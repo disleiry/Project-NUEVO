@@ -45,7 +45,7 @@ except ImportError:
     sys.exit(1)
 
 # Add the src directory to path so we can import the codec and type defs
-sys.path.insert(0, '/Users/toby/Projects/Project-NUEVO/ros2_ws/src')
+sys.path.insert(0, '../src')
 
 from tlvcodec.src.encoder import Encoder
 from tlvcodec.src.decoder import Decoder, DecodeErrorCode
