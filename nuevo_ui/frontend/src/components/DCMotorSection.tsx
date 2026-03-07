@@ -72,8 +72,8 @@ export function DCMotorSection({ motorId }: DCMotorSectionProps) {
 
   const handleSendCommand = () => {
     const targetMode = MODE_MAP[controlMode];
-    // If motor is enabled but in the wrong mode, switch it first
-    if (isEnabled && status?.mode !== targetMode) {
+    // Switch to correct mode if needed (even if motor is currently disabled)
+    if ((status?.mode ?? 0) !== targetMode) {
       wsSend('dc_enable', { motorNumber: motorId, mode: targetMode });
     }
     if (controlMode === "velocity") {
