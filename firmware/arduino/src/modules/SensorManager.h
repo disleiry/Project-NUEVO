@@ -201,6 +201,16 @@ public:
     static float getServoVoltage();
 
     /**
+     * @brief Battery presence check
+     *
+     * Returns true when the measured battery voltage is at or above VBAT_MIN_PRESENT_V.
+     * Returns false when no battery is connected (ADC reads ~0 V) or the voltage is
+     * too low to safely run motors.  All actuator enable commands are silently rejected
+     * when this returns false — the system does NOT enter ERROR state.
+     */
+    static bool  isBatteryPresent() { return batteryVoltage_ >= VBAT_MIN_PRESENT_V; }
+
+    /**
      * @brief Battery under-voltage checks
      *
      * isBatteryLow()      — below VBAT_WARN_V    → warning (LED blink, NeoPixel yellow)

@@ -53,13 +53,13 @@ enum SystemState : uint8_t {
  */
 enum SystemErrorFlags : uint8_t {
     ERR_NONE           = 0x00,
-    ERR_UNDERVOLTAGE   = 0x01,  // Battery below configured minimum
-    ERR_OVERVOLTAGE    = 0x02,  // Battery above configured maximum
+    ERR_UNDERVOLTAGE   = 0x01,  // Battery below warn threshold (LED blink, UI warning)
+    ERR_OVERVOLTAGE    = 0x02,  // Battery above safe maximum (wrong charger/chemistry)
     ERR_ENCODER_FAIL   = 0x04,  // Encoder reads 0 for >500 ms while PWM > 20%
     ERR_I2C_ERROR      = 0x08,  // I2C bus error (PCA9685 or IMU)
     ERR_IMU_ERROR      = 0x10,  // IMU specifically not responding
-    ERR_LIVENESS_LOST  = 0x20,  // Liveness timeout — motors cut, not in ERROR state
-    ERR_LOOP_OVERRUN   = 0x40,  // Control loop exceeded deadline
+    ERR_LIVENESS_LOST  = 0x20,  // Host heartbeat lost while RUNNING → motors cut
+    // 0x40 reserved
 };
 
 /**
@@ -562,12 +562,12 @@ struct PayloadSetNeoPixel {
  */
 struct PayloadIOStatus {
     uint16_t buttonMask;        // All digital input GPIOs (bit N = GPIO N pressed)
-    uint8_t  ledBrightness[3];  // Brightness of each user LED (0=off, 255=full)
+    uint8_t  ledBrightness[5];  // Brightness of all 5 user LEDs: RED,GREEN,BLUE,ORANGE,PURPLE
     uint8_t  reserved;          // Set to 0
     uint32_t timestamp;         // Arduino millis()
     // uint8_t neoPixelRGB[neoPixelCount * 3]; — appended after fixed fields
 };
-// 10 bytes fixed (+ 3 × neoPixelCount appended)
+// 12 bytes fixed (+ 3 × neoPixelCount appended)
 
 // ============================================================================
 // END OF PACKED STRUCTS
@@ -622,6 +622,6 @@ STATIC_ASSERT_SIZE(PayloadMagCalStatus, 44);
 // I/O payloads
 STATIC_ASSERT_SIZE(PayloadSetLED,       8);
 STATIC_ASSERT_SIZE(PayloadSetNeoPixel,  4);
-STATIC_ASSERT_SIZE(PayloadIOStatus,     10);
+STATIC_ASSERT_SIZE(PayloadIOStatus,     12);
 
 #endif // TLV_PAYLOADS_H

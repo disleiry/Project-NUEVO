@@ -43,6 +43,8 @@
 
 // Maximum TLV payload size we will accept from the RPi
 #define MAX_TLV_PAYLOAD_SIZE 256
+#define TX_BUFFER_SIZE 1024
+#define RX_BUFFER_SIZE 1024
 
 // ============================================================================
 // MESSAGE CENTER CLASS (Static)
@@ -57,7 +59,8 @@
  * - Batched telemetry generation and transmission
  * - Liveness monitoring and safety timeout
  */
-class MessageCenter {
+class MessageCenter
+{
 public:
     /**
      * @brief Initialize message center
@@ -73,12 +76,24 @@ public:
     // ========================================================================
 
     /**
+     * @brief Drain the hardware UART ring buffer into the software receive buffer.
+     *
+     * Call from loop() on EVERY iteration, BEFORE Scheduler::tick().
+     * Moves bytes out of the 64-byte HW ring buffer into rxBuffer_ (1024 bytes)
+     * at loop() rate (~67 kHz), preventing ring-buffer overflow when the RPi
+     * sends back-to-back frames (heartbeat + command ≥ 96 bytes at 1 Mbps).
+     *
+     * Cheap when no data is available (~5 µs). No decoding is performed here.
+     */
+    static void drainUart();
+
+    /**
      * @brief Process incoming messages from UART
      *
-     * Drains all available bytes from RPI_SERIAL into the TLV decoder.
-     * The decoder fires decodeCallback() for each complete frame, which
-     * routes every TLV in the frame to the appropriate handler.
-     * Should be called from scheduler at 100Hz.
+     * Decodes all bytes accumulated in rxBuffer_ by drainUart(), fires
+     * decodeCallback() for each complete frame, and routes every TLV to the
+     * appropriate handler. Also runs the heartbeat timeout check.
+     * Should be called from the scheduler at 100 Hz.
      */
     static void processIncoming();
 
@@ -89,9 +104,9 @@ public:
      * based on its millis interval, then transmits the frame in one write.
      *
      * Rates:
-     * - DC_STATUS_ALL      (100 Hz, RUNNING)
-     * - STEP_STATUS_ALL    (100 Hz, RUNNING)
-     * - SERVO_STATUS_ALL   ( 50 Hz, RUNNING)
+     * - DC_STATUS_ALL      ( 50 Hz, RUNNING)
+     * - STEP_STATUS_ALL    ( 10 Hz, RUNNING)
+     * - SERVO_STATUS_ALL   ( 25 Hz, RUNNING)
      * - SENSOR_IMU         (100 Hz, RUNNING, if IMU attached)
      * - SENSOR_KINEMATICS  (100 Hz, RUNNING)
      * - IO_STATUS          (100 Hz, RUNNING)
@@ -134,22 +149,62 @@ public:
      */
     static void disableAllActuators();
 
+    /**
+     * @brief Latch the error flags that caused the current ERROR state.
+     *
+     * Called by SafetyManager BEFORE forceState(ERROR) so the cause is not lost
+     * when the state transitions away from RUNNING/IDLE.  The latched flags are
+     * OR'd into every subsequent SYS_STATUS errorFlags field until CMD_RESET clears
+     * them.  Safe to call from ISR context (volatile write, no heap alloc).
+     *
+     * @param flags  SystemErrorFlags bitmask describing the triggering fault(s)
+     */
+    static void latchFaultFlags(uint8_t flags);
+
+    /**
+     * @brief Record UART task wall-clock time for diagnostic display
+     *
+     * Maintains exponential moving average and per-window max.
+     * Values are reported in SYS_STATUS (loopTimeAvgUs / loopTimeMaxUs).
+     *
+     * NOTE: elapsedUs is measured with micros() in loop() while interrupts are
+     * enabled — it includes ISR preemption time (Timer1 PID, Timer3 stepper).
+     * This is NOT a control-loop overrun measurement; the PID loop runs in
+     * Timer1 ISR and is completely unaffected by anything that happens here.
+     *
+     * @param elapsedUs  Wall-clock microseconds for this taskUART() call
+     */
+    static void recordLoopTime(uint32_t elapsedUs);
+
+    // ---- Diagnostic accessors (for debug serial / SYS_STATUS) ----
+    static uint16_t getLoopTimeAvgUs()  { return loopTimeAvgUs_; }
+    static uint16_t getLoopTimeMaxUs()  { return loopTimeMaxUs_; }
+    static uint16_t getUartRxErrors()   { return uartRxErrors_; }
+    static uint16_t getFreeRAM();
+
 private:
     // ---- TLV codec (owned directly, no UARTDriver wrapper) ----
     static struct TlvEncodeDescriptor encodeDesc_;
     static struct TlvDecodeDescriptor decodeDesc_;
-    static uint8_t txBuffer_[1024];   // TX frame accumulation buffer
-    static uint8_t rxBuffer_[512];    // RX decode buffer
+    static uint8_t *txBuffer_; // TX buffer built in the encode descriptor
+    static uint8_t rxBuffer_[RX_BUFFER_SIZE];  // Software RX buffer (drain target)
+    static uint16_t rxFill_;                   // Bytes accumulated by drainUart()
 
     // ---- Liveness tracking ----
-    static uint32_t lastHeartbeatMs_;   // millis() of last received TLV
-    static uint32_t lastCmdMs_;         // millis() of last non-heartbeat command
-    static bool     heartbeatValid_;    // False if liveness timeout
+    static uint32_t lastHeartbeatMs_;    // millis() of last received TLV
+    static uint32_t lastCmdMs_;          // millis() of last non-heartbeat command
+    static bool heartbeatValid_;         // False if liveness timeout
     static uint16_t heartbeatTimeoutMs_; // Configurable timeout (ms)
 
+    // ---- Fault latch (cleared only by CMD_RESET) ----
+    // Captures the error flags that triggered the current ERROR state so they
+    // remain visible in SYS_STATUS even after the state has already changed to ERROR
+    // (at which point live flag conditions may no longer evaluate true).
+    static volatile uint8_t faultLatchFlags_;
+
     // ---- Configuration (from SYS_CONFIG) ----
-    static uint8_t  motorDirMask_;      // Direction inversion bitmask
-    static uint8_t  neoPixelCount_;     // Configured NeoPixel count
+    static uint8_t motorDirMask_;  // Direction inversion bitmask
+    static uint8_t neoPixelCount_; // Configured NeoPixel count
 
     // ---- Servo enable tracking (bit N = channel N enabled) ----
     static uint16_t servoEnabledMask_;
@@ -178,7 +233,7 @@ private:
     // Set by handleMagCalCmd on STOP/SAVE/APPLY/CLEAR so the response is
     // included in the very next sendTelemetry() frame rather than sent as a
     // standalone frame from within the command handler.
-    static bool     pendingMagCal_;
+    static bool pendingMagCal_;
 
     // ---- Initialization flag ----
     static bool initialized_;
@@ -205,10 +260,10 @@ private:
      * Loops over every TLV in the frame and routes each to routeMessage().
      * Incoming multi-TLV frames are therefore handled correctly.
      */
-    static void decodeCallback(enum DecodeErrorCode* error,
-                               const struct FrameHeader* frameHeader,
-                               struct TlvHeader* tlvHeaders,
-                               uint8_t** tlvData);
+    static void decodeCallback(enum DecodeErrorCode *error,
+                               const struct FrameHeader *frameHeader,
+                               struct TlvHeader *tlvHeaders,
+                               uint8_t **tlvData);
 
     // ========================================================================
     // MESSAGE ROUTING
@@ -224,7 +279,7 @@ private:
      * @param payload Pointer to message payload
      * @param length Payload length in bytes
      */
-    static void routeMessage(uint32_t type, const uint8_t* payload, uint32_t length);
+    static void routeMessage(uint32_t type, const uint8_t *payload, uint32_t length);
 
     /**
      * @brief Check liveness timeout and disable actuators if expired
@@ -232,33 +287,33 @@ private:
     static void checkHeartbeatTimeout();
 
     // ---- System message handlers ----
-    static void handleHeartbeat(const PayloadHeartbeat* payload);
-    static void handleSysCmd(const PayloadSysCmd* payload);
-    static void handleSysConfig(const PayloadSysConfig* payload);
-    static void handleSetPID(const PayloadSetPID* payload);
+    static void handleHeartbeat(const PayloadHeartbeat *payload);
+    static void handleSysCmd(const PayloadSysCmd *payload);
+    static void handleSysConfig(const PayloadSysConfig *payload);
+    static void handleSetPID(const PayloadSetPID *payload);
 
     // ---- DC motor message handlers ----
-    static void handleDCEnable(const PayloadDCEnable* payload);
-    static void handleDCSetPosition(const PayloadDCSetPosition* payload);
-    static void handleDCSetVelocity(const PayloadDCSetVelocity* payload);
-    static void handleDCSetPWM(const PayloadDCSetPWM* payload);
+    static void handleDCEnable(const PayloadDCEnable *payload);
+    static void handleDCSetPosition(const PayloadDCSetPosition *payload);
+    static void handleDCSetVelocity(const PayloadDCSetVelocity *payload);
+    static void handleDCSetPWM(const PayloadDCSetPWM *payload);
 
     // ---- Stepper motor message handlers ----
-    static void handleStepEnable(const PayloadStepEnable* payload);
-    static void handleStepSetParams(const PayloadStepSetParams* payload);
-    static void handleStepMove(const PayloadStepMove* payload);
-    static void handleStepHome(const PayloadStepHome* payload);
+    static void handleStepEnable(const PayloadStepEnable *payload);
+    static void handleStepSetParams(const PayloadStepSetParams *payload);
+    static void handleStepMove(const PayloadStepMove *payload);
+    static void handleStepHome(const PayloadStepHome *payload);
 
     // ---- Servo message handlers ----
-    static void handleServoEnable(const PayloadServoEnable* payload);
-    static void handleServoSet(const PayloadServoSetSingle* payload);
+    static void handleServoEnable(const PayloadServoEnable *payload);
+    static void handleServoSet(const PayloadServoSetSingle *payload);
 
     // ---- User I/O message handlers ----
-    static void handleSetLED(const PayloadSetLED* payload);
-    static void handleSetNeoPixel(const PayloadSetNeoPixel* payload);
+    static void handleSetLED(const PayloadSetLED *payload);
+    static void handleSetNeoPixel(const PayloadSetNeoPixel *payload);
 
     // ---- Magnetometer calibration handler ----
-    static void handleMagCalCmd(const PayloadMagCalCmd* payload);
+    static void handleMagCalCmd(const PayloadMagCalCmd *payload);
 
     // ========================================================================
     // TELEMETRY APPENDERS
@@ -309,9 +364,6 @@ private:
     // ========================================================================
     // HELPERS
     // ========================================================================
-
-    /** @brief Return available SRAM in bytes */
-    static uint16_t getFreeRAM();
 };
 
 #endif // MESSAGECENTER_H

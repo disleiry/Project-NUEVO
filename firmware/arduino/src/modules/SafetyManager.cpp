@@ -34,10 +34,19 @@ void SafetyManager::check() {
 
     // ── Fault response ────────────────────────────────────────────────────────
 
-    // 1. Disable all actuators atomically (DC motors, steppers, servos)
+    // 1. Build the flag bitmask NOW — before forceState() changes the state.
+    //    (After forceState the state is ERROR, so RUNNING-gated checks would miss.)
+    uint8_t triggerFlags = 0;
+    if (heartbeatFault)                      triggerFlags |= ERR_LIVENESS_LOST;
+    if (SensorManager::isBatteryCritical())  triggerFlags |= ERR_UNDERVOLTAGE;
+    if (SensorManager::isBatteryOvervoltage()) triggerFlags |= ERR_OVERVOLTAGE;
+
+    // 2. Disable all actuators atomically (DC motors, steppers, servos)
     MessageCenter::disableAllActuators();
 
-    // 2. Force ERROR state (bypasses FSM guard — we are inside an ISR,
-    //    interrupts are already disabled by hardware)
+    // 3. Latch the flags so SYS_STATUS keeps reporting the cause while in ERROR
+    MessageCenter::latchFaultFlags(triggerFlags);
+
+    // 4. Force ERROR state (bypasses FSM guard — interrupts already disabled by hardware)
     SystemManager::forceState(SYS_STATE_ERROR);
 }

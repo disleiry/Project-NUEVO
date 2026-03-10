@@ -185,7 +185,17 @@ void decodePacket(struct TlvDecodeDescriptor *descriptor, const uint8_t *data)
         }
         else
         {
+            // Mismatch: reset to Init, but re-examine the current byte.
+            // Without this, a valid frame start byte arriving immediately after
+            // a corrupt magic sequence is silently discarded, forcing an extra
+            // round-trip through Init before re-syncing.
             resetDecodeDescriptor(descriptor);
+            if (*data == FRAME_HEADER_MAGIC_NUM[0])
+            {
+                descriptor->buffer[descriptor->bufferIndex++] = *data;
+                descriptor->ofst = 1;
+                descriptor->decodeState = MagicNum;
+            }
         }
         break;
     case TotalPacketLen:

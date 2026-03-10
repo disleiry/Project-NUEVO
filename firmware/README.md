@@ -70,7 +70,7 @@ firmware/
 
 **Command–telemetry loop.** All communication uses the [TLV v2.0 protocol](../COMMUNICATION_PROTOCOL.md). The Raspberry Pi sends typed commands (enable a motor, set velocity, move a stepper, set a servo position, etc.). The Arduino continuously streams back sensor data at rates appropriate to each subsystem — motor status and IMU at 100 Hz, voltage at 10 Hz, system health at 1–10 Hz.
 
-**Safety.** The firmware expects a heartbeat (any received TLV) at least every 500 ms. If the link goes silent, the liveness timer expires, all actuators are immediately disabled, and the NeoPixel turns red. An emergency stop (`SYS_CMD_ESTOP`) does the same and requires an explicit `SYS_CMD_RESET` to recover. All of this happens in hardware-interrupt-driven code on the Arduino — the Raspberry Pi cannot accidentally leave motors running if the link drops.
+**Safety.** The firmware expects a heartbeat (any received TLV) at least every 2000 ms. If the link goes silent, the liveness timer expires, all actuators are immediately disabled, and the NeoPixel turns red. An emergency stop (`SYS_CMD_ESTOP`) does the same and requires an explicit `SYS_CMD_RESET` to recover. All of this happens in hardware-interrupt-driven code on the Arduino — the Raspberry Pi cannot accidentally leave motors running if the link drops. See **Fault and Warning Reference** below for the full fault/warning model.
 
 **Scheduler.** A two-tier scheduling architecture ensures hard real-time guarantees for critical tasks even if `loop()` stalls:
 
@@ -79,7 +79,7 @@ firmware/
 | ISR | Rate | What it does |
 |-----|------|--------------|
 | TIMER1_OVF_vect | 200 Hz | DC Motor PID (every tick) |
-| TIMER1_OVF_vect | 100 Hz | UART comms + heartbeat safety (every 2nd tick) |
+| TIMER1_OVF_vect | 100 Hz | UART comms + heartbeat safety (every 2nd tick); `sei()` re-enables nested interrupts so USART2_RX_vect can drain the receive buffer during processing |
 | TIMER4_OVF_vect | 100 Hz | IMU + Fusion AHRS (`update100Hz`) |
 | TIMER4_OVF_vect | 50 Hz  | Lidar reads (`update50Hz`) |
 | TIMER4_OVF_vect | 10 Hz  | Voltages + Ultrasonic (`update10Hz`) |
@@ -180,11 +180,13 @@ The `SafetyManager` runs inside the 100 Hz UART ISR and forces ERROR state when 
 
 | Fault | Trigger |
 |-------|---------|
-| Heartbeat timeout | No TLV received from RPi within `heartbeatTimeoutMs` (default 500 ms) while RUNNING |
+| Heartbeat timeout | No TLV received from RPi within `HEARTBEAT_TIMEOUT_MS` (default 2000 ms) while RUNNING |
 | Battery critical | Battery voltage below `VBAT_CUTOFF_V` (set by `BATTERY_TYPE` in `config.h`) |
 | Battery overvoltage | Battery voltage above `VBAT_OVERVOLTAGE_V` |
 
 In all cases, actuators (DC motors, steppers, servos) are disabled atomically before the state transition.
+
+> **No-battery interlock:** When no battery is connected the ADC reads ~0 V (`batteryVoltage_ = 0.0f`). The firmware does **not** enter ERROR in this case — that would make it impossible to use the robot over USB alone (e.g. for communication testing). Instead, all actuator *enable* commands (`DC_ENABLE`, `DC_SET_POSITION`, `DC_SET_VELOCITY`, `DC_SET_PWM`, `STEP_ENABLE`, `SERVO_ENABLE`) are **silently rejected** until `SensorManager::isBatteryPresent()` returns true (`batteryVoltage_ >= VBAT_MIN_PRESENT_V = 2.0 V`, configured in `config.h`). Disable commands always succeed. The UI will show VBAT=0 V in the system panel; the enable toggle will appear to do nothing until a battery is connected.
 
 ---
 
@@ -211,6 +213,63 @@ The five discrete LEDs are controlled by the Raspberry Pi via the `IO_SET_LED` T
 | `LED_PWM` | Constant dim at specified brightness (0–255) |
 | `LED_BLINK` | Square-wave toggle at specified period (ms) |
 | `LED_BREATHE` | Triangle-wave fade in/out at specified period. On LED_PURPLE (no PWM), falls back to ON/OFF at brightness threshold 128 |
+
+---
+
+## Fault and Warning Reference
+
+The firmware distinguishes between **hard faults** (which force ERROR state and disable all actuators) and **soft warnings** (which set a flag in the telemetry stream but allow continued operation). Both are reported in the `errorFlags` bitmask of the `SYS_STATUS` TLV.
+
+The UI backend caches each new flag as a human-readable notification until the user clears it.
+
+### Hard Faults → ERROR state
+
+All actuators (DC motors, steppers, servos) are disabled atomically before the state transition. The robot stays in ERROR until `SYS_CMD_RESET` is received **and** the underlying condition has resolved.
+
+| Flag | Value | Trigger | Condition cleared when |
+|------|-------|---------|------------------------|
+| `ERR_LIVENESS_LOST` | `0x20` | No TLV received from RPi within `HEARTBEAT_TIMEOUT_MS` (default 2000 ms) while RUNNING | RPi reconnects and sends heartbeats; user sends `SYS_CMD_RESET` |
+| `ERR_UNDERVOLTAGE` (critical) | `0x01` | Battery below `VBAT_CUTOFF_V` (configured per `BATTERY_TYPE`) | Battery replaced/charged; `SYS_CMD_RESET` |
+| `ERR_OVERVOLTAGE` | `0x02` | Battery above `VBAT_OVERVOLTAGE_V` | Wrong charger removed; `SYS_CMD_RESET` |
+
+> **Recovery**: `SYS_CMD_RESET` transitions ERROR → IDLE. The underlying fault must also be resolved (battery OK, RPi link live) or SafetyManager will immediately re-trigger ERROR on the next 100 Hz check.
+
+### Enable interlock → silent reject, no state change
+
+These conditions prevent actuators from being enabled at all, without changing the system state. Disable commands are always accepted.
+
+| Condition | Value | Effect |
+|-----------|-------|--------|
+| No battery / below `VBAT_MIN_PRESENT_V` (2.0 V) | — | All enable commands silently rejected. System stays IDLE/RUNNING. Battery voltage shows as 0 V (or very low) in telemetry. |
+
+This covers the common case of running USB-only (no battery connected) for communication testing without accidentally triggering ERROR state or locking up the state machine.
+
+### Soft Warnings → flag only, operation continues
+
+These conditions set `errorFlags` bits and appear as UI notifications, but the firmware does **not** enter ERROR and does not stop unaffected actuators.
+
+| Flag | Value | Trigger | Per-motor / system effect |
+|------|-------|---------|---------------------------|
+| `ERR_UNDERVOLTAGE` (warning) | `0x01` | Battery below `VBAT_WARN_V` but above `VBAT_CUTOFF_V` | None (LED blinks amber) |
+| `ERR_I2C_ERROR` | `0x08` | PCA9685 servo controller reports I2C failure | Servos may misbehave; robot stays RUNNING |
+| `ERR_IMU_ERROR` | `0x10` | IMU not responding on init or lost during operation | Orientation data unavailable; kinematics falls back to encoder-only odometry |
+| `ERR_ENCODER_FAIL` | `0x04` | Motor commanded at >20% PWM but encoder position unchanged for 500 ms | **Only that motor is disabled.** Other motors continue. Re-enable by sending `DC_ENABLE` for that motor. |
+| `ERR_LOOP_OVERRUN` | `0x40` | Any single UART ISR tick exceeded 10 ms | Warning sent. If >5% of ticks in a 2-second window overrun, **all DC motors soft-stop** (robot stays RUNNING; steppers and servos continue). Re-enable motors with `DC_ENABLE`. Clear the latch with `SYS_CMD_RESET`. |
+
+### Summary table
+
+| Condition | State change | Actuators | Recovery |
+|-----------|-------------|-----------|----------|
+| No battery (< 2.0 V) | None | Enable commands rejected | Connect battery |
+| Battery low warning | None | Unaffected | Replace battery |
+| Heartbeat timeout (>2 s) | → ERROR | All disabled | Fix link + `SYS_CMD_RESET` |
+| Battery critical (undervoltage cutoff) | → ERROR | All disabled | Charge battery + `SYS_CMD_RESET` |
+| Battery overvoltage | → ERROR | All disabled | Remove wrong charger + `SYS_CMD_RESET` |
+| I2C error | None | Unaffected | Power cycle I2C bus |
+| IMU error | None | Unaffected | Restart or `SYS_CMD_RESET` |
+| Encoder stall (single motor) | None | **That motor only** disabled | `DC_ENABLE` for that motor |
+| Loop overrun (persistent >5%) | None | **DC motors** soft-stop | `DC_ENABLE` + `SYS_CMD_RESET` |
+| `SYS_CMD_ESTOP` (operator) | → ESTOP | All disabled | `SYS_CMD_RESET` |
 
 ---
 

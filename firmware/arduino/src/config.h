@@ -95,14 +95,33 @@
 #define STEPPER_MAX_RATE_SPS    5000    // Maximum steps per second per motor
 
 // Safety timeout
-#define HEARTBEAT_TIMEOUT_MS    500      // Disable motors if no heartbeat
+#define HEARTBEAT_TIMEOUT_MS    2000     // Disable motors if no heartbeat (raised from 500ms
+                                         // to tolerate asyncio event loop jitter at 100Hz telemetry)
+
+// ============================================================================
+// FAULT DETECTION THRESHOLDS
+// ============================================================================
+
+// Encoder stall detection (per DC motor)
+// If |PWM| > threshold and encoder position unchanged for timeout → disable that motor
+// Set ENCODER_STALL_DETECTION to 0 to disable this safety feature entirely (e.g. if
+// encoders are not fitted or the timeout is too aggressive for your PID tuning).
+#define ENCODER_STALL_DETECTION     0    // 1=enabled, 0=disabled
+#define ENCODER_FAIL_PWM_THRESHOLD  51   // ~20% of 255; below this = intentional slow/stop
+#define ENCODER_FAIL_TIMEOUT_MS     500  // ms without encoder movement before fault declared
+
+// UART task wall-clock budget (used only for oscilloscope debug pin A9 reference)
+// taskUART() runs at 100 Hz; the 10 ms budget is the full tick period.
+// NOTE: micros()-based measurement includes ISR preemption time — it is NOT a
+// control-loop overrun. The PID loop is in Timer1 ISR and cannot overrun here.
+#define UART_TASK_BUDGET_US      10000   // 10 ms = full 100 Hz tick period
 
 // ============================================================================
 // COMMUNICATION SETTINGS
 // ============================================================================
 
 // UART to Raspberry Pi (Serial2)
-#define RPI_BAUD_RATE           1000000 // 1 Mbps UART (full duplex, ~48% TX utilization at 100Hz)
+#define RPI_BAUD_RATE           1000000  // UART baud rate (set to 1000000 for 1 Mbps production)
 #define RPI_SERIAL              Serial2 // Hardware serial port
 
 // Debug serial (Serial0 - USB)
@@ -127,7 +146,7 @@
 
 // Default PID gains for DC motors (runtime configurable via TLV)
 // Position PID (outer loop)
-#define DEFAULT_POS_KP          10.0f
+#define DEFAULT_POS_KP          5.0f
 #define DEFAULT_POS_KI          0.0f
 #define DEFAULT_POS_KD          0.5f
 
@@ -136,7 +155,7 @@
 #define DEFAULT_VEL_KI          4.0f
 #define DEFAULT_VEL_KD          0.0f
 
-// Torque PID (inner loop - optional, requires current sensing)
+// Torque PID (inner loop - not used for now)
 #define DEFAULT_TRQ_KP          0.2f
 #define DEFAULT_TRQ_KI          0.05f
 #define DEFAULT_TRQ_KD          0.0f
@@ -150,7 +169,7 @@
 // ============================================================================
 
 // IMU (ICM-20948 via SparkFun library + Fusion AHRS)
-#define IMU_ENABLED             1
+#define IMU_ENABLED             0
 // AD0_VAL: 0 = I2C addr 0x68 (AD0 pin LOW), 1 = I2C addr 0x69 (AD0 pin HIGH)
 #define IMU_AD0_VAL             1       // SparkFun breakout default: AD0 high = 0x69
 
@@ -265,6 +284,13 @@
 // Backward-compatible alias used by SensorManager::isBatteryLow()
 #define VBAT_LOW_THRESHOLD  VBAT_WARN_V
 
+// Minimum voltage to consider a battery present and safe for motor enables.
+// Below this threshold (including 0 V when no battery is connected), all
+// actuator enable commands are silently rejected without entering ERROR state.
+// Must be well below any real battery's minimum cell voltage — 2 V covers
+// all supported chemistries (NiMH, LiPo 2S–6S) while remaining above ADC noise.
+#define VBAT_MIN_PRESENT_V      2.0f
+
 // ============================================================================
 // VOLTAGE DIVIDER RATIOS (ADC INPUT SCALING)
 // ============================================================================
@@ -339,14 +365,54 @@
 // #define DEBUG_SCHEDULER         // Print scheduler task execution info
 
 // Debug pins for oscilloscope timing measurement
-// These pins toggle on entry/exit of critical sections for timing analysis
-#define DEBUG_PINS_ENABLED      0
+// These pins toggle on entry/exit of critical sections for timing analysis.
+//
+// SCOPE CHANNEL GUIDE — connect probes, set to 3.3V/5V trigger:
+//
+//   ISR timing (always available when ENABLED):
+//     A10  PID_LOOP      HIGH = inside Timer1 ISR (200 Hz, budget ~500 µs)
+//     A8   STEPPER_ISR   HIGH = inside Timer3 ISR (10 kHz, budget ~10 µs)
+//     A7   ENCODER_ISR   HIGH = inside any encoder interrupt
+//
+//   UART task timing:
+//     A11  UART_TASK     HIGH = entire taskUART() running (100 Hz, ~1-6 ms typical)
+//     A12  UART_RX       HIGH = inside processIncoming() only
+//     A13  UART_TX       HIGH = inside sendTelemetry() only
+//     A9   UART_LATE     Pulse when wall-clock > 10 ms (usually ISR preemption, not a real problem)
+//
+// KEY INSIGHT (verified by scope):
+//   micros()-based measurement in loop() INCLUDES ISR preemption time.
+//   A PID_LOOP pulse (A10) inside a UART_TASK window inflates the elapsed time
+//   without any actual UART slowness. This is normal and expected — it is NOT a
+//   control-loop overrun. The PID runs in Timer1 ISR and cannot be affected by
+//   anything in loop().
+//
+// SUGGESTED SCOPE SETUPS:
+//
+//   Q: "Is RX or TX the bottleneck?"
+//     Ch1=A12 (UART_RX), Ch2=A13 (UART_TX) — time-base 2 ms/div.
+//
+//   Q: "Are ISRs preempting the UART task?"
+//     Ch1=A11 (UART_TASK), Ch2=A10 (PID_LOOP) — time-base 1 ms/div.
+//     PID pulses inside UART_TASK window = ISR preemption inflation (normal).
+//
+//   Q: "Is the UART task running reliably at 100 Hz?"
+//     Ch1=A11 (UART_TASK) — time-base 5 ms/div, trigger rising.
+//     Period should be ~10 ms; width should be 1-6 ms.
+//
+#define DEBUG_PINS_ENABLED      1
 
 #if DEBUG_PINS_ENABLED
-  #define DEBUG_PIN_ENCODER_ISR   A7    // Toggle on encoder ISR entry/exit
-  #define DEBUG_PIN_STEPPER_ISR   A8    // Toggle on stepper timer ISR entry/exit
-  #define DEBUG_PIN_SCHEDULER     A9    // Toggle on scheduler tick ISR entry/exit
-  #define DEBUG_PIN_PID_LOOP      A10   // Toggle during PID computation
+  // ISR channels (original)
+  #define DEBUG_PIN_ENCODER_ISR   A7    // HIGH inside any encoder ISR
+  #define DEBUG_PIN_STEPPER_ISR   A8    // HIGH inside Timer3 (stepper) ISR
+  #define DEBUG_PIN_UART_LATE     A9    // Pulse when taskUART() wall-clock > 10 ms (ISR inflation, not a real error)
+  #define DEBUG_PIN_PID_LOOP      A10   // HIGH inside Timer1 (PID) ISR
+
+  // UART task sub-channels (new — overrun diagnosis)
+  #define DEBUG_PIN_UART_TASK     A11   // HIGH for entire taskUART() execution
+  #define DEBUG_PIN_UART_RX       A12   // HIGH during processIncoming() only
+  #define DEBUG_PIN_UART_TX       A13   // HIGH during sendTelemetry() only
 #endif
 
 // ============================================================================

@@ -180,6 +180,19 @@ public:
      */
     static void setAllLEDsOff();
 
+    /**
+     * @brief Get current effective brightness of a LED (0=off, 255=full)
+     *
+     * For LED_OFF: returns 0.
+     * For LED_ON / LED_PWM: returns the configured brightness.
+     * For LED_BLINK / LED_BREATHE: returns the configured brightness ceiling
+     *   (not the instantaneous value — the LED may be between on/off states).
+     *
+     * @param ledId LED identifier (0-4, see LEDId enum)
+     * @return Brightness 0–255, or 0 if ledId is out of range
+     */
+    static uint8_t getLEDBrightness(uint8_t ledId);
+
     // ========================================================================
     // NEOPIXEL SYSTEM STATUS
     // ========================================================================

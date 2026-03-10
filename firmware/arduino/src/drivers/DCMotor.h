@@ -313,6 +313,15 @@ public:
      */
     uint8_t getMotorId() const { return motorId_; }
 
+    /**
+     * @brief Check if encoder stall fault has been declared for this motor
+     *
+     * Set when |PWM| > ENCODER_FAIL_PWM_THRESHOLD and encoder position
+     * unchanged for ENCODER_FAIL_TIMEOUT_MS. Motor is disabled on fault.
+     * Cleared automatically on the next enable() call.
+     */
+    bool isEncoderFailed() const { return encoderFailed_; }
+
 private:
     // Hardware
     uint8_t motorId_;                       // Motor identifier (0-3)
@@ -342,6 +351,12 @@ private:
 
     // Timing
     uint32_t lastUpdateUs_;                 // Last update timestamp (micros())
+
+    // Encoder stall detection
+    bool     encoderFailed_;                // Latches true once stall fault declared; cleared by enable()
+    int32_t  lastCheckedPos_;               // Encoder count when stall window opened
+    uint32_t stuckStartMs_;                 // millis() when stall window opened
+    bool     stuckTracking_;                // True while actively tracking a potential stall
 
     // ========================================================================
     // INTERNAL HELPERS

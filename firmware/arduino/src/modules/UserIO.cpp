@@ -52,6 +52,7 @@ void UserIO::init() {
     leds_[LED_RED].pin = PIN_LED_RED;
     leds_[LED_RED].mode = LED_OFF;
     pinMode(PIN_LED_RED, OUTPUT);
+    LED_RED_OCR = 0;  // Timer3 Fast PWM — must zero OCR explicitly, not just digitalWrite
     digitalWrite(PIN_LED_RED, LOW);
 
     leds_[LED_GREEN].pin = PIN_LED_GREEN;
@@ -170,6 +171,11 @@ void UserIO::setLED(LEDId ledId, LEDMode mode, uint8_t brightness, uint16_t peri
 
     // Immediately apply state for OFF, ON, and PWM modes
     if (mode == LED_OFF) {
+        // LED_RED uses Timer3 Fast PWM — digitalWrite() alone doesn't suppress the
+        // hardware PWM output. Zero the OCR register explicitly to ensure 0% duty cycle.
+        if (led.pin == PIN_LED_RED) {
+            LED_RED_OCR = 0;
+        }
         digitalWrite(led.pin, LOW);
         led.state = false;
     } else if (mode == LED_ON) {
@@ -190,6 +196,13 @@ void UserIO::setAllLEDsOff() {
     for (uint8_t i = 0; i < LED_COUNT; i++) {
         setLED((LEDId)i, LED_OFF);
     }
+}
+
+uint8_t UserIO::getLEDBrightness(uint8_t ledId) {
+    if (ledId >= LED_COUNT) return 0;
+    const LEDState& led = leds_[ledId];
+    if (led.mode == LED_OFF) return 0;
+    return led.brightness;
 }
 
 // ============================================================================
@@ -278,7 +291,13 @@ void UserIO::updateLED(LEDState& led) {
             if (now - led.lastToggle >= led.periodMs / 2) {
                 led.lastToggle = now;
                 led.state = !led.state;
-                digitalWrite(led.pin, led.state ? HIGH : LOW);
+                // LED_RED is controlled by Timer3 OC3A — digitalWrite() has no effect
+                // when COM3A1 is set. Use direct OCR write instead.
+                if (led.pin == PIN_LED_RED) {
+                    LED_RED_OCR = led.state ? ((uint16_t)led.brightness * LED_RED_ICR) / 255 : 0;
+                } else {
+                    digitalWrite(led.pin, led.state ? HIGH : LOW);
+                }
             }
             break;
 

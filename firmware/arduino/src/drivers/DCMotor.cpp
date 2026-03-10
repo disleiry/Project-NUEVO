@@ -95,6 +95,10 @@ DCMotor::DCMotor()
     , encoder_(nullptr)
     , velocityEst_(nullptr)
     , lastUpdateUs_(0)
+    , encoderFailed_(false)
+    , lastCheckedPos_(0)
+    , stuckStartMs_(0)
+    , stuckTracking_(false)
 {
 }
 
@@ -144,6 +148,10 @@ void DCMotor::enable(DCMotorMode mode) {
     if (velocityEst_) {
         velocityEst_->reset();
     }
+
+    // Clear encoder fault — re-enable is the user's explicit acknowledgement
+    encoderFailed_ = false;
+    stuckTracking_ = false;
 
     lastUpdateUs_ = micros();
 
@@ -215,98 +223,97 @@ void DCMotor::update() {
     if (mode_ == DC_MODE_PWM) {
         pwmOutput_ = directPwm_;
         setPWM(pwmOutput_);
-        return;
-    }
-
-    if (!encoder_ || !velocityEst_) {
-        // Missing encoder or velocity estimator - cannot control
-        return;
-    }
-
-    // Compute time step
-    uint32_t currentUs = micros();
-    float dt = (currentUs - lastUpdateUs_) / 1000000.0f;  // Convert to seconds
-    lastUpdateUs_ = currentUs;
-
-    // Velocity already updated above; just read the result
-    int32_t currentPosition = encoder_->getCount();
-
-    float currentVelocity = velocityEst_->getVelocity();
-
-    // Read motor current if current sensing is configured
-    if (hasCurrentSense_) {
-        // Multiple ADC reads and average to reduce noise
-        const uint8_t NUM_SAMPLES = 4;
-        uint32_t adcSum = 0;
-
-        for (uint8_t i = 0; i < NUM_SAMPLES; i++) {
-            adcSum += analogRead(pinCT_);
+    } else {
+        if (!encoder_ || !velocityEst_) {
+            // Missing encoder or velocity estimator — cannot control
+            return;
         }
 
-        int rawADC = adcSum / NUM_SAMPLES;
+        // Compute time step
+        uint32_t currentUs = micros();
+        float dt = (currentUs - lastUpdateUs_) / 1000000.0f;  // Convert to seconds
+        lastUpdateUs_ = currentUs;
 
-        // Convert to voltage (assuming 5V reference)
-        float voltage = (rawADC / 1023.0f) * 5.0f;
+        // Velocity already updated above; just read the result
+        int32_t currentPosition = encoder_->getCount();
 
-        // Convert to milliamps using scaling factor
-        int16_t newCurrentMa = (int16_t)(voltage * maPerVolt_);
+        float currentVelocity = velocityEst_->getVelocity();
 
-        // Apply deadband: ignore small currents when motor is stopped
-        if (pwmOutput_ == 0 && abs(newCurrentMa) < 50) {
-            newCurrentMa = 0;
+        // Read motor current if current sensing is configured
+        if (hasCurrentSense_) {
+            const uint8_t NUM_SAMPLES = 4;
+            uint32_t adcSum = 0;
+            for (uint8_t i = 0; i < NUM_SAMPLES; i++) {
+                adcSum += analogRead(pinCT_);
+            }
+            int rawADC = adcSum / NUM_SAMPLES;
+            float voltage = (rawADC / 1023.0f) * 5.0f;
+            int16_t newCurrentMa = (int16_t)(voltage * maPerVolt_);
+            if (pwmOutput_ == 0 && abs(newCurrentMa) < 50) newCurrentMa = 0;
+            const float ALPHA = 0.3f;
+            currentMa_ = (int16_t)((ALPHA * newCurrentMa) + ((1.0f - ALPHA) * currentMa_));
         }
 
-        // Simple low-pass filter (exponential moving average)
-        // Alpha = 0.3 means 30% new value, 70% old value
-        const float ALPHA = 0.3f;
-        currentMa_ = (int16_t)((ALPHA * newCurrentMa) + ((1.0f - ALPHA) * currentMa_));
-    }
+        // Compute control output based on mode
+        float velocitySetpoint = targetVelocity_;
 
-    // Compute control output based on mode
-    float velocitySetpoint = targetVelocity_;
+        if (mode_ == DC_MODE_POSITION) {
+            velocitySetpoint = positionPID_.compute(
+                (float)targetPosition_,
+                (float)currentPosition,
+                dt
+            );
+#ifdef DEBUG_MOTOR_CONTROL
+            if (motorId_ == 0) {
+                DEBUG_SERIAL.print(F("[M0] Pos: "));
+                DEBUG_SERIAL.print(currentPosition);
+                DEBUG_SERIAL.print(F(" / "));
+                DEBUG_SERIAL.print(targetPosition_);
+                DEBUG_SERIAL.print(F(" -> VelSP: "));
+                DEBUG_SERIAL.println(velocitySetpoint);
+            }
+#endif
+        }
 
-    if (mode_ == DC_MODE_POSITION) {
-        // Position mode: Outer loop (position PID) computes velocity setpoint
-        velocitySetpoint = positionPID_.compute(
-            (float)targetPosition_,
-            (float)currentPosition,
-            dt
-        );
+        float pwmOutput = velocityPID_.compute(velocitySetpoint, currentVelocity, dt);
+        pwmOutput_ = (int16_t)pwmOutput;
+        setPWM(pwmOutput_);
 
 #ifdef DEBUG_MOTOR_CONTROL
-        if (motorId_ == 0) {  // Only debug motor 0 to reduce spam
-            DEBUG_SERIAL.print(F("[M0] Pos: "));
-            DEBUG_SERIAL.print(currentPosition);
+        if (mode_ == DC_MODE_VELOCITY && motorId_ == 0) {
+            DEBUG_SERIAL.print(F("[M0] Vel: "));
+            DEBUG_SERIAL.print(currentVelocity);
             DEBUG_SERIAL.print(F(" / "));
-            DEBUG_SERIAL.print(targetPosition_);
-            DEBUG_SERIAL.print(F(" -> VelSP: "));
-            DEBUG_SERIAL.println(velocitySetpoint);
+            DEBUG_SERIAL.print(targetVelocity_);
+            DEBUG_SERIAL.print(F(" -> PWM: "));
+            DEBUG_SERIAL.println(pwmOutput_);
         }
 #endif
     }
 
-    // Inner loop: Velocity PID computes PWM output
-    float pwmOutput = velocityPID_.compute(
-        velocitySetpoint,
-        currentVelocity,
-        dt
-    );
-
-    pwmOutput_ = (int16_t)pwmOutput;
-
-    // Apply PWM to motor
-    setPWM(pwmOutput_);
-
-#ifdef DEBUG_MOTOR_CONTROL
-    if (mode_ == DC_MODE_VELOCITY && motorId_ == 0) {  // Debug velocity mode
-        DEBUG_SERIAL.print(F("[M0] Vel: "));
-        DEBUG_SERIAL.print(currentVelocity);
-        DEBUG_SERIAL.print(F(" / "));
-        DEBUG_SERIAL.print(targetVelocity_);
-        DEBUG_SERIAL.print(F(" -> PWM: "));
-        DEBUG_SERIAL.println(pwmOutput_);
+#if ENCODER_STALL_DETECTION
+    // ── Encoder stall detection ──────────────────────────────────────────────
+    // If |PWM| > ENCODER_FAIL_PWM_THRESHOLD and encoder hasn't moved for
+    // ENCODER_FAIL_TIMEOUT_MS, declare encoder fault and disable this motor.
+    // Clears automatically on next enable(). Disable with ENCODER_STALL_DETECTION=0.
+    if (!encoderFailed_ && encoder_) {
+        int32_t pos = encoder_->getCount();
+        if (abs(pwmOutput_) > ENCODER_FAIL_PWM_THRESHOLD) {
+            if (!stuckTracking_ || pos != lastCheckedPos_) {
+                // Motor is moving, or first sample above threshold — start/reset window
+                stuckTracking_  = true;
+                lastCheckedPos_ = pos;
+                stuckStartMs_   = millis();
+            } else if ((uint32_t)(millis() - stuckStartMs_) >= ENCODER_FAIL_TIMEOUT_MS) {
+                // Encoder stuck under load for too long
+                encoderFailed_ = true;
+                disable();
+            }
+        } else {
+            stuckTracking_ = false;  // PWM below threshold — not a fault condition
+        }
     }
-#endif
+#endif // ENCODER_STALL_DETECTION
 }
 
 int32_t DCMotor::getPosition() const {

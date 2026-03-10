@@ -23,9 +23,10 @@ void EncoderCounter2x::init(uint8_t pinA, uint8_t pinB, bool invertDir) {
     pinB_ = pinB;
     invertDir_ = invertDir;
 
-    // Configure pins
-    pinMode(pinA_, INPUT);
-    pinMode(pinB_, INPUT);
+    // INPUT_PULLUP: required for open-collector encoder outputs.
+    // Harmless for push-pull encoders (internal 20-50kΩ is overridden).
+    pinMode(pinA_, INPUT_PULLUP);
+    pinMode(pinB_, INPUT_PULLUP);
 
     // Reset state
     count_ = 0;
@@ -109,9 +110,10 @@ void EncoderCounter4x::init(uint8_t pinA, uint8_t pinB, bool invertDir) {
     pinB_ = pinB;
     invertDir_ = invertDir;
 
-    // Configure pins
-    pinMode(pinA_, INPUT);
-    pinMode(pinB_, INPUT);
+    // INPUT_PULLUP: required for open-collector encoder outputs.
+    // Harmless for push-pull encoders (internal 20-50kΩ is overridden).
+    pinMode(pinA_, INPUT_PULLUP);
+    pinMode(pinB_, INPUT_PULLUP);
 
     // Read initial state
     uint8_t a = digitalRead(pinA_);
