@@ -39,6 +39,9 @@ ros2_ws/log/
 firmware/**/build/
 firmware/**/.build/
 
+# Firmware test local symlinks
+firmware/tests/*/src
+
 # ============================================
 # PCB Design Files
 # ============================================
@@ -205,4 +208,3 @@ logs/
 # Large binary assets (document separately)
 # *.stl  # Uncomment if STL files are too large
 # *.step # Uncomment if STEP files are too large
-
