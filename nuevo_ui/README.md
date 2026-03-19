@@ -24,7 +24,37 @@ Browser  ←── WebSocket ──→  nuevo_bridge (FastAPI)  ←── UART/T
 
 ---
 
-## Quick start — development
+## Production build & deploy (RPi, no ROS2)
+
+The frontend must be compiled to static files so `nuevo_bridge` can serve everything on a single port.
+
+```bash
+# From nuevo_ui/
+cd frontend && npm run build && cd .. && cp -r frontend/dist/. backend/static/
+```
+
+Then start the backend — it serves both the API and the compiled UI:
+
+```bash
+# From nuevo_ui/
+cd backend && NUEVO_SERIAL_PORT=/dev/ttyAMA0 python3 -m nuevo_bridge
+```
+
+Access the UI from any browser on the local network at `http://<rpi-hostname>:8000`.
+
+Default login:
+```
+username: user
+password: 162
+```
+
+---
+
+## Development (frontend and backend separated)
+
+The default dev setup runs with mock Arduino data — no hardware needed.
+
+### Using the dev script
 
 The easiest way to run both servers at once:
 
@@ -35,11 +65,11 @@ cd nuevo_ui
 
 This starts:
 - **Backend** at `http://localhost:8000` — mock mode (no Arduino needed)
-- **Frontend** at `http://localhost:5173` — Vite dev server with hot reload
+- **Frontend** at `http://localhost:5173` — Vite dev server with **hot reload**
 
 Open `http://localhost:5173` in your browser. The frontend proxies `/ws` and `/auth` to the backend automatically.
 
-### Manual startup (two terminals)
+### Manual startup (two separate terminals)
 
 **Terminal 1 — backend (mock mode, no Arduino needed)**
 ```bash
@@ -62,29 +92,16 @@ npm run dev
 
 ---
 
-## Production build (deploy to RPi)
+## Backend options
 
-The frontend must be compiled to static files so `nuevo_bridge` can serve everything on a single port.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NUEVO_MOCK` | `0` | `1` = simulate Arduino data (no hardware needed) |
+| `NUEVO_SERIAL_PORT` | `/dev/ttyAMA0` | Serial device path to the Arduino |
+| `NUEVO_SERIAL_BAUD` | `500000` | Baud rate — must match firmware `RPI_BAUD_RATE` |
+| `NUEVO_ROS2` | `0` | `1` = enable ROS2 topic bridge (requires ROS2 installed) |
 
-```bash
-# From nuevo_ui/
-cd frontend && npm run build && cd .. && cp -r frontend/dist/. backend/static/
-```
-
-Then on the RPi, start the backend — it serves both the API and the compiled UI:
-
-```bash
-cd nuevo_ui/backend
-NUEVO_SERIAL_PORT=/dev/ttyAMA0 python3 -m nuevo_bridge
-```
-
-Access the UI from any browser on the local network at `http://<rpi-hostname>:8000`.
-
----
-
-## Running the backend
-
-### Mock mode (no Arduino, for development)
+### Mock mode (no Arduino, works on any machine)
 ```bash
 cd nuevo_ui/backend
 NUEVO_MOCK=1 python3 -m nuevo_bridge
@@ -97,19 +114,8 @@ NUEVO_SERIAL_PORT=/dev/ttyAMA0 python3 -m nuevo_bridge
 ```
 
 ### With ROS2
-Set `NUEVO_ROS2=1` to enable ROS2 topic publishing/subscribing alongside the WebSocket bridge. The bridge node is launched automatically when running inside Docker.
+Set `NUEVO_ROS2=1` to enable ROS2 topic publishing/subscribing alongside the WebSocket bridge. The bridge is started automatically by the Docker entrypoint when running in the ROS2 container.
 See [`../ros2_ws/README.md`](../ros2_ws/README.md) for Docker setup and ROS2 integration details.
-
----
-
-## Environment variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NUEVO_MOCK` | `0` | `1` = simulate Arduino data (no hardware needed) |
-| `NUEVO_SERIAL_PORT` | `/dev/ttyAMA0` | Serial device path to the Arduino |
-| `NUEVO_SERIAL_BAUD` | `500000` | Baud rate — must match firmware `RPI_BAUD_RATE` |
-| `NUEVO_ROS2` | `0` | `1` = enable ROS2 topic bridge (requires ROS2 installed) |
 
 ---
 
