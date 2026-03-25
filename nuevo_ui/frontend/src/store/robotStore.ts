@@ -172,6 +172,7 @@ function buildSystemStatus(
     heartbeatTimeoutMs: int(sysConfig?.heartbeatTimeoutMs),
     limitSwitchMask: int(sysInfo?.limitSwitchMask),
     stepperHomeLimitGpio: sysInfo?.stepperHomeLimitGpio ?? [0xFF, 0xFF, 0xFF, 0xFF],
+    dcHomeLimitGpio: sysInfo?.dcHomeLimitGpio ?? [0xFF, 0xFF, 0xFF, 0xFF],
     warningFlags,
     runtimeFlags: int(sysState.runtimeFlags),
   }

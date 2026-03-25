@@ -1,8 +1,8 @@
 import ctypes
 
-from nuevo_bridge.TLV_TypeDefs import DC_ENABLE, SENSOR_MAG_CAL_CMD, SYS_DIAG_RSP, SYS_INFO_RSP, SYS_POWER, SYS_STATE
+from nuevo_bridge.TLV_TypeDefs import DC_ENABLE, DC_HOME, DC_RESET_POSITION, SENSOR_MAG_CAL_CMD, SYS_DIAG_RSP, SYS_INFO_RSP, SYS_POWER, SYS_STATE
 from nuevo_bridge.message_router import MessageRouter
-from nuevo_bridge.payloads import PayloadDCEnable, PayloadMagCalCmd, PayloadSysDiagRsp, PayloadSysInfoRsp, PayloadSysPower, PayloadSysState
+from nuevo_bridge.payloads import PayloadDCEnable, PayloadDCHome, PayloadDCResetPosition, PayloadMagCalCmd, PayloadSysDiagRsp, PayloadSysInfoRsp, PayloadSysPower, PayloadSysState
 from tlvcodec import DecodeErrorCode, Decoder, Encoder
 
 
@@ -65,6 +65,22 @@ def main() -> None:
     assert payload.motorId == 0
     assert payload.mode == 2
 
+    outgoing = router.handle_outgoing("dc_reset_position", {"motorNumber": 2})
+    assert outgoing is not None
+    tlv_type, payload = outgoing
+    assert tlv_type == DC_RESET_POSITION
+    assert isinstance(payload, PayloadDCResetPosition)
+    assert payload.motorId == 1
+
+    outgoing = router.handle_outgoing("dc_home", {"motorNumber": 3, "direction": 1, "homeVelocity": 320})
+    assert outgoing is not None
+    tlv_type, payload = outgoing
+    assert tlv_type == DC_HOME
+    assert isinstance(payload, PayloadDCHome)
+    assert payload.motorId == 2
+    assert payload.direction == 1
+    assert payload.homeVelocity == 320
+
     outgoing = router.handle_outgoing("sensor_mag_cal_cmd", {"command": 4, "offsetX": 1.0, "offsetY": -2.0, "offsetZ": 3.0})
     assert outgoing is not None
     tlv_type, payload = outgoing
@@ -77,6 +93,7 @@ def main() -> None:
 
     info = PayloadSysInfoRsp()
     info.sensorCapabilityMask = 0x01
+    info.dcHomeLimitGpio[0] = 40
     decoded = router.decode_incoming(SYS_INFO_RSP, bytes(info))
     assert decoded is not None
 

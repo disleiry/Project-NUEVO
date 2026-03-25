@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useOptimisticEnable } from "../hooks/useOptimisticEnable";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Home, RotateCcw } from "lucide-react";
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { useRobotStore } from "../store/robotStore";
@@ -25,6 +25,7 @@ const MAX_REV_S = 2.0;
 export function DCMotorSection({ motorId }: DCMotorSectionProps) {
   const motorState = useRobotStore((s) => s.dcMotors[motorId - 1]);
   const status     = motorState?.status ?? null;
+  const system     = useRobotStore((s) => s.system);
   const setMotorRecording = useRobotStore((s) => s.setMotorRecording);
 
   const [showModal, setShowModal] = useState(false);
@@ -64,6 +65,8 @@ export function DCMotorSection({ motorId }: DCMotorSectionProps) {
   const speedPct    = Math.min(100, (speedRevs / MAX_REV_S) * 100);
 
   const modeIndex = MODES.indexOf(controlMode);
+  const dcHomeLimitGpio = system?.dcHomeLimitGpio?.[motorId - 1] ?? 0xff;
+  const canHome = dcHomeLimitGpio !== 0xff;
 
   // ── Commands ─────────────────────────────────────────────────────────────
   const handleEnable = (checked: boolean) => {
@@ -99,6 +102,14 @@ export function DCMotorSection({ motorId }: DCMotorSectionProps) {
       ki: parseFloat(pid.i),
       kd: parseFloat(pid.d),
     });
+  };
+
+  const handleResetPosition = () => {
+    wsSend('dc_reset_position', { motorNumber: motorId });
+  };
+
+  const handleHome = () => {
+    wsSend('dc_home', { motorNumber: motorId });
   };
 
   // ── Recording ────────────────────────────────────────────────────────────
@@ -351,6 +362,28 @@ export function DCMotorSection({ motorId }: DCMotorSectionProps) {
               </div>
             </div>
           )}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleResetPosition}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl backdrop-blur-xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all text-sm font-semibold text-white"
+            >
+              <RotateCcw className="size-4" />
+              Reset Pos
+            </button>
+            <button
+              onClick={handleHome}
+              disabled={!canHome}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-semibold ${
+                canHome
+                  ? "backdrop-blur-xl bg-amber-500/20 border-amber-400/40 hover:bg-amber-500/30 text-white"
+                  : "bg-white/5 border-white/10 text-white/35 cursor-not-allowed"
+              }`}
+            >
+              <Home className="size-4" />
+              Home
+            </button>
+          </div>
 
           {/* ── Recording ─────────────────────────────────────────────── */}
           <RecordCSV

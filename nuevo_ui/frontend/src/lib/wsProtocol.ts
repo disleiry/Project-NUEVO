@@ -52,6 +52,7 @@ export interface SysInfoRspData {
   maxNeoPixelCount: number
   limitSwitchMask: number
   stepperHomeLimitGpio: number[]
+  dcHomeLimitGpio: number[]
 }
 
 export interface SysConfigRspData {
@@ -262,6 +263,7 @@ export interface SystemStatusData {
   heartbeatTimeoutMs: number
   limitSwitchMask: number
   stepperHomeLimitGpio: number[]
+  dcHomeLimitGpio: number[]
   warningFlags: number
   runtimeFlags: number
 }

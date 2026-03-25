@@ -38,7 +38,7 @@ from .payloads import (
     PayloadHeartbeat, PayloadSysCmd,
     PayloadSysState, PayloadSysInfoRsp, PayloadSysConfigRsp, PayloadSysConfigSet,
     PayloadSysPower, PayloadSysDiagRsp, PayloadSysOdomReset,
-    PayloadDCStateAll, PayloadDCPidReq, PayloadDCPidRsp,
+    PayloadDCStateAll, PayloadDCPidReq, PayloadDCPidRsp, PayloadDCResetPosition, PayloadDCHome,
     PayloadStepStateAll, PayloadStepConfigReq, PayloadStepConfigRsp,
     PayloadServoStateAll, PayloadSensorIMU, PayloadSensorKinematics,
     PayloadSensorUltrasonicAll, PayloadIOInputState, PayloadIOOutputState,
@@ -52,7 +52,7 @@ from .TLV_TypeDefs import (
     SYS_DIAG_REQ, SYS_DIAG_RSP,
     SYS_ODOM_RESET,
     DC_PID_REQ, DC_PID_RSP, DC_PID_SET,
-    DC_ENABLE, DC_SET_VELOCITY, DC_SET_POSITION, DC_SET_PWM,
+    DC_ENABLE, DC_SET_VELOCITY, DC_SET_POSITION, DC_SET_PWM, DC_RESET_POSITION, DC_HOME,
     DC_STATE_ALL,
     STEP_ENABLE,
     STEP_CONFIG_REQ, STEP_CONFIG_RSP, STEP_CONFIG_SET,
@@ -428,6 +428,7 @@ _DC_DISABLED = 0
 _DC_POSITION = 1
 _DC_VELOCITY = 2
 _DC_PWM      = 3
+_DC_HOMING   = 4
 
 _STEP_IDLE    = 0
 _STEP_ACCEL   = 1
@@ -500,6 +501,19 @@ class _DC:
             self.velocity += (target_vel - self.velocity) * alpha
             self.velocity += random.gauss(0, 1.5)
             self.current_ma = abs(self.velocity) * 0.25 + random.gauss(40, 8)
+
+        elif self.mode == _DC_HOMING:
+            target = -abs(float(self.target_vel or 200))
+            tau = 0.15
+            alpha = 1.0 - math.exp(-dt / tau)
+            self.velocity += (target - self.velocity) * alpha
+            self.velocity += random.gauss(0, 1.0)
+            self.pwm = int(_clamp(self.velocity / 10.0, -255, 255))
+            self.current_ma = abs(self.velocity) * 0.25 + random.gauss(40, 8)
+            if self.position <= 0.0:
+                self.position = 0.0
+                self.velocity = 0.0
+                self.mode = _DC_DISABLED
 
         self.position += self.velocity * dt
 
@@ -847,6 +861,19 @@ class MockSerialManager:
             mid = payload.motorId
             if 0 <= mid < 4:
                 a.dc[mid].pwm = payload.pwm
+                a.dc[mid].mode = _DC_PWM
+
+        elif tlv_type == DC_RESET_POSITION:
+            mid = payload.motorId
+            if 0 <= mid < 4:
+                a.dc[mid].position = 0.0
+                a.dc[mid].target_pos = 0
+
+        elif tlv_type == DC_HOME:
+            mid = payload.motorId
+            if 0 <= mid < 4:
+                a.dc[mid].mode = _DC_HOMING
+                a.dc[mid].target_vel = abs(int(payload.homeVelocity or 200))
 
         elif tlv_type == STEP_ENABLE:
             sid = payload.stepperId
@@ -948,6 +975,7 @@ class MockSerialManager:
         p.limitSwitchMask = a.limit_switch_mask
         for i in range(4):
             p.stepperHomeLimitGpio[i] = a.stepper_home_limit[i]
+            p.dcHomeLimitGpio[i] = 0xFF
         self._emit(SYS_INFO_RSP, p)
 
     def _gen_sys_config_rsp(self):

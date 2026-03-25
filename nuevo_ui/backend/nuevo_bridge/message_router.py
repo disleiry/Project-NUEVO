@@ -529,6 +529,25 @@ class MessageRouter:
         payload.pwm = _clamp(int(data["pwm"]), -255, 255)
         return payload
 
+    def _encode_dc_reset_position(self, data: dict) -> Optional[ctypes.Structure]:
+        motor_number = int(data["motorNumber"])
+        if not 1 <= motor_number <= TLV_MAX_DC_MOTORS:
+            return None
+        payload = PayloadDCResetPosition()
+        payload.motorId = motor_number - 1
+        return payload
+
+    def _encode_dc_home(self, data: dict) -> Optional[ctypes.Structure]:
+        motor_number = int(data["motorNumber"])
+        if not 1 <= motor_number <= TLV_MAX_DC_MOTORS:
+            return None
+        payload = PayloadDCHome()
+        payload.motorId = motor_number - 1
+        direction = int(data.get("direction", -1))
+        payload.direction = 1 if direction >= 0 else -1
+        payload.homeVelocity = int(data.get("homeVelocity", 200))
+        return payload
+
     def _encode_dc_pid_req(self, data: dict) -> Optional[ctypes.Structure]:
         motor_number = int(data["motorNumber"])
         if not 1 <= motor_number <= TLV_MAX_DC_MOTORS:
@@ -665,6 +684,8 @@ class MessageRouter:
             "dc_set_position": (DC_SET_POSITION, self._encode_dc_set_position),
             "dc_set_velocity": (DC_SET_VELOCITY, self._encode_dc_set_velocity),
             "dc_set_pwm": (DC_SET_PWM, self._encode_dc_set_pwm),
+            "dc_reset_position": (DC_RESET_POSITION, self._encode_dc_reset_position),
+            "dc_home": (DC_HOME, self._encode_dc_home),
             "dc_pid_req": (DC_PID_REQ, self._encode_dc_pid_req),
             "dc_pid_set": (DC_PID_SET, self._encode_dc_pid_set),
             "step_enable": (STEP_ENABLE, self._encode_step_enable),

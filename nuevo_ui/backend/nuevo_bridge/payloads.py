@@ -78,6 +78,7 @@ class PayloadSysInfoRsp(ctypes.Structure):
         ("maxNeoPixelCount", ctypes.c_uint8),
         ("limitSwitchMask", ctypes.c_uint16),
         ("stepperHomeLimitGpio", ctypes.c_uint8 * TLV_MAX_STEPPERS),
+        ("dcHomeLimitGpio", ctypes.c_uint8 * TLV_MAX_DC_MOTORS),
     ]
 
 
@@ -198,6 +199,24 @@ class PayloadDCSetPWM(ctypes.Structure):
         ("motorId", ctypes.c_uint8),
         ("reserved", ctypes.c_uint8),
         ("pwm", ctypes.c_int16),
+    ]
+
+
+class PayloadDCResetPosition(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("motorId", ctypes.c_uint8),
+        ("reserved", ctypes.c_uint8 * 3),
+    ]
+
+
+class PayloadDCHome(ctypes.Structure):
+    _pack_ = 1
+    _fields_ = [
+        ("motorId", ctypes.c_uint8),
+        ("direction", ctypes.c_int8),
+        ("reserved", ctypes.c_uint8 * 2),
+        ("homeVelocity", ctypes.c_int32),
     ]
 
 
