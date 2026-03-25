@@ -89,8 +89,8 @@ class PayloadSystemStatus(ctypes.Structure):
         ("loopTimeAvgUs",       ctypes.c_uint16),
         ("loopTimeMaxUs",       ctypes.c_uint16),
         ("uartRxErrors",        ctypes.c_uint16),
-        ("wheelDiameterMm",     ctypes.c_float),
-        ("wheelBaseMm",         ctypes.c_float),
+        # ("wheelDiameterMm",     ctypes.c_float),
+        # ("wheelBaseMm",         ctypes.c_float),
         ("motorDirMask",        ctypes.c_uint8),
         ("neoPixelCount",       ctypes.c_uint8),
         ("heartbeatTimeoutMs",  ctypes.c_uint16),
@@ -99,7 +99,7 @@ class PayloadSystemStatus(ctypes.Structure):
     ]
 # 48 bytes
 
-assert ctypes.sizeof(PayloadSystemStatus) == 48, \
+assert ctypes.sizeof(PayloadSystemStatus) == 40, \
     f"PayloadSystemStatus size wrong: {ctypes.sizeof(PayloadSystemStatus)}"
 
 SYS_STATE_NAMES = {0: "INIT", 1: "IDLE", 2: "RUNNING", 3: "ERROR", 4: "ESTOP"}

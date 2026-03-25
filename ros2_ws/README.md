@@ -47,6 +47,11 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
+Start docker:
+```bash
+sudo systemctl start docker
+```
+
 ### macOS
 1. Install [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
 2. Open **Docker Desktop** and wait for the whale icon in the menu bar to stop animating
@@ -59,6 +64,7 @@ newgrp docker
 
 ## 2. Set your compose file
 
+Do this from the project root `project-NUEVO/` folder.
 Two compose files are provided — pick the one for your platform:
 
 | Platform | Compose file | Mode |
