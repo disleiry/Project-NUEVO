@@ -108,8 +108,9 @@ class BridgeNode(Node):
         stamp = self.get_clock().now().to_msg()
         publisher.publish(converter(msg_dict["data"], stamp))
 
-    def _send(self, cmd: str, data: dict) -> None:
+    def _send(self, cmd: str, data: dict) -> bool:
         self._runtime.handle_command(cmd, data)
+        return True
 
     def _on_sys_cmd(self, msg: SysCommand) -> None:
         self._send("sys_cmd", {"command": int(msg.command)})

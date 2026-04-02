@@ -35,15 +35,16 @@ class LED:
 
 class MyFSM(RobotFSM):
     """
-    Example FSM with two states: IDLE and MOVING.
+    Three-state FSM: INIT → IDLE ↔ MOVING
 
-    Button 1 → start moving forward
-    Button 2 → stop
+    INIT  : one-time startup — starts the firmware, then immediately goes to IDLE
+    IDLE  : waiting; RED LED on. Press button 1 to start moving.
+    MOVING: driving forward; GREEN LED on. Press button 2 to stop.
 
-    ┌────────┐  to_moving  ┌────────┐
-    │  IDLE  │ ──────────> │ MOVING │
-    │        │ <────────── │        │
-    └────────┘   to_idle   └────────┘
+    ┌──────┐  ready      ┌────────┐  to_moving  ┌────────┐
+    │ INIT │ ──────────> │  IDLE  │ ──────────> │ MOVING │
+    └──────┘             │        │ <────────── │        │
+                         └────────┘   to_idle   └────────┘
     """
 
     # ------------------------------------------------------------------
@@ -60,10 +61,14 @@ class MyFSM(RobotFSM):
     # ------------------------------------------------------------------
 
     def __init__(self, robot: Robot) -> None:
-        super().__init__(robot, initial_state="IDLE")
+        super().__init__(robot, initial_state="INIT")
 
+        self.add_transition("INIT",   "ready",     "IDLE",   action=self._on_ready)
         self.add_transition("IDLE",   "to_moving", "MOVING", action=self._on_to_moving)
         self.add_transition("MOVING", "to_idle",   "IDLE",   action=self._on_to_idle)
+
+        # Tracks the previous button state for edge detection (see _button_pressed)
+        self._btn_prev: dict[int, bool] = {}
 
     # ------------------------------------------------------------------
     # Part 2 — Continuous logic (runs every spin cycle, ~20 Hz)
@@ -81,14 +86,19 @@ class MyFSM(RobotFSM):
     def update(self) -> None:
         state = self.get_state()
 
-        if state == "IDLE":
+        if state == "INIT":
+            # No output — transition happens automatically on the first cycle.
+            # trigger() changes state to IDLE and calls _on_ready() once.
+            self.trigger("ready")
+
+        elif state == "IDLE":
             # Continuous output while IDLE — runs every cycle
             self.robot.set_led(LED.GREEN, LED.OFF)
             self.robot.set_led(LED.RED,   LED.ON)
 
-            # Transition condition: button 1 pressed → fire "to_moving" event
-            # trigger() changes state to MOVING and calls _on_to_moving() once
-            if self.robot.get_button(1):
+            # _button_pressed() fires only on the rising edge (moment of press).
+            # This prevents the trigger from firing repeatedly while held down.
+            if self._button_pressed(1):
                 self.trigger("to_moving")
 
         elif state == "MOVING":
@@ -96,9 +106,7 @@ class MyFSM(RobotFSM):
             self.robot.set_led(LED.RED,   LED.OFF)
             self.robot.set_led(LED.GREEN, LED.ON)
 
-            # Transition condition: button 2 pressed → fire "to_idle" event
-            # trigger() changes state to IDLE and calls _on_to_idle() once
-            if self.robot.get_button(2):
+            if self._button_pressed(2):
                 self.trigger("to_idle")
 
     # ------------------------------------------------------------------
@@ -109,15 +117,33 @@ class MyFSM(RobotFSM):
     # initial velocity, or cleanly stopping motors.
     # ------------------------------------------------------------------
 
+    def _on_ready(self) -> None:
+        """Called once when leaving INIT. Starts the firmware."""
+        self.robot.set_state(FirmwareState.RUNNING)
+
     def _on_to_moving(self) -> None:
         """Called once when entering MOVING."""
-        self.robot.set_state(FirmwareState.RUNNING)       # enable firmware
         self.robot.set_velocity(linear=100, angular=0.0)  # 100 mm/s forward
 
     def _on_to_idle(self) -> None:
-        """Called once when entering IDLE."""
-        self.robot.stop()                                  # halt motors
-        self.robot.set_state(FirmwareState.IDLE)           # disable firmware
+        """Called once when entering IDLE from MOVING."""
+        self.robot.stop()
+
+    # ------------------------------------------------------------------
+    # Helper — edge-detection for buttons
+    #
+    # get_button() returns True the entire time a button is held down.
+    # In update() running at 20 Hz, one press would fire trigger() up to
+    # 20 times per second. _button_pressed() detects only the rising edge
+    # (the moment the button goes from not-pressed to pressed), so each
+    # physical press fires the trigger exactly once.
+    # ------------------------------------------------------------------
+
+    def _button_pressed(self, button_id: int) -> bool:
+        current = self.robot.get_button(button_id)
+        prev = self._btn_prev.get(button_id, False)
+        self._btn_prev[button_id] = current
+        return current and not prev
 
 
 def run(robot: Robot) -> None:

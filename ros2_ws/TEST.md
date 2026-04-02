@@ -58,6 +58,15 @@ ros2 interface show bridge_interfaces/srv/SetFirmwareState
 
 ## 3. Start the Bridge Node
 
+> **Note:** The container does NOT auto-start any ROS nodes. After startup it
+> runs `sleep infinity` and waits. If you see `/bridge` already listed in
+> `ros2 node list`, you have a leftover shell from a previous session — find
+> and kill it before continuing:
+> ```bash
+> docker compose -f $COMPOSE exec ros2_runtime bash -c "pgrep -a python3"
+> # then: kill <pid>
+> ```
+
 In the container shell (Shell 1):
 
 ```bash
