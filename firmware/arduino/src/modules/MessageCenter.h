@@ -300,12 +300,16 @@ private:
     static bool pendingMagCal_;
     static bool pendingServoStatus_;
     static bool pendingDCStatus_;
+    static bool pendingIOInputState_;
     static bool pendingSysInfoRsp_;
     static bool pendingSysConfigRsp_;
     static bool pendingSysDiagRsp_;
+    static bool pendingSysOdomParamRsp_;
     static uint8_t pendingDCPidRspMask_;
     static uint8_t pendingStepConfigRspMask_;
     static bool pendingIOOutputState_;
+    static uint16_t lastPublishedButtonMask_;
+    static uint8_t lastPublishedLimitMask_;
 
     // ---- Deferred servo side effects ----
     static bool servoHardwareDirty_;
@@ -391,6 +395,7 @@ private:
     static void handleSysConfigSet(const PayloadSysConfigSet *payload);
     static void handleSysDiagReq(const PayloadSysDiagReq *payload);
     static void handleSysOdomReset(const PayloadSysOdomReset *payload);
+    static void handleSysOdomParamReq(const PayloadSysOdomParamReq *payload);
     static void handleSysOdomParamSet(const PayloadSysOdomParamSet *payload);
 
     // ---- DC motor message handlers ----
@@ -462,8 +467,14 @@ private:
     /** @brief Append engineering diagnostics in response to SYS_DIAG_REQ */
     static void sendSysDiagRsp();
 
-    /** @brief Append button and limit switch input state */
-    static void sendIOInputState();
+    /** @brief Append odometry parameter snapshot in response to SYS_ODOM_PARAM_REQ */
+    static void sendSysOdomParamRsp();
+
+    /**
+     * @brief Append button and limit switch input state.
+     * @return True if the TLV was appended to the current frame.
+     */
+    static bool sendIOInputState();
 
     /** @brief Append LED and NeoPixel output state */
     static void sendIOOutputState();

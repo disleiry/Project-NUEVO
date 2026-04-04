@@ -15,11 +15,15 @@
 
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
+constexpr float countsPerRevForMode(uint8_t mode)
+{
+    return (mode == ENCODER_2X) ? ((float)ENCODER_PPR * 0.5f) : (float)ENCODER_PPR;
+}
 constexpr float kTicksPerRev[4] = {
-    (float)(ENCODER_PPR * ENCODER_1_MODE),
-    (float)(ENCODER_PPR * ENCODER_2_MODE),
-    (float)(ENCODER_PPR * ENCODER_3_MODE),
-    (float)(ENCODER_PPR * ENCODER_4_MODE)
+    countsPerRevForMode(ENCODER_1_MODE),
+    countsPerRevForMode(ENCODER_2_MODE),
+    countsPerRevForMode(ENCODER_3_MODE),
+    countsPerRevForMode(ENCODER_4_MODE)
 };
 } // namespace
 
@@ -40,6 +44,9 @@ uint8_t RobotKinematics::leftMotorId_     = ODOM_LEFT_MOTOR;
 uint8_t RobotKinematics::rightMotorId_    = ODOM_RIGHT_MOTOR;
 bool    RobotKinematics::leftMotorDirInverted_ = (ODOM_LEFT_MOTOR_DIR_INVERTED != 0);
 bool    RobotKinematics::rightMotorDirInverted_ = (ODOM_RIGHT_MOTOR_DIR_INVERTED != 0);
+float   RobotKinematics::leftMmPerTick_   = (kPi * WHEEL_DIAMETER_MM) / kTicksPerRev[ODOM_LEFT_MOTOR];
+float   RobotKinematics::rightMmPerTick_  = (kPi * WHEEL_DIAMETER_MM) / kTicksPerRev[ODOM_RIGHT_MOTOR];
+float   RobotKinematics::invWheelBase_    = 1.0f / WHEEL_BASE_MM;
 int32_t RobotKinematics::prevLeftTicks_ = 0;
 int32_t RobotKinematics::prevRightTicks_= 0;
 
@@ -75,6 +82,7 @@ bool RobotKinematics::setParameters(float wheelDiameterMm, float wheelBaseMm, fl
     rightMotorId_ = rightMotorId;
     leftMotorDirInverted_ = leftMotorDirInverted;
     rightMotorDirInverted_ = rightMotorDirInverted;
+    refreshDerivedParameters();
     reseed(leftTicks, rightTicks);
     return true;
 }
@@ -116,10 +124,10 @@ void RobotKinematics::update(int32_t leftTicks, int32_t rightTicks,
     prevRightTicks_ = rightTicks;
 
     if (dL != 0 || dR != 0) {
-        float dLeft   = (float)dL * mmPerTickForMotor(leftMotorId_);
-        float dRight  = (float)dR * mmPerTickForMotor(rightMotorId_);
+        float dLeft   = (float)dL * leftMmPerTick_;
+        float dRight  = (float)dR * rightMmPerTick_;
         float dCenter = (dLeft + dRight) * 0.5f;
-        float dTheta  = (dRight - dLeft) / wheelBaseMm_;
+        float dTheta  = (dRight - dLeft) * invWheelBase_;
 
         // Midpoint heading integration (reduces discretization error)
         float headingMid = theta_ + dTheta * 0.5f;
@@ -136,15 +144,18 @@ void RobotKinematics::update(int32_t leftTicks, int32_t rightTicks,
         rightVelTps = -rightVelTps;
     }
 
-    float vLeft  = leftVelTps  * mmPerTickForMotor(leftMotorId_);
-    float vRight = rightVelTps * mmPerTickForMotor(rightMotorId_);
+    float vLeft  = leftVelTps  * leftMmPerTick_;
+    float vRight = rightVelTps * rightMmPerTick_;
 
     vx_     = (vLeft + vRight) * 0.5f;
     vy_     = 0.0f;  // Always 0 for differential drive
-    vTheta_ = (vRight - vLeft) / wheelBaseMm_;
+    vTheta_ = (vRight - vLeft) * invWheelBase_;
 }
 
-float RobotKinematics::mmPerTickForMotor(uint8_t motorId)
+void RobotKinematics::refreshDerivedParameters()
 {
-    return (kPi * wheelDiameterMm_) / kTicksPerRev[motorId];
+    const float wheelCircumferenceMm = kPi * wheelDiameterMm_;
+    leftMmPerTick_ = wheelCircumferenceMm / kTicksPerRev[leftMotorId_];
+    rightMmPerTick_ = wheelCircumferenceMm / kTicksPerRev[rightMotorId_];
+    invWheelBase_ = 1.0f / wheelBaseMm_;
 }

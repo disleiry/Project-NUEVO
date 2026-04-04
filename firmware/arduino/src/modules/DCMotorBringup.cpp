@@ -5,9 +5,9 @@
 
 uint16_t DCMotorBringup::countsPerRev() {
 #if ENCODER_1_MODE == ENCODER_4X
-    return (uint16_t)(ENCODER_PPR * 4U);
+    return (uint16_t)ENCODER_PPR;
 #else
-    return (uint16_t)(ENCODER_PPR * 2U);
+    return (uint16_t)(ENCODER_PPR / 2U);
 #endif
 }
 

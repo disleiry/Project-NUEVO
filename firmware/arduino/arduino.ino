@@ -559,7 +559,7 @@ void taskMotors() {
  * This loop-owned task runs at the same 200 Hz cadence as the per-motor mixed
  * control period, but applies to all motors regardless of enable state. It is
  * the single source of truth for cached DC velocity used by PID, telemetry,
- * and odometry.
+ * and the 100 Hz odometry/sensor task.
  */
 void taskMotorFeedback() {
   bool odomNeedsReseed = false;
@@ -573,10 +573,10 @@ void taskMotorFeedback() {
     }
   }
 
+  const int32_t leftTicks = dcMotors[leftMotorId].getPosition();
+  const int32_t rightTicks = dcMotors[rightMotorId].getPosition();
   if (odomNeedsReseed) {
-    RobotKinematics::reseed(
-      dcMotors[leftMotorId].getPosition(),
-      dcMotors[rightMotorId].getPosition());
+    RobotKinematics::reseed(leftTicks, rightTicks);
   }
 }
 
@@ -589,11 +589,21 @@ void taskMotorFeedback() {
  *
  * This is the main bring-up change relative to the older architecture: Timer4
  * still provides motor PWM, but its overflow interrupt is disabled. The same
- * 100 Hz task also refreshes the cached user button / limit switch states.
+ * 100 Hz task also integrates odometry and refreshes the cached user button /
+ * limit switch states.
  */
 void taskSensors() {
   uint32_t t0 = micros();
   SensorManager::tick();
+
+  const uint8_t leftMotorId = RobotKinematics::getLeftMotorId();
+  const uint8_t rightMotorId = RobotKinematics::getRightMotorId();
+  RobotKinematics::update(
+    dcMotors[leftMotorId].getPosition(),
+    dcMotors[rightMotorId].getPosition(),
+    dcMotors[leftMotorId].getVelocity(),
+    dcMotors[rightMotorId].getVelocity());
+
   UserIO::sampleInputs();
   LoopMonitor::record(SLOT_SENSOR_ISR, Utility::clampElapsedUs(micros() - t0));
 }
@@ -743,21 +753,21 @@ void setup() {
   // 6. Register cooperative fast-lane and periodic soft tasks.
   DEBUG_SERIAL.println(F("[Setup] Registering scheduler tasks..."));
 
-  fastTaskId = Scheduler::registerFastTask(fastMotorCompute, 0);
-  if (fastTaskId >= 0) {
-    DEBUG_SERIAL.print(F("  - Fast MotorCompute: Task #"));
-    DEBUG_SERIAL.println(fastTaskId);
-  }
-
-  fastTaskId = Scheduler::registerFastTask(fastDrainUart, 1);
+  fastTaskId = Scheduler::registerFastTask(fastDrainUart, 0);
   if (fastTaskId >= 0) {
     DEBUG_SERIAL.print(F("  - Fast UART RX: Task #"));
     DEBUG_SERIAL.println(fastTaskId);
   }
 
-  fastTaskId = Scheduler::registerFastTask(fastDrainTx, 2);
+  fastTaskId = Scheduler::registerFastTask(fastDrainTx, 1);
   if (fastTaskId >= 0) {
     DEBUG_SERIAL.print(F("  - Fast UART TX: Task #"));
+    DEBUG_SERIAL.println(fastTaskId);
+  }
+
+  fastTaskId = Scheduler::registerFastTask(fastMotorCompute, 2);
+  if (fastTaskId >= 0) {
+    DEBUG_SERIAL.print(F("  - Fast MotorCompute: Task #"));
     DEBUG_SERIAL.println(fastTaskId);
   }
 

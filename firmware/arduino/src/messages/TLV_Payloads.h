@@ -205,7 +205,24 @@ struct PayloadSysOdomReset {
 };
 // 4 bytes
 
+struct PayloadSysOdomParamReq {
+    uint8_t target;       // Reserved for future use; send 0xFF
+    uint8_t reserved[3];
+};
+// 4 bytes
+
 struct PayloadSysOdomParamSet {
+    float wheelDiameterMm;
+    float wheelBaseMm;
+    float initialThetaDeg;
+    uint8_t leftMotorId;            // 0-based
+    uint8_t leftMotorDirInverted;   // 0 or 1
+    uint8_t rightMotorId;           // 0-based
+    uint8_t rightMotorDirInverted;  // 0 or 1
+};
+// 16 bytes
+
+struct PayloadSysOdomParamRsp {
     float wheelDiameterMm;
     float wheelBaseMm;
     float initialThetaDeg;
@@ -594,7 +611,9 @@ STATIC_ASSERT_SIZE(PayloadSysPower, 12);
 STATIC_ASSERT_SIZE(PayloadSysDiagReq, 4);
 STATIC_ASSERT_SIZE(PayloadSysDiagRsp, 24);
 STATIC_ASSERT_SIZE(PayloadSysOdomReset, 4);
+STATIC_ASSERT_SIZE(PayloadSysOdomParamReq, 4);
 STATIC_ASSERT_SIZE(PayloadSysOdomParamSet, 16);
+STATIC_ASSERT_SIZE(PayloadSysOdomParamRsp, 16);
 
 STATIC_ASSERT_SIZE(PayloadDCEnable, 4);
 STATIC_ASSERT_SIZE(PayloadDCSetPosition, 12);

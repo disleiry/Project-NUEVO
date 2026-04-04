@@ -145,12 +145,16 @@ uint8_t MessageCenter::telemetrySlot_ = 0;
 bool MessageCenter::pendingMagCal_ = false;
 bool MessageCenter::pendingServoStatus_ = false;
 bool MessageCenter::pendingDCStatus_ = false;
+bool MessageCenter::pendingIOInputState_ = false;
 bool MessageCenter::pendingSysInfoRsp_ = false;
 bool MessageCenter::pendingSysConfigRsp_ = false;
 bool MessageCenter::pendingSysDiagRsp_ = false;
+bool MessageCenter::pendingSysOdomParamRsp_ = false;
 uint8_t MessageCenter::pendingDCPidRspMask_ = 0;
 uint8_t MessageCenter::pendingStepConfigRspMask_ = 0;
 bool MessageCenter::pendingIOOutputState_ = false;
+uint16_t MessageCenter::lastPublishedButtonMask_ = 0;
+uint8_t MessageCenter::lastPublishedLimitMask_ = 0;
 bool MessageCenter::servoHardwareDirty_ = false;
 uint16_t MessageCenter::servoPulseDirtyMask_ = 0;
 uint16_t MessageCenter::servoOffDirtyMask_ = 0;
@@ -228,12 +232,15 @@ void MessageCenter::init()
     pendingMagCal_ = false;
     pendingServoStatus_ = false;
     pendingDCStatus_ = false;
+    pendingIOInputState_ = false;
     pendingSysInfoRsp_ = false;
     pendingSysConfigRsp_ = false;
     pendingSysDiagRsp_ = false;
     pendingDCPidRspMask_ = 0;
     pendingStepConfigRspMask_ = 0;
     pendingIOOutputState_ = false;
+    lastPublishedButtonMask_ = 0;
+    lastPublishedLimitMask_ = 0;
     rxBytesWindow_ = 0;
     rxFramesWindow_ = 0;
     rxTlvsWindow_ = 0;
@@ -587,6 +594,14 @@ void MessageCenter::sendTelemetry()
     const uint32_t kinematicsInterval = running ? TELEMETRY_KINEMATICS_MS
                                                 : TELEMETRY_KINEMATICS_IDLE_MS;
 
+    if (state != SYS_STATE_INIT) {
+        UserIO::sampleInputs();
+        if (UserIO::getButtonStates() != lastPublishedButtonMask_ ||
+            UserIO::getLimitStates() != lastPublishedLimitMask_) {
+            pendingIOInputState_ = true;
+        }
+    }
+
     // Open a new frame; all send*() calls below append TLVs to it.
     beginFrame();
 
@@ -602,6 +617,10 @@ void MessageCenter::sendTelemetry()
     if (pendingSysDiagRsp_) {
         pendingSysDiagRsp_ = false;
         sendSysDiagRsp();
+    }
+    if (pendingSysOdomParamRsp_) {
+        pendingSysOdomParamRsp_ = false;
+        sendSysOdomParamRsp();
     }
     for (uint8_t bit = 0; bit < 8; ++bit) {
         if ((pendingDCPidRspMask_ & (uint8_t)(1u << bit)) == 0U) {
@@ -635,24 +654,29 @@ void MessageCenter::sendTelemetry()
         sendSysPower();
     }
 
-    // ---- Low-latency telemetry first ----
-    // Kinematics and input state drive UI responsiveness and closed-loop robot
-    // behaviors. Emit them before bulk status streams so they still fit when
-    // the frame is near TX_FRAME_SOFT_LIMIT.
-    if (state != SYS_STATE_INIT &&
-        oddFastLane &&
-        currentMs - lastKinematicsSendMs_ >= kinematicsInterval)
-    {
-        lastKinematicsSendMs_ = currentMs;
-        sendSensorKinematics();
+    // ---- Urgent input state changes first ----
+    // Send button / limit updates in their own tiny frame as soon as the
+    // sampled state changes so they do not wait behind the heavier RUNNING
+    // telemetry batch.
+    if (state != SYS_STATE_INIT && pendingIOInputState_) {
+        if (sendIOInputState()) {
+            pendingIOInputState_ = false;
+            lastIOInputStateSendMs_ = currentMs;
+            sendFrame();
+            return;
+        }
     }
 
-    if (running &&
+    // Button and limit state are needed in IDLE as well so the UI and student
+    // robot node can react immediately before entering RUNNING. Keep this
+    // ahead of kinematics so RUNNING UI input remains snappy under TX pressure.
+    if (state != SYS_STATE_INIT &&
         oddFastLane &&
         currentMs - lastIOInputStateSendMs_ >= TELEMETRY_IO_INPUT_STATE_MS)
     {
-        lastIOInputStateSendMs_ = currentMs;
-        sendIOInputState();
+        if (sendIOInputState()) {
+            lastIOInputStateSendMs_ = currentMs;
+        }
     }
 
     // ---- Runtime streams (RUNNING only) ----
@@ -693,6 +717,14 @@ void MessageCenter::sendTelemetry()
     {
         lastIMUSendMs_ = currentMs;
         sendSensorIMU();
+    }
+
+    if (state != SYS_STATE_INIT &&
+        oddFastLane &&
+        currentMs - lastKinematicsSendMs_ >= kinematicsInterval)
+    {
+        lastKinematicsSendMs_ = currentMs;
+        sendSensorKinematics();
     }
 
     // Servo status is needed in IDLE as well because the UI can enable and
@@ -905,6 +937,11 @@ void MessageCenter::routeMessage(uint8_t type, const uint8_t *payload, uint8_t l
     case SYS_ODOM_RESET:
         if (allowQueries && length == sizeof(PayloadSysOdomReset))
             handleSysOdomReset((const PayloadSysOdomReset *)payload);
+        break;
+
+    case SYS_ODOM_PARAM_REQ:
+        if (allowQueries && length == sizeof(PayloadSysOdomParamReq))
+            handleSysOdomParamReq((const PayloadSysOdomParamReq *)payload);
         break;
 
     case SYS_ODOM_PARAM_SET:
@@ -1145,6 +1182,12 @@ void MessageCenter::handleSysOdomReset(const PayloadSysOdomReset *payload)
     RobotKinematics::reset(leftTicks, rightTicks);
 }
 
+void MessageCenter::handleSysOdomParamReq(const PayloadSysOdomParamReq *payload)
+{
+    (void)payload;
+    pendingSysOdomParamRsp_ = true;
+}
+
 void MessageCenter::handleSysOdomParamSet(const PayloadSysOdomParamSet *payload)
 {
     if (payload->leftMotorId >= NUM_DC_MOTORS || payload->rightMotorId >= NUM_DC_MOTORS ||
@@ -1152,16 +1195,18 @@ void MessageCenter::handleSysOdomParamSet(const PayloadSysOdomParamSet *payload)
         return;
     }
 
-    RobotKinematics::setParameters(
-        payload->wheelDiameterMm,
-        payload->wheelBaseMm,
-        payload->initialThetaDeg,
-        payload->leftMotorId,
-        payload->leftMotorDirInverted != 0,
-        payload->rightMotorId,
-        payload->rightMotorDirInverted != 0,
-        dcMotors[payload->leftMotorId].getPosition(),
-        dcMotors[payload->rightMotorId].getPosition());
+    if (RobotKinematics::setParameters(
+            payload->wheelDiameterMm,
+            payload->wheelBaseMm,
+            payload->initialThetaDeg,
+            payload->leftMotorId,
+            payload->leftMotorDirInverted != 0,
+            payload->rightMotorId,
+            payload->rightMotorDirInverted != 0,
+            dcMotors[payload->leftMotorId].getPosition(),
+            dcMotors[payload->rightMotorId].getPosition())) {
+        pendingSysOdomParamRsp_ = true;
+    }
 }
 
 void MessageCenter::handleDCPidReq(const PayloadDCPidReq *payload)
@@ -1646,14 +1691,6 @@ void MessageCenter::sendSensorIMU()
 
 void MessageCenter::sendSensorKinematics()
 {
-    const uint8_t leftMotorId = RobotKinematics::getLeftMotorId();
-    const uint8_t rightMotorId = RobotKinematics::getRightMotorId();
-    RobotKinematics::update(
-        dcMotors[leftMotorId].getPosition(),
-        dcMotors[rightMotorId].getPosition(),
-        dcMotors[leftMotorId].getVelocity(),
-        dcMotors[rightMotorId].getVelocity());
-
     PayloadSensorKinematics payload;
     payload.x = RobotKinematics::getX();
     payload.y = RobotKinematics::getY();
@@ -1680,14 +1717,25 @@ void MessageCenter::sendSysPower()
     appendTelemetryTlv(SYS_POWER, sizeof(payload), &payload);
 }
 
-void MessageCenter::sendIOInputState()
+bool MessageCenter::sendIOInputState()
 {
+    // Refresh the shared button/limit cache right before encoding telemetry.
+    // In RUNNING, taskSensors() can slip behind higher-priority periodic work,
+    // which would otherwise stamp a fresh packet with stale input bits.
+    UserIO::sampleInputs();
+
     PayloadIOInputState payload;
     payload.buttonMask = UserIO::getButtonStates();
     payload.limitMask = UserIO::getLimitStates();
     payload.timestamp = millis();
 
-    appendTelemetryTlv(IO_INPUT_STATE, sizeof(payload), &payload);
+    if (!appendTelemetryTlv(IO_INPUT_STATE, sizeof(payload), &payload)) {
+        return false;
+    }
+
+    lastPublishedButtonMask_ = payload.buttonMask;
+    lastPublishedLimitMask_ = payload.limitMask;
+    return true;
 }
 
 void MessageCenter::sendIOOutputState()
@@ -1913,6 +1961,21 @@ void MessageCenter::sendSysDiagRsp()
     payload.txDroppedFrames = txDroppedFrames_;
 
     appendTlv(SYS_DIAG_RSP, sizeof(payload), &payload);
+}
+
+void MessageCenter::sendSysOdomParamRsp()
+{
+    PayloadSysOdomParamRsp payload;
+    memset(&payload, 0, sizeof(payload));
+    payload.wheelDiameterMm = RobotKinematics::getWheelDiameterMm();
+    payload.wheelBaseMm = RobotKinematics::getWheelBaseMm();
+    payload.initialThetaDeg = RobotKinematics::getInitialThetaDeg();
+    payload.leftMotorId = RobotKinematics::getLeftMotorId();
+    payload.leftMotorDirInverted = RobotKinematics::isLeftMotorDirInverted() ? 1U : 0U;
+    payload.rightMotorId = RobotKinematics::getRightMotorId();
+    payload.rightMotorDirInverted = RobotKinematics::isRightMotorDirInverted() ? 1U : 0U;
+
+    appendTlv(SYS_ODOM_PARAM_RSP, sizeof(payload), &payload);
 }
 
 void MessageCenter::sendDCPidRsp(uint8_t motorId, uint8_t loopType)

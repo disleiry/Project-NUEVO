@@ -14,7 +14,7 @@
  *   // In setup():
  *   RobotKinematics::reset(0, 0);
  *
- *   // In telemetry loop (100 Hz):
+ *   // In the sensor / odometry task (100 Hz by default):
  *   RobotKinematics::update(
  *       dcMotors[RobotKinematics::getLeftMotorId()].getPosition(),
  *       dcMotors[RobotKinematics::getRightMotorId()].getPosition(),
@@ -79,7 +79,8 @@ public:
     /**
      * @brief Update odometry and instantaneous velocity.
      *
-     * Call once per telemetry cycle (100 Hz) after reading motor state.
+     * Call once per odometry integration cycle after refreshing motor state.
+     * In the current firmware this runs from the 100 Hz sensor task.
      *
      * @param leftTicks   Absolute left encoder tick count
      * @param rightTicks  Absolute right encoder tick count
@@ -94,6 +95,15 @@ public:
 
     /** @brief Current right odometry motor index (0-based). */
     static uint8_t getRightMotorId() { return rightMotorId_; }
+
+    /** @brief Current wheel diameter used for odometry (mm). */
+    static float getWheelDiameterMm() { return wheelDiameterMm_; }
+
+    /** @brief Current wheel base used for odometry (mm). */
+    static float getWheelBaseMm() { return wheelBaseMm_; }
+
+    /** @brief Current initial heading used by future resets (degrees). */
+    static float getInitialThetaDeg() { return initialThetaRad_ * 180.0f / 3.14159265358979323846f; }
 
     /** @brief Whether left odometry wheel direction is inverted. */
     static bool isLeftMotorDirInverted() { return leftMotorDirInverted_; }
@@ -120,7 +130,7 @@ public:
     static float getVTheta() { return vTheta_; }
 
 private:
-    static float mmPerTickForMotor(uint8_t motorId);
+    static void refreshDerivedParameters();
 
     static float   x_;
     static float   y_;
@@ -135,6 +145,9 @@ private:
     static uint8_t rightMotorId_;
     static bool    leftMotorDirInverted_;
     static bool    rightMotorDirInverted_;
+    static float   leftMmPerTick_;
+    static float   rightMmPerTick_;
+    static float   invWheelBase_;
     static int32_t prevLeftTicks_;
     static int32_t prevRightTicks_;
 };
