@@ -70,6 +70,8 @@ class MessageRouter:
 
         self._dc_frame_counter = 0
         self._last_uptime_ms: Optional[int] = None
+        self._bootstrap_queue: List[Tuple[str, Dict[str, Any]]] = []
+        self._last_bootstrap_request_time = 0.0
 
         self._sys_state: Optional[dict] = None
         self._sys_power: Optional[dict] = None
@@ -151,20 +153,34 @@ class MessageRouter:
         self._invalidate_runtime_cache()
         if connected:
             self._request_bootstrap()
+            self.flush_bootstrap(max_commands=2)
         else:
             self._invalidate_bootstrap_cache()
 
     def _request_bootstrap(self) -> None:
+        now = time.monotonic()
+        if now - self._last_bootstrap_request_time < 1.0 and self._bootstrap_queue:
+            return
         self._invalidate_bootstrap_cache()
-        self.send_wire_command("sys_info_req", {"target": 0xFF})
-        self.send_wire_command("sys_config_req", {"target": 0xFF})
-        self.send_wire_command("sys_diag_req", {"target": 0xFF})
-        self.send_wire_command("sys_odom_param_req", {"target": 0xFF})
+        self._bootstrap_queue = [
+            ("sys_info_req", {"target": 0xFF}),
+            ("sys_config_req", {"target": 0xFF}),
+            ("sys_diag_req", {"target": 0xFF}),
+            ("sys_odom_param_req", {"target": 0xFF}),
+        ]
         for motor_number in range(1, 5):
-            self.send_wire_command("dc_pid_req", {"motorNumber": motor_number, "loopType": 0})
-            self.send_wire_command("dc_pid_req", {"motorNumber": motor_number, "loopType": 1})
+            self._bootstrap_queue.append(("dc_pid_req", {"motorNumber": motor_number, "loopType": 0}))
+            self._bootstrap_queue.append(("dc_pid_req", {"motorNumber": motor_number, "loopType": 1}))
         for stepper_number in range(1, 5):
-            self.send_wire_command("step_config_req", {"stepperNumber": stepper_number})
+            self._bootstrap_queue.append(("step_config_req", {"stepperNumber": stepper_number}))
+        self._last_bootstrap_request_time = now
+
+    def flush_bootstrap(self, max_commands: int = 2) -> None:
+        sent = 0
+        while self._bootstrap_queue and sent < max_commands:
+            cmd, data = self._bootstrap_queue.pop(0)
+            self.send_wire_command(cmd, data)
+            sent += 1
 
     def _wrap(self, topic: str, data: dict) -> dict:
         self._mag_cal_controller.observe(topic, data)
@@ -221,6 +237,7 @@ class MessageRouter:
         uptime_ms = int(decoded.get("uptimeMs", 0))
         if self._last_uptime_ms is None or uptime_ms < self._last_uptime_ms:
             self._request_bootstrap()
+            self.flush_bootstrap(max_commands=2)
         self._last_uptime_ms = uptime_ms
 
         self._sys_state = decoded

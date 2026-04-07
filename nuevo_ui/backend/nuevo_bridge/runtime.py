@@ -60,11 +60,15 @@ class BridgeRuntime:
         self._serial_task = asyncio.create_task(self.serial_manager.run())
 
         async def periodic_router_queries() -> None:
+            last_runtime_poll = 0.0
             while True:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.1)
                 if self.serial_manager.stats.get("connected", False):
-                    self.message_router.poll_runtime_queries()
+                    self.message_router.flush_bootstrap(max_commands=2)
                     now = time.monotonic()
+                    if now - last_runtime_poll >= 1.0:
+                        self.message_router.poll_runtime_queries()
+                        last_runtime_poll = now
                     if now - self._last_odom_param_refresh >= ODOM_PARAM_REFRESH_INTERVAL_S:
                         if self._send_command("sys_odom_param_req", {"target": 0xFF}):
                             self._last_odom_param_refresh = now
