@@ -544,6 +544,8 @@ class Robot:
         time.sleep(self._SHUTDOWN_SETTLE_S)
         self.disable_drive_motors()
         time.sleep(self._SHUTDOWN_SETTLE_S)
+        if self.get_state() == FirmwareState.RUNNING:
+            self.set_state(FirmwareState.IDLE, timeout=1.0)
 
     def set_left_wheel(self, motor_id: int) -> None:
         """Alias for set_odom_left_motor()."""

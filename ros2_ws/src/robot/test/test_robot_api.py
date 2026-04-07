@@ -19,6 +19,9 @@ class FakePublisher:
 
 
 class FakeLogger:
+    def info(self, _msg: str) -> None:
+        pass
+
     def error(self, _msg: str) -> None:
         pass
 
@@ -432,6 +435,14 @@ class RobotApiTests(unittest.TestCase):
         self.assertTrue(all(msg.target_ticks == 0 for msg in velocity_msgs))
         self.assertEqual([msg.motor_number for msg in disable_msgs], [1, 2])
         self.assertTrue(all(msg.mode == int(self.hardware_map.DCMotorMode.DISABLED) for msg in disable_msgs))
+
+    def test_shutdown_requests_idle_when_firmware_was_running(self) -> None:
+        self.robot._sys_state = int(self.robot_module.FirmwareState.RUNNING)
+
+        with mock.patch.object(self.robot, "set_state", return_value=True) as set_state:
+            self.robot.shutdown()
+
+        set_state.assert_called_once_with(self.robot_module.FirmwareState.IDLE, timeout=1.0)
 
     def test_button_edges_are_latched_in_subscription_callback(self) -> None:
         first = self.robot_module.IOInputState()
