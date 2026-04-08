@@ -114,7 +114,8 @@ class MyFSM(RobotFSM):
                 self.trigger("to_moving")
 
         elif state == "MOVING":
-            current_x, current_y, current_theta_deg = self.robot.get_pose()
+            current_x, current_y, _ = self.robot.get_pose()
+            current_theta_deg = self.robot.get_fused_orientation()
             current_theta_rad = math.radians(current_theta_deg)
             self._advance_remaining_path(current_x, current_y)
             current_pursuit_x, current_pursuit_y = self.planner._lookahead_point(

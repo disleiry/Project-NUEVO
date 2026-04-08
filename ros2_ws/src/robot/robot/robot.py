@@ -39,6 +39,8 @@ from bridge_interfaces.msg import (
 )
 from bridge_interfaces.srv import SetFirmwareState
 
+from robot.sensor_fusion import ComplementaryFilter, SensorFusion
+
 from robot.hardware_map import (
     BUTTON_COUNT,
     DCMotorMode,
@@ -171,8 +173,8 @@ class Robot:
         self._servo_state: ServoStateAll = None
         self._imu:        SensorImu      = None
         self._mag_heading:  float | None = None   # absolute heading from magnetometer (rad)
-        self._fused_theta:  float        = 0.0    # complementary-filter output (rad)
-        self._fusion_alpha: float        = 0.02   # mag weight [0 = all odometry, 1 = all mag]
+        self._fused_theta:  float        = 0.0    # fusion strategy output (rad)
+        self._fusion: SensorFusion = ComplementaryFilter(alpha=0.02)
         self._pose:    tuple = (0.0, 0.0, 0.0)  # x_mm, y_mm, theta_rad
         self._vel:     tuple = (0.0, 0.0, 0.0)  # vx_mm_s, vy_mm_s, vtheta_rad_s
         self._buttons: int   = 0
@@ -263,16 +265,12 @@ class Robot:
         with self._lock:
             self._pose = (msg.x, msg.y, msg.theta)
             self._vel  = (msg.vx, msg.vy, msg.v_theta)
-            if self._mag_heading is not None:
-                # Complementary filter: correct odometry heading toward absolute mag heading.
-                # atan2(sin, cos) wraps the difference to [-π, π] before blending.
-                diff = math.atan2(
-                    math.sin(self._mag_heading - msg.theta),
-                    math.cos(self._mag_heading - msg.theta),
-                )
-                self._fused_theta = msg.theta + self._fusion_alpha * diff
-            else:
-                self._fused_theta = msg.theta
+            self._fused_theta = self._fusion.update(
+                odom_theta=msg.theta,
+                mag_heading=self._mag_heading,
+                linear_vel=math.hypot(float(msg.vx), float(msg.vy)),
+                angular_vel=float(msg.v_theta),
+            )
         self._pose_event.set()
         self._pose_event.clear()
 
@@ -1011,26 +1009,51 @@ class Robot:
 
     def get_fused_orientation(self) -> float:
         """
-        Return complementary-filter orientation estimate in degrees.
+        Return the current fusion strategy's heading estimate in degrees.
 
-        Blends the absolute magnetometer heading (corrects long-term drift) with
-        the odometry theta (smooth, short-term accurate). The filter weight
-        ``_fusion_alpha`` (default 0.02) controls how quickly the magnetometer
-        heading pulls the estimate; it only activates once the firmware reports
-        ``mag_calibrated = True``. Before calibration, returns odometry theta.
+        Before the magnetometer is calibrated all strategies fall back to
+        raw odometry theta. After calibration the active strategy blends the
+        magnetometer reading with odometry. Use ``set_fusion_strategy()`` to
+        switch between ComplementaryFilter, AdaptiveComplementaryFilter, and
+        HeadingKalmanFilter.
         """
         with self._lock:
             return math.degrees(self._fused_theta)
 
     def set_fusion_alpha(self, alpha: float) -> None:
         """
-        Set the magnetometer weight for the complementary filter (0.0–1.0).
+        Set the magnetometer weight on the active ComplementaryFilter (0.0–1.0).
 
-        Lower values trust odometry more (less mag noise, more drift).
-        Higher values correct drift faster but introduce magnetometer noise.
-        Default is 0.02.
+        Raises TypeError if a different fusion strategy is active; use
+        set_fusion_strategy() to switch strategies.
         """
-        self._fusion_alpha = max(0.0, min(1.0, float(alpha)))
+        if not isinstance(self._fusion, ComplementaryFilter):
+            raise TypeError(
+                "set_fusion_alpha() only works with ComplementaryFilter. "
+                "Use set_fusion_strategy() to change strategies."
+            )
+        self._fusion.alpha = max(0.0, min(1.0, float(alpha)))
+
+    def set_fusion_strategy(self, strategy: SensorFusion) -> None:
+        """
+        Replace the active heading fusion strategy.
+
+        Example::
+
+            from robot.sensor_fusion import AdaptiveComplementaryFilter, HeadingKalmanFilter
+
+            # Velocity-adaptive: high mag trust when slow, low when fast
+            robot.set_fusion_strategy(AdaptiveComplementaryFilter())
+
+            # Kalman filter
+            robot.set_fusion_strategy(HeadingKalmanFilter())
+
+            # Back to fixed complementary filter
+            from robot.sensor_fusion import ComplementaryFilter
+            robot.set_fusion_strategy(ComplementaryFilter(alpha=0.02))
+        """
+        with self._lock:
+            self._fusion = strategy
 
     # =========================================================================
     # Units

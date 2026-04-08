@@ -373,9 +373,9 @@ class RobotApiTests(unittest.TestCase):
 
     def test_set_fusion_alpha_is_clamped(self) -> None:
         self.robot.set_fusion_alpha(2.0)
-        self.assertEqual(self.robot._fusion_alpha, 1.0)
+        self.assertEqual(self.robot._fusion.alpha, 1.0)
         self.robot.set_fusion_alpha(-1.0)
-        self.assertEqual(self.robot._fusion_alpha, 0.0)
+        self.assertEqual(self.robot._fusion.alpha, 0.0)
 
 
 if __name__ == "__main__":
