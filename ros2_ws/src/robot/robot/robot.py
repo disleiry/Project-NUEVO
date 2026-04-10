@@ -7,6 +7,8 @@ import threading
 from enum import Enum, IntEnum
 
 from rclpy.node import Node
+import numpy as np
+import matplotlib.pyplot as plt
 
 from bridge_interfaces.msg import (
     DCEnable,
@@ -1573,6 +1575,92 @@ class Robot:
         Returns True when the full interval elapsed, False when cancel was requested.
         """
         return not self._nav_cancel.wait(timeout=seconds)
+
+
+    # =========================================================================
+    # Obstacle avoidance — DWA path following  (restored from commit 8894254)
+    # =========================================================================
+
+    def _nav_follow_dwa_path(
+        self,
+        max_vel_mm: float,
+        max_acc_mm: float,
+        max_angular_radv: float,
+        max_angular_acc_rad: float,
+        lookahead_mm: float,
+        advance_radius_mm: float,
+        tolerance_mm: float,
+        gains_of_costs: list,
+        period: float,
+        predict_time: float,
+        predict_velocity_samples_resolution: list,
+        obstacles_range_mm: float,
+        ttc_weight: float,
+    ) -> None:
+        # BUG: DWAPlanner (upstream) expects SI units (m, m/s, rad/s) but this
+        #      method passes raw mm values. The planner will compute velocities
+        #      orders-of-magnitude too large without a unit conversion layer.
+        # BUG: advance_radius_mm is passed as robot_radius — these are semantically
+        #      different parameters (path-advance threshold vs. physical robot size).
+        from robot.path_planner import DWAPlanner
+        self.planner = DWAPlanner(
+            lookahead_dist=lookahead_mm,
+            max_linear_speed=max_vel_mm,
+            max_angular_speed=max_angular_radv,
+            max_linear_acc=max_acc_mm,
+            max_angular_acc=max_angular_acc_rad,
+            goal_tolerance=tolerance_mm,
+            gains_of_costs=gains_of_costs,
+            dt=period,
+            predict_time=predict_time,
+            predict_velocity_samples_resolution=predict_velocity_samples_resolution,
+            robot_radius=advance_radius_mm,
+            obstacles_range=obstacles_range_mm,
+            ttc_weight=ttc_weight,
+        )
+
+    def _nav_follow_path_loop(self, path, period: float):
+        # BUG: passes `period` as a 5th positional arg to DWAPlanner.compute_velocity()
+        #      which only accepts 4 args (path, pose, velocity, obstacles). Will raise
+        #      TypeError at runtime. period is already baked into the planner via dt.
+        # BUG: accesses self._pose and self._vel directly without the lock, risking a
+        #      torn read on the ROS spin thread. Use self._get_pose_mm() instead.
+        # BUG: self._obstacles_mm is a list[tuple] but DWAPlanner.compute_velocity()
+        #      expects a numpy array. Will raise AttributeError inside calc_obstacle_cost().
+        v, w = self.planner.compute_velocity(path, self._pose, self._vel, self._obstacles_mm)
+        self.set_velocity(v, math.degrees(w))
+        print(f"Current Pose: ({self._pose[0]:.1f}, {self._pose[1]:.1f}, {math.degrees(self._pose[2]):.1f} deg)")
+
+        if self.planner.TargetReached(path, self._pose[0], self._pose[1]):
+            print("MOVING: Target reached! Stopping.")
+            self.stop()
+            return "IDLE"
+
+        return "MOVING"
+        # return self._obstacles_mm  # BUG: original stray return — unreachable dead code
+
+    def _draw_lidar_obstacles(self):
+        # BUG: matplotlib (plt) is not imported in robot.py. Will raise NameError on
+        #      first call. Add `import matplotlib.pyplot as plt` to fix.
+        # BUG: self._obstacles_mm is list[tuple[float, float]] but code calls
+        #      .size and indexes as 2-D numpy array ([:, 0]). Will raise AttributeError.
+        #      Convert with np.array(self._obstacles_mm) before use.
+        # BUG: plt.subplots() called every tick — creates a new figure window each time
+        #      instead of updating the existing one. Store fig/ax as instance attributes.
+        plt.ion()
+        self.fig, self.ax = plt.subplots()
+        self.ax.clear()
+        print(self._obstacles_mm)
+        if self._obstacles_mm.size != 0:
+            self.ax.scatter(self._obstacles_mm[:, 0] / 1000.0, self._obstacles_mm[:, 1] / 1000.0, s=5)
+        self.ax.set_xlim(-3, 3)
+        self.ax.set_ylim(-3, 3)
+        self.ax.set_title("LiDAR Scan")
+        self.ax.set_aspect("equal")
+        plt.grid()
+        plt.draw()
+        plt.pause(0.001)
+        plt.savefig("/data/plot.png")
 
     # =========================================================================
     # Internal — blocking waits for actuator completion
