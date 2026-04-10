@@ -1,7 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Dockerfile.jetson — Global GPS stack for the Jetson Nano
 #
-# Target:  Jetson Nano / Orin Nano running JetPack 6.x (Ubuntu 22.04, arm64)
+# Target:  Jetson Orin NX / Orin Nano running JetPack 6.x (host: Ubuntu 22.04, arm64)
+#          The container itself uses Ubuntu 24.04 (Noble) via ros:jazzy-ros-base.
 # ROS2:    Jazzy Jalisco
 #
 # For JetPack 5.x (Ubuntu 20.04) replace the base image with:
@@ -18,6 +19,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV ROS_DISTRO=jazzy
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+
+# ── Intel RealSense apt repository ───────────────────────────────────────────
+# librealsense2 is not in Ubuntu's standard repos — add Intel's repo first.
+# ros:jazzy-ros-base is Ubuntu 24.04 (Noble).
+RUN apt-get update && apt-get install -y --no-install-recommends curl gnupg2 \
+    && curl -sSf https://librealsense.intel.com/Debian/librealsense.pgp \
+        | gpg --dearmor -o /usr/share/keyrings/librealsense-archive-keyring.gpg \
+    && echo "deb [arch=arm64 signed-by=/usr/share/keyrings/librealsense-archive-keyring.gpg] \
+        https://librealsense.intel.com/Debian/apt-repo noble main" \
+        > /etc/apt/sources.list.d/librealsense.list \
+    && rm -rf /var/lib/apt/lists/*
 
 # ── Core system packages ──────────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
