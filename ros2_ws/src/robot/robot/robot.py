@@ -204,7 +204,9 @@ class Robot:
         self._io_output_state: IOOutputState = None
         self._imu:        SensorImu      = None
         self._mag_heading:        float | None = None   # absolute heading from AHRS (rad)
-        self._mag_heading_offset: float      = 0.0    # mag heading at last reset_odometry(); zeroes fused heading
+        self._mag_heading_offset: float      = 0.0    # mag heading at last reset_odometry()
+        self._mag_accumulated:    float      = 0.0    # incrementally unwrapped relative heading (rad)
+        self._mag_prev_wrapped:   float | None = None  # previous relative_mag for incremental unwrap
         self._fused_theta:        float      = 0.0    # fusion strategy output (rad)
         self._fusion: SensorFusion           = ComplementaryFilter(alpha=0.02)
         self._pose:    tuple = (0.0, 0.0, 0.0)  # x_mm, y_mm, theta_rad (raw odometry)
@@ -365,13 +367,30 @@ class Robot:
             self._vel  = (msg.vx, msg.vy, msg.v_theta)
 
             # Orientation fusion: delegate to the active strategy.
-            # Shift mag heading to be relative to the pose at last reset_odometry()
-            # so that fused heading starts at 0 after every reset, matching odometry.
+            #
+            # The AHRS yaw is an absolute, bounded heading (wrapped to [-π, π]).
+            # The firmware odometry (msg.theta) is unbounded — it accumulates past
+            # 2π for multiple rotations.  Passing the bounded AHRS directly to the
+            # filter causes wrap() discontinuities every half-revolution when
+            # |mag - odom| crosses ±π.
+            #
+            # Fix: incrementally unwrap the relative mag heading so it accumulates
+            # in the same unbounded frame as odometry.  Their difference then stays
+            # small, and wrap() in the filter is never discontinuous.
             if self._mag_heading is not None:
-                relative_mag = math.atan2(
+                curr_wrapped = math.atan2(
                     math.sin(self._mag_heading - self._mag_heading_offset),
                     math.cos(self._mag_heading - self._mag_heading_offset),
                 )
+                if self._mag_prev_wrapped is not None:
+                    delta = math.atan2(
+                        math.sin(curr_wrapped - self._mag_prev_wrapped),
+                        math.cos(curr_wrapped - self._mag_prev_wrapped),
+                    )
+                    self._mag_accumulated += delta
+                # else: first sample after reset — _mag_accumulated stays 0
+                self._mag_prev_wrapped = curr_wrapped
+                relative_mag = self._mag_accumulated
             else:
                 relative_mag = None
             linear_vel  = math.hypot(float(msg.vx), float(msg.vy))
@@ -540,6 +559,8 @@ class Robot:
         """
         with self._lock:
             self._mag_heading_offset = self._mag_heading if self._mag_heading is not None else 0.0
+            self._mag_accumulated  = 0.0
+            self._mag_prev_wrapped = None
         msg = SysOdomReset()
         msg.flags = 0
         self._odom_pub.publish(msg)

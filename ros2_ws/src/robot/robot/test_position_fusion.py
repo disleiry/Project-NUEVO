@@ -138,9 +138,18 @@ def _drive_straight(robot: Robot, rec: _Record) -> None:
             time.sleep(0.05)
     robot.reset_odometry()
     robot.wait_for_pose_update(timeout=1.0)
+    robot.wait_for_pose_update(timeout=1.0)  # second wait ensures reset has propagated
+
+    # Capture starting position as the reference origin — safety net against
+    # any UART timing window where the reset hasn't fully landed yet.
+    with robot._lock:
+        odom_x0, odom_y0, _ = robot._pose
+    fused_x0, fused_y0, _ = robot._get_pose_mm()
 
     t_start = time.monotonic()
     next_tick = t_start
+    odom_x = odom_x0
+    odom_y = odom_y0
 
     print(
         f"[pos_fusion_test] Driving straight {DRIVE_DISTANCE_MM:.0f} mm "
@@ -159,9 +168,15 @@ def _drive_straight(robot: Robot, rec: _Record) -> None:
         gps_on = robot.is_gps_active()
 
         elapsed = time.monotonic() - t_start
-        rec.append(elapsed, odom_x, odom_y, fused_x_mm, fused_y_mm, gps_on)
+        # Record relative to starting position so plots start at (0, 0).
+        rec.append(
+            elapsed,
+            odom_x - odom_x0, odom_y - odom_y0,
+            fused_x_mm - fused_x0, fused_y_mm - fused_y0,
+            gps_on,
+        )
 
-        dist_traveled = math.hypot(odom_x, odom_y)
+        dist_traveled = math.hypot(odom_x - odom_x0, odom_y - odom_y0)
         if dist_traveled >= DRIVE_DISTANCE_MM:
             break
 
@@ -174,10 +189,11 @@ def _drive_straight(robot: Robot, rec: _Record) -> None:
         else:
             next_tick = time.monotonic()
 
+    t_end = time.monotonic()
     robot.stop()
     print(
-        f"[pos_fusion_test] Done — travelled {math.hypot(odom_x, odom_y):.1f} mm "
-        f"in {time.monotonic() - t_start:.1f} s"
+        f"[pos_fusion_test] Done — travelled {dist_traveled:.1f} mm "
+        f"in {t_end - t_start:.1f} s"
     )
 
 
