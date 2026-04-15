@@ -85,11 +85,11 @@ def run(robot: Robot) -> None:
             print("[FSM] INIT (odometry reset)")
             path_control_points = [ 
                 (0.0, 0.0),
-                (0.0, 610.0),
-                (305.0, 610.0),
-                (610.0, 610.0),
-                (610.0, 305.0),
-                (610.0, 0.0),
+                (0.0, 510.0),
+                (305.0, 510.0),
+                (510.0, 510.0),
+                (510.0, 305.0),
+                (510.0, 0.0),
                 (0.0, 0.0)
             ]    
             path1 = densify_polyline(path_control_points, spacing=20.0)
@@ -101,7 +101,7 @@ def run(robot: Robot) -> None:
             show_idle_leds(robot)
             print("[FSM] IDLE - Press BTN_1 to enter MOVING state.")
             if robot.get_button(Button.BTN_1):
-                LOOKAHEAD_DIST = 50.0 # Lookahead distance in mm (adjust as needed)
+                LOOKAHEAD_DIST = 150.0 # Lookahead distance in mm (adjust as needed)
                 ADVANCE_DIST = 20.0
                 planner1 = PurePursuitPlanner(
                     lookahead_dist=LOOKAHEAD_DIST, 
