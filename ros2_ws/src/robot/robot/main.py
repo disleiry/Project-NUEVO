@@ -121,7 +121,7 @@ def run(robot: Robot) -> None:
             current_theta_rad = math.radians(current_theta_deg)
         
             # Step 3: manually advance the remaining path
-            remaining_path = robot._advance_remaining_path(remaining_path,current_x,current_y, advance_radius_mm = ADVANCE_DIST)
+            remaining_path = robot._advance_remaining_path(remaining_path,current_x,current_y, advance_radius_mm = LOOKAHEAD_DIST)
         
             # Step 4: calculate current pursuit point
             current_pursuit_x, current_pursuit_y = planner1._lookahead_point(
