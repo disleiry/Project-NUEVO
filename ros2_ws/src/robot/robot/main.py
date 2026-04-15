@@ -100,6 +100,7 @@ def run(robot: Robot) -> None:
             print("[FSM] IDLE - Press BTN_1 to enter MOVING state.")
             if robot.get_button(Button.BTN_1):
                 LOOKAHEAD_DIST = 100.0 # Lookahead distance in mm (adjust as needed)
+                ADVANCE_DIST = 20.0
                 planner1 = PurePursuitPlanner(
                     lookahead_dist=LOOKAHEAD_DIST, 
                     max_angular=1.5, # Max angular velocity in rad/s (adjust as needed)
@@ -120,7 +121,7 @@ def run(robot: Robot) -> None:
             current_theta_rad = math.radians(current_theta_deg)
         
             # Step 3: manually advance the remaining path
-            remaining_path = robot._advance_remaining_path(remaining_path,current_x,current_y, advance_radius_mm = LOOKAHEAD_DIST)
+            remaining_path = robot._advance_remaining_path(remaining_path,current_x,current_y, advance_radius_mm = ADVANCE_DIST)
         
             # Step 4: calculate current pursuit point
             current_pursuit_x, current_pursuit_y = planner1._lookahead_point(
