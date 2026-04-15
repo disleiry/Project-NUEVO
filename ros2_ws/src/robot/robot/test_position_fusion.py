@@ -175,11 +175,28 @@ def _drive_straight(robot: Robot, rec: _Record) -> None:
                 )
             time.sleep(0.05)
     robot.reset_odometry()
-    robot.wait_for_pose_update(timeout=1.0)
-    robot.wait_for_pose_update(timeout=1.0)  # second wait ensures reset has propagated
 
-    # Capture starting position as the reference origin — safety net against
-    # any UART timing window where the reset hasn't fully landed yet.
+    # Poll until the odometry echo comes back near zero, confirming the reset
+    # has fully round-tripped through UART.  Two fixed wait_for_pose_update
+    # calls are not reliable when the previous run left the firmware at a large
+    # odometry value — the reset packet and the stale pose echo can race.
+    _RESET_SETTLE_MM  = 10.0   # accept once within 10 mm of origin
+    _RESET_TIMEOUT_S  = 3.0
+    _t_reset = time.monotonic()
+    while True:
+        robot.wait_for_pose_update(timeout=0.5)
+        with robot._lock:
+            _ox, _oy, _ = robot._pose
+        if math.hypot(_ox, _oy) < _RESET_SETTLE_MM:
+            break
+        if time.monotonic() - _t_reset > _RESET_TIMEOUT_S:
+            print(
+                f"[pos_fusion_test] WARNING — odometry did not settle to zero after "
+                f"{_RESET_TIMEOUT_S:.0f}s (last value: {_ox:.1f}, {_oy:.1f} mm). "
+                f"Proceeding with current position as reference origin."
+            )
+            break
+
     with robot._lock:
         odom_x0, odom_y0, _ = robot._pose
     fused_x0, fused_y0, _ = robot._get_pose_mm()
