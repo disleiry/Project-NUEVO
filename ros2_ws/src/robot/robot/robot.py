@@ -1742,6 +1742,8 @@ class Robot:
             self.ax.scatter(obstacles[:, 0] / 1000.0, obstacles[:, 1] / 1000.0, s=5)
         self.ax.set_xlim(-2.5, 2.5)
         self.ax.set_ylim(-2.5, 2.5)
+        self.ax.set_xlabel("X (m)")
+        self.ax.set_ylabel("Y (m)")
         self.ax.set_title("LiDAR Scan")
         self.ax.set_aspect("equal")
         plt.grid()
