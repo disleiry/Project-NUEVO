@@ -4,8 +4,8 @@
 # Usage (from Project-NUEVO/ repository root):
 #   docker compose -f ros2_ws/docker/docker-compose.rpi.yml up -d
 #
-# First startup builds the ROS workspace with colcon (~60s), then the
-# container stays idle so ROS nodes can be started manually with
+# First startup builds the ROS workspace with colcon (~60s), then launches the
+# bridge node automatically. Additional ROS nodes can be started with
 # `docker compose exec`.
 # Subsequent restarts reuse the cached build artifacts (named volumes): ~5s.
 #   - Python / .msg changes → docker compose restart  (no image rebuild)
@@ -19,6 +19,10 @@ services:
       dockerfile: ros2_ws/docker/Dockerfile.robot
 
     image: ros2-runtime:latest
+
+    # Entrypoint builds/sources the workspace, then this launch file becomes
+    # the container's main process. If the bridge exits, Docker restarts it.
+    command: ["ros2", "launch", "bridge", "bridge.launch.py"]
 
     # ROS2 DDS (Fast-DDS / Cyclone) uses UDP multicast — requires host networking.
     network_mode: host
@@ -54,11 +58,11 @@ services:
       - ${HOME}:/host_home
 
     environment:
-      # Restrict DDS discovery to loopback — prevents ROS2 nodes from bleeding
-      # across RPis on the same network. All nodes on this Pi stay local.
-      # To override for a specific node (e.g. a global position relay):
-      #   ROS_LOCALHOST_ONLY=0 ros2 run <package> <node>
-      - ROS_LOCALHOST_ONLY=1
+      # Restrict DDS discovery to this host. This replaces the deprecated
+      # ROS_LOCALHOST_ONLY flag and prevents ROS2 nodes from bleeding across
+      # RPis on the same network. Cross-machine links such as Jetson GPS use
+      # explicit TCP instead of DDS multicast.
+      - ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
       - NUEVO_BRIDGE_SOURCE=/workspace/nuevo_bridge_source
       - NUEVO_USERS_FILE=/data/users.json
       - NUEVO_SERIAL_PORT=/dev/ttyAMA0
@@ -69,11 +73,11 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD-SHELL", "test -f /ros2_ws/install/setup.bash"]
+      test: ["CMD-SHELL", "test -f /ros2_ws/install/setup.bash && python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\""]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 90s   # allow time for first-run colcon build
+      start_period: 90s   # allow time for first-run colcon build and bridge start
 
 volumes:
   ros2_runtime_data:
