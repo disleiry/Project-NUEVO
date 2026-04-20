@@ -2,21 +2,21 @@
 set -uo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-env_file="${NUEVO_CAMERA_ENV_FILE:-/etc/default/nuevo-pi-camera}"
+env_file="${PI_CAMERA_ENV_FILE:-/etc/default/pi-camera}"
 
 if [[ -r "$env_file" ]]; then
     # shellcheck disable=SC1090
     source "$env_file"
-elif [[ -r "${script_dir}/nuevo-pi-camera.env" ]]; then
+elif [[ -r "${script_dir}/pi-camera.env" ]]; then
     # shellcheck disable=SC1091
-    source "${script_dir}/nuevo-pi-camera.env"
+    source "${script_dir}/pi-camera.env"
 fi
 
-: "${NUEVO_CAMERA_DEVICE:=/dev/video10}"
-: "${NUEVO_CAMERA_CARD_LABEL:=NUEVO Pi Camera}"
-: "${NUEVO_CAMERA_DOCKER_IMAGE:=nuevo-ros2:latest}"
+: "${PI_CAMERA_DEVICE:=/dev/video10}"
+: "${PI_CAMERA_CARD_LABEL:=Pi Camera}"
+: "${PI_CAMERA_DOCKER_IMAGE:=ros2-runtime:latest}"
 
-out_dir="/tmp/nuevo_camera_check"
+out_dir="/tmp/pi_camera_check"
 host_img="${out_dir}/host_loopback.jpg"
 docker_img="${out_dir}/docker_loopback.jpg"
 pass_count=0
@@ -79,51 +79,51 @@ else
 fi
 
 section "Virtual camera device"
-if [[ -c "$NUEVO_CAMERA_DEVICE" ]]; then
-    pass "$NUEVO_CAMERA_DEVICE exists"
+if [[ -c "$PI_CAMERA_DEVICE" ]]; then
+    pass "$PI_CAMERA_DEVICE exists"
     if command -v v4l2-ctl >/dev/null 2>&1; then
-        device_info="$(v4l2-ctl --device="$NUEVO_CAMERA_DEVICE" --info 2>&1 || true)"
+        device_info="$(v4l2-ctl --device="$PI_CAMERA_DEVICE" --info 2>&1 || true)"
         printf '%s\n' "$device_info" | sed 's/^/  /'
-        if printf '%s\n' "$device_info" | grep -Fq "$NUEVO_CAMERA_CARD_LABEL"; then
-            pass "$NUEVO_CAMERA_DEVICE has expected card label"
+        if printf '%s\n' "$device_info" | grep -Fq "$PI_CAMERA_CARD_LABEL"; then
+            pass "$PI_CAMERA_DEVICE has expected card label"
         else
-            fail "$NUEVO_CAMERA_DEVICE does not show expected label '$NUEVO_CAMERA_CARD_LABEL'"
+            fail "$PI_CAMERA_DEVICE does not show expected label '$PI_CAMERA_CARD_LABEL'"
         fi
     else
         fail "v4l2-ctl is not installed"
     fi
 else
-    fail "$NUEVO_CAMERA_DEVICE does not exist"
+    fail "$PI_CAMERA_DEVICE does not exist"
 fi
 
 section "systemd service"
-service_status="$(systemctl is-active nuevo-pi-camera-feed.service 2>/dev/null || true)"
+service_status="$(systemctl is-active pi-camera-feed.service 2>/dev/null || true)"
 if [[ "$service_status" == "active" ]]; then
-    pass "nuevo-pi-camera-feed.service is active"
+    pass "pi-camera-feed.service is active"
 else
-    fail "nuevo-pi-camera-feed.service is ${service_status:-missing}; run sudo systemctl status nuevo-pi-camera-feed"
+    fail "pi-camera-feed.service is ${service_status:-missing}; run sudo systemctl status pi-camera-feed"
 fi
 
 section "Loopback formats"
-if [[ -c "$NUEVO_CAMERA_DEVICE" ]] && command -v v4l2-ctl >/dev/null 2>&1; then
-    formats="$(v4l2-ctl --device="$NUEVO_CAMERA_DEVICE" --list-formats-ext 2>&1 || true)"
+if [[ -c "$PI_CAMERA_DEVICE" ]] && command -v v4l2-ctl >/dev/null 2>&1; then
+    formats="$(v4l2-ctl --device="$PI_CAMERA_DEVICE" --list-formats-ext 2>&1 || true)"
     printf '%s\n' "$formats" | sed -n '1,16p' | sed 's/^/  /'
     if printf '%s\n' "$formats" | grep -Eq 'YUYV|YUY2|MJPG|Motion-JPEG'; then
-        pass "$NUEVO_CAMERA_DEVICE advertises a usable pixel format"
+        pass "$PI_CAMERA_DEVICE advertises a usable pixel format"
     else
-        fail "$NUEVO_CAMERA_DEVICE did not advertise YUYV/MJPEG formats"
+        fail "$PI_CAMERA_DEVICE did not advertise YUYV/MJPEG formats"
     fi
 fi
 
 section "Host frame capture"
-if [[ -c "$NUEVO_CAMERA_DEVICE" ]]; then
+if [[ -c "$PI_CAMERA_DEVICE" ]]; then
     capture_prefix=()
-    if [[ ! -r "$NUEVO_CAMERA_DEVICE" && "$EUID" -ne 0 ]]; then
-        info "$NUEVO_CAMERA_DEVICE is not readable by this shell; trying sudo for host capture"
+    if [[ ! -r "$PI_CAMERA_DEVICE" && "$EUID" -ne 0 ]]; then
+        info "$PI_CAMERA_DEVICE is not readable by this shell; trying sudo for host capture"
         capture_prefix=(sudo)
     fi
 
-    if run_capture "$NUEVO_CAMERA_DEVICE" "$host_img" "${capture_prefix[@]}"; then
+    if run_capture "$PI_CAMERA_DEVICE" "$host_img" "${capture_prefix[@]}"; then
         size="$(stat -c%s "$host_img" 2>/dev/null || echo 0)"
         if [[ "$size" -gt 1000 ]]; then
             pass "host loopback frame captured: $host_img (${size} bytes)"
@@ -131,7 +131,7 @@ if [[ -c "$NUEVO_CAMERA_DEVICE" ]]; then
             fail "host loopback capture was too small (${size} bytes)"
         fi
     else
-        fail "could not capture a host frame from $NUEVO_CAMERA_DEVICE"
+        fail "could not capture a host frame from $PI_CAMERA_DEVICE"
     fi
 fi
 
@@ -140,26 +140,26 @@ docker_camera_run() {
     docker run \
         --rm \
         --entrypoint bash \
-        --device "${NUEVO_CAMERA_DEVICE}:${NUEVO_CAMERA_DEVICE}" \
-        --env NUEVO_CAMERA_DEVICE="$NUEVO_CAMERA_DEVICE" \
-        --volume "${out_dir}:/tmp/nuevo_camera_check_host" \
-        "$NUEVO_CAMERA_DOCKER_IMAGE" \
+        --device "${PI_CAMERA_DEVICE}:${PI_CAMERA_DEVICE}" \
+        --env PI_CAMERA_DEVICE="$PI_CAMERA_DEVICE" \
+        --volume "${out_dir}:/tmp/pi_camera_check_host" \
+        "$PI_CAMERA_DOCKER_IMAGE" \
         -lc "$1"
 }
 
 if command -v docker >/dev/null 2>&1; then
-    if ! docker image inspect "$NUEVO_CAMERA_DOCKER_IMAGE" >/dev/null 2>&1; then
-        fail "Docker image '$NUEVO_CAMERA_DOCKER_IMAGE' is not built; run docker compose -f ros2_ws/docker/docker-compose.rpi.yml build"
-    elif [[ ! -c "$NUEVO_CAMERA_DEVICE" ]]; then
-        fail "cannot test Docker access because $NUEVO_CAMERA_DEVICE does not exist on the host"
+    if ! docker image inspect "$PI_CAMERA_DOCKER_IMAGE" >/dev/null 2>&1; then
+        fail "Docker image '$PI_CAMERA_DOCKER_IMAGE' is not built; run docker compose -f ros2_ws/docker/docker-compose.rpi.yml build"
+    elif [[ ! -c "$PI_CAMERA_DEVICE" ]]; then
+        fail "cannot test Docker access because $PI_CAMERA_DEVICE does not exist on the host"
     else
-        if docker_camera_run 'test -c "$NUEVO_CAMERA_DEVICE"'; then
-            pass "$NUEVO_CAMERA_DEVICE exists inside a disposable camera test container"
+        if docker_camera_run 'test -c "$PI_CAMERA_DEVICE"'; then
+            pass "$PI_CAMERA_DEVICE exists inside a disposable camera test container"
         else
-            fail "$NUEVO_CAMERA_DEVICE is not visible inside a Docker test container"
+            fail "$PI_CAMERA_DEVICE is not visible inside a Docker test container"
         fi
 
-        if docker_camera_run 'timeout 8 ffmpeg -nostdin -y -loglevel error -f v4l2 -input_format yuyv422 -i "$NUEVO_CAMERA_DEVICE" -vframes 1 /tmp/nuevo_camera_check_host/docker_loopback.jpg'; then
+        if docker_camera_run 'timeout 8 ffmpeg -nostdin -y -loglevel error -f v4l2 -input_format yuyv422 -i "$PI_CAMERA_DEVICE" -vframes 1 /tmp/pi_camera_check_host/docker_loopback.jpg'; then
             size="$(stat -c%s "$docker_img" 2>/dev/null || echo 0)"
             if [[ "$size" -gt 1000 ]]; then
                 pass "Docker loopback frame captured: $docker_img (${size} bytes)"
@@ -167,7 +167,7 @@ if command -v docker >/dev/null 2>&1; then
                 fail "Docker loopback capture was too small (${size} bytes)"
             fi
         else
-            fail "could not capture a frame from $NUEVO_CAMERA_DEVICE inside a Docker test container"
+            fail "could not capture a frame from $PI_CAMERA_DEVICE inside a Docker test container"
         fi
     fi
 else

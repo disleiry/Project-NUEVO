@@ -18,22 +18,28 @@ services:
       context: ../..
       dockerfile: ros2_ws/docker/Dockerfile.robot
 
-    image: nuevo-ros2:latest
+    image: ros2-runtime:latest
 
     # ROS2 DDS (Fast-DDS / Cyclone) uses UDP multicast — requires host networking.
     network_mode: host
 
-    # Arduino UART — RPi GPIO 14/15 (hardware UART).
-    devices:
-      - /dev/ttyAMA0:/dev/ttyAMA0
-      - /dev/rplidar:/dev/rplidar
-      # Pi Camera — native Ubuntu feeds this v4l2loopback device.
-      - /dev/video10:/dev/video10
-    
+    # Hardware devices are optional at container startup. Bind /dev so devices
+    # such as /dev/ttyAMA0, /dev/rplidar, and /dev/video10 can appear after the
+    # container is already running, then restrict access by device class.
+    device_cgroup_rules:
+      - "c 81:* rmw"    # V4L2 cameras, including /dev/video10.
+      - "c 188:* rmw"   # USB serial adapters, including /dev/rplidar targets.
+      - "c 204:* rmw"   # Raspberry Pi UARTs, including /dev/ttyAMA0.
+
     group_add:
       - dialout
+      - video
 
     volumes:
+      # Host device namespace — optional hardware must not block container startup.
+      - /dev:/dev
+      # udev state lets stable symlinks such as /dev/rplidar resolve in-container.
+      - /run/udev:/run/udev:ro
       # ROS workspace source — live from repo (edits take effect on restart).
       - ../../ros2_ws/src:/ros2_ws/src:ro
       # Shared Python bridge runtime used by the ROS wrapper package.
@@ -57,7 +63,7 @@ services:
       - NUEVO_USERS_FILE=/data/users.json
       - NUEVO_SERIAL_PORT=/dev/ttyAMA0
       - NUEVO_SERIAL_BAUD=200000
-      - NUEVO_CAMERA_DEVICE=/dev/video10
+      - PI_CAMERA_DEVICE=/dev/video10
 
 
     restart: unless-stopped

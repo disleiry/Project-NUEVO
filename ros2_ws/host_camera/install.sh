@@ -2,14 +2,14 @@
 set -Eeuo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_env="${script_dir}/nuevo-pi-camera.env"
-system_env="/etc/default/nuevo-pi-camera"
-runner_src="${script_dir}/nuevo-pi-camera-feed"
-runner_dst="/usr/local/bin/nuevo-pi-camera-feed"
-service_src="${script_dir}/nuevo-pi-camera-feed.service"
-service_dst="/etc/systemd/system/nuevo-pi-camera-feed.service"
-modules_load_conf="/etc/modules-load.d/nuevo-pi-camera.conf"
-modprobe_conf="/etc/modprobe.d/nuevo-pi-camera.conf"
+repo_env="${script_dir}/pi-camera.env"
+system_env="/etc/default/pi-camera"
+runner_src="${script_dir}/pi-camera-feed"
+runner_dst="/usr/local/bin/pi-camera-feed"
+service_src="${script_dir}/pi-camera-feed.service"
+service_dst="/etc/systemd/system/pi-camera-feed.service"
+modules_load_conf="/etc/modules-load.d/pi-camera.conf"
+modprobe_conf="/etc/modprobe.d/pi-camera.conf"
 
 if [[ "$EUID" -eq 0 ]]; then
     sudo_cmd=()
@@ -18,15 +18,15 @@ else
 fi
 
 log() {
-    printf '[nuevo-camera-install] %s\n' "$*"
+    printf '[pi-camera-install] %s\n' "$*"
 }
 
 warn() {
-    printf '[nuevo-camera-install] WARNING: %s\n' "$*" >&2
+    printf '[pi-camera-install] WARNING: %s\n' "$*" >&2
 }
 
 die() {
-    printf '[nuevo-camera-install] ERROR: %s\n' "$*" >&2
+    printf '[pi-camera-install] ERROR: %s\n' "$*" >&2
     exit 1
 }
 
@@ -74,6 +74,7 @@ log "installing host camera packages"
 apt_install \
     "${headers_to_install[@]}" \
     ffmpeg \
+    libcamera-ipa \
     libcamera-tools \
     "$rpicam_pkg" \
     v4l-utils \
@@ -89,19 +90,19 @@ fi
 
 # shellcheck disable=SC1090
 source "$system_env"
-: "${NUEVO_CAMERA_DEVICE:=/dev/video10}"
-: "${NUEVO_CAMERA_VIDEO_NR:=10}"
-: "${NUEVO_CAMERA_CARD_LABEL:=NUEVO Pi Camera}"
+: "${PI_CAMERA_DEVICE:=/dev/video10}"
+: "${PI_CAMERA_VIDEO_NR:=10}"
+: "${PI_CAMERA_CARD_LABEL:=Pi Camera}"
 
-video_node="/dev/video${NUEVO_CAMERA_VIDEO_NR}"
-if [[ "$NUEVO_CAMERA_DEVICE" != "$video_node" ]]; then
-    warn "NUEVO_CAMERA_DEVICE=$NUEVO_CAMERA_DEVICE does not match video_nr $video_node"
+video_node="/dev/video${PI_CAMERA_VIDEO_NR}"
+if [[ "$PI_CAMERA_DEVICE" != "$video_node" ]]; then
+    warn "PI_CAMERA_DEVICE=$PI_CAMERA_DEVICE does not match video_nr $video_node"
 fi
 
 if [[ -c "$video_node" ]]; then
     card_label="$(v4l2-ctl --device="$video_node" --info 2>/dev/null | awk -F: '/Card type/ { sub(/^[ \t]+/, "", $2); print $2; exit }')"
-    if [[ -n "$card_label" && "$card_label" != "$NUEVO_CAMERA_CARD_LABEL" ]]; then
-        die "$video_node already exists with card label '$card_label'. Edit $system_env to use a different NUEVO_CAMERA_VIDEO_NR."
+    if [[ -n "$card_label" && "$card_label" != "$PI_CAMERA_CARD_LABEL" ]]; then
+        die "$video_node already exists with card label '$card_label'. Edit $system_env to use a different PI_CAMERA_VIDEO_NR."
     fi
 fi
 
@@ -109,8 +110,8 @@ log "installing module autoload config"
 printf 'v4l2loopback\n' | "${sudo_cmd[@]}" tee "$modules_load_conf" >/dev/null
 {
     printf 'options v4l2loopback '
-    printf 'video_nr=%s ' "$NUEVO_CAMERA_VIDEO_NR"
-    printf 'card_label="%s" ' "$NUEVO_CAMERA_CARD_LABEL"
+    printf 'video_nr=%s ' "$PI_CAMERA_VIDEO_NR"
+    printf 'card_label="%s" ' "$PI_CAMERA_CARD_LABEL"
     printf 'exclusive_caps=1 max_buffers=4\n'
 } | "${sudo_cmd[@]}" tee "$modprobe_conf" >/dev/null
 
@@ -122,13 +123,13 @@ config_path="/boot/firmware/config.txt"
 camera_config_changed=0
 if [[ -f "$config_path" ]]; then
     if ! grep -Eq '^[[:space:]]*camera_auto_detect=1([[:space:]]*(#.*)?)?$' "$config_path"; then
-        backup_path="${config_path}.nuevo-camera.$(date +%Y%m%d%H%M%S).bak"
+        backup_path="${config_path}.pi-camera.$(date +%Y%m%d%H%M%S).bak"
         log "enabling camera_auto_detect=1 in $config_path"
         "${sudo_cmd[@]}" cp -a "$config_path" "$backup_path"
         if grep -Eq '^[[:space:]]*#?[[:space:]]*camera_auto_detect=' "$config_path"; then
             "${sudo_cmd[@]}" sed -i -E 's/^[[:space:]]*#?[[:space:]]*camera_auto_detect=.*/camera_auto_detect=1/' "$config_path"
         else
-            printf '\n# Project NUEVO camera service\ncamera_auto_detect=1\n' | "${sudo_cmd[@]}" tee -a "$config_path" >/dev/null
+            printf '\n# Pi camera service\ncamera_auto_detect=1\n' | "${sudo_cmd[@]}" tee -a "$config_path" >/dev/null
         fi
         camera_config_changed=1
         log "backup saved to $backup_path"
@@ -147,7 +148,7 @@ if [[ -n "$real_user" && "$real_user" != "root" ]]; then
 fi
 
 log "stopping old feed service if present"
-"${sudo_cmd[@]}" systemctl stop nuevo-pi-camera-feed.service 2>/dev/null || true
+"${sudo_cmd[@]}" systemctl stop pi-camera-feed.service 2>/dev/null || true
 
 if lsmod | awk '{print $1}' | grep -qx v4l2loopback; then
     if [[ ! -c "$video_node" ]]; then
@@ -159,18 +160,18 @@ fi
 if [[ ! -c "$video_node" ]]; then
     log "loading v4l2loopback for $video_node"
     "${sudo_cmd[@]}" modprobe v4l2loopback \
-        video_nr="$NUEVO_CAMERA_VIDEO_NR" \
-        card_label="$NUEVO_CAMERA_CARD_LABEL" \
+        video_nr="$PI_CAMERA_VIDEO_NR" \
+        card_label="$PI_CAMERA_CARD_LABEL" \
         exclusive_caps=1 \
         max_buffers=4
 fi
 
-log "enabling and starting nuevo-pi-camera-feed.service"
+log "enabling and starting pi-camera-feed.service"
 "${sudo_cmd[@]}" systemctl daemon-reload
-"${sudo_cmd[@]}" systemctl enable --now nuevo-pi-camera-feed.service
+"${sudo_cmd[@]}" systemctl enable --now pi-camera-feed.service
 
 log "camera service status"
-"${sudo_cmd[@]}" systemctl --no-pager --lines=20 status nuevo-pi-camera-feed.service || true
+"${sudo_cmd[@]}" systemctl --no-pager --lines=20 status pi-camera-feed.service || true
 
 if [[ "$camera_config_changed" -eq 1 ]]; then
     warn "camera boot config changed; reboot the Pi if the service cannot see the camera"

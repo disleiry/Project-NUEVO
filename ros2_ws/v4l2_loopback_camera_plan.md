@@ -64,9 +64,9 @@ runs on native Ubuntu, not inside Docker.
 ros2_ws/host_camera/
 ├── install.sh                       # one-time/idempotent host setup
 ├── check.sh                         # one-command sanity check
-├── nuevo-pi-camera-feed             # installed to /usr/local/bin/
-├── nuevo-pi-camera.env              # installed to /etc/default/
-└── nuevo-pi-camera-feed.service     # installed to /etc/systemd/system/
+├── pi-camera-feed             # installed to /usr/local/bin/
+├── pi-camera.env              # installed to /etc/default/
+└── pi-camera-feed.service     # installed to /etc/systemd/system/
 ```
 
 The service file should be a real file in the repo, not only embedded in a
@@ -85,6 +85,7 @@ Responsibilities:
 4. Install required packages:
    - `rpicam-apps-lite` when available, otherwise `rpicam-apps`
    - `libcamera-tools`
+   - `libcamera-ipa`
    - `v4l2loopback-dkms`
    - `v4l2loopback-utils`
    - `v4l-utils`
@@ -93,8 +94,8 @@ Responsibilities:
 5. Ensure `/boot/firmware/config.txt` has `camera_auto_detect=1`, with a backup
    before editing.
 6. Configure v4l2loopback module autoload:
-   - `/etc/modules-load.d/nuevo-pi-camera.conf`
-   - `/etc/modprobe.d/nuevo-pi-camera.conf`
+   - `/etc/modules-load.d/pi-camera.conf`
+   - `/etc/modprobe.d/pi-camera.conf`
 7. Load the module immediately for first setup.
 8. Install the feed wrapper, env file, and systemd service.
 9. Enable and start the service.
@@ -103,13 +104,13 @@ Responsibilities:
 Proposed loopback defaults:
 
 ```text
-NUEVO_CAMERA_DEVICE=/dev/video10
-NUEVO_CAMERA_VIDEO_NR=10
-NUEVO_CAMERA_CARD_LABEL=NUEVO Pi Camera
-NUEVO_CAMERA_WIDTH=1280
-NUEVO_CAMERA_HEIGHT=720
-NUEVO_CAMERA_FPS=15
-NUEVO_CAMERA_PIXEL_FORMAT=YUYV
+PI_CAMERA_DEVICE=/dev/video10
+PI_CAMERA_VIDEO_NR=10
+PI_CAMERA_CARD_LABEL=Pi Camera
+PI_CAMERA_WIDTH=1280
+PI_CAMERA_HEIGHT=720
+PI_CAMERA_FPS=15
+PI_CAMERA_PIXEL_FORMAT=YUYV
 ```
 
 Use `exclusive_caps=1` for compatibility with clients that expect a capture-only
@@ -121,16 +122,17 @@ Prefer one durable feed service plus module autoload config.
 
 ```ini
 [Unit]
-Description=Project NUEVO Pi camera feed to V4L2 loopback
-After=multi-user.target
+Description=Pi camera feed to V4L2 loopback
+After=systemd-modules-load.service
+Wants=systemd-modules-load.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-EnvironmentFile=/etc/default/nuevo-pi-camera
-ExecStart=/usr/local/bin/nuevo-pi-camera-feed
-Restart=always
-RestartSec=2
-StartLimitIntervalSec=0
+EnvironmentFile=/etc/default/pi-camera
+ExecStart=/usr/local/bin/pi-camera-feed
+Restart=on-failure
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
@@ -138,9 +140,9 @@ WantedBy=multi-user.target
 
 Notes:
 
-- Use `Restart=always`, not `Restart=on-failure`, because this should stay on
-  even if the producer exits cleanly.
-- Put the camera pipeline in `/usr/local/bin/nuevo-pi-camera-feed`, not directly
+- Use `Restart=on-failure` with a moderate delay so transient camera failures
+  do not hammer the Pi camera driver.
+- Put the camera pipeline in `/usr/local/bin/pi-camera-feed`, not directly
   in a long quoted `ExecStart`.
 - The wrapper should use `set -Eeuo pipefail` so pipeline failures are visible
   to systemd.
@@ -154,9 +156,9 @@ Initial candidate:
 ```bash
 rpicam-vid \
   --nopreview \
-  --width "$NUEVO_CAMERA_WIDTH" \
-  --height "$NUEVO_CAMERA_HEIGHT" \
-  --framerate "$NUEVO_CAMERA_FPS" \
+  --width "$PI_CAMERA_WIDTH" \
+  --height "$PI_CAMERA_HEIGHT" \
+  --framerate "$PI_CAMERA_FPS" \
   --codec mjpeg \
   --timeout 0 \
   --output - |
@@ -165,9 +167,9 @@ ffmpeg \
   -loglevel warning \
   -re \
   -i pipe:0 \
-  -vf "scale=${NUEVO_CAMERA_WIDTH}:${NUEVO_CAMERA_HEIGHT},format=yuyv422" \
+  -vf "scale=${PI_CAMERA_WIDTH}:${PI_CAMERA_HEIGHT},format=yuyv422" \
   -f v4l2 \
-  "$NUEVO_CAMERA_DEVICE"
+  "$PI_CAMERA_DEVICE"
 ```
 
 YUYV/YUYV422 is the first target because `v4l2_camera` defaults to YUYV-style
@@ -206,16 +208,16 @@ is running. The feed service owns the real camera. Instead:
 Example outputs:
 
 ```text
-/tmp/nuevo_camera_check/host_loopback.jpg
-/tmp/nuevo_camera_check/docker_loopback.jpg
+/tmp/pi_camera_check/host_loopback.jpg
+/tmp/pi_camera_check/docker_loopback.jpg
 ```
 
 Direct native `rpicam-still` can remain an advanced hardware-debug mode, but it
 should stop and restart the feed service with a trap if used:
 
 ```bash
-sudo systemctl stop nuevo-pi-camera-feed
-trap 'sudo systemctl start nuevo-pi-camera-feed' EXIT
+sudo systemctl stop pi-camera-feed
+trap 'sudo systemctl start pi-camera-feed' EXIT
 rpicam-still ...
 ```
 
@@ -242,7 +244,7 @@ devices:
   - /dev/video10:/dev/video10
 
 environment:
-  - NUEVO_CAMERA_DEVICE=/dev/video10
+  - PI_CAMERA_DEVICE=/dev/video10
 ```
 
 Remove Pi camera internals from the ROS container:
@@ -270,7 +272,7 @@ Student-facing command:
 ros2 launch vision pi_camera.launch.py
 ```
 
-The launch file should read `NUEVO_CAMERA_DEVICE`, defaulting to `/dev/video10`,
+The launch file should read `PI_CAMERA_DEVICE`, defaulting to `/dev/video10`,
 and start `v4l2_camera_node` with the agreed image size and pixel format.
 
 Use the documented `v4l2_camera` parameter style:
@@ -323,7 +325,7 @@ v4l2loopback module options, or Docker device internals for normal operation.
 | Real CSI camera not detected | Check should report `rpicam-hello --list-cameras` output and point to cable/config/reboot. |
 | Feed service exits | `Restart=always`, `RestartSec=2`, and wrapper `pipefail` should make systemd restart the pipeline. |
 | Direct `rpicam-still` check conflicts with service | Default check captures from `/dev/video10`; direct native capture is advanced mode only. |
-| `/dev/video10` conflicts with another device | Keep video number configurable in `/etc/default/nuevo-pi-camera`; check should print the active card label. |
+| `/dev/video10` conflicts with another device | Keep video number configurable in `/etc/default/pi-camera`; check should print the active card label. |
 | Docker cannot see `/dev/video10` | Check should use the known compose service, not a guessed container name, and print the compose device mapping to inspect. |
 | `v4l2_camera` format mismatch | Validate YUYV first; keep MJPEG as fallback by changing host feed format and launch parameters together. |
 | Students forget setup | `check.sh` should detect missing service/module/device and print the exact one-time setup command. |
