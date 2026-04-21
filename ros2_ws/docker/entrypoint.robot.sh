@@ -10,11 +10,14 @@
 set -e
 
 source /opt/ros/jazzy/setup.bash
+cd /ros2_ws
 
-echo "[entrypoint] Building ROS2 packages (cached after first run)..."
+packages=( ${NUEVO_ROS_PACKAGES:-robot sensors bridge bridge_interfaces rplidar_ros} )
+
+echo "[entrypoint] Building ROS2 packages: ${packages[*]}"
 colcon build \
     --symlink-install \
-    --packages-select robot sensors bridge bridge_interfaces rplidar_ros \
+    --packages-select "${packages[@]}" \
     --cmake-args -DBUILD_TESTING=OFF
 
 source /ros2_ws/install/setup.bash

@@ -2,7 +2,7 @@
 # docker-compose.rpi.yml — Raspberry Pi 5 with real Arduino
 #
 # Usage (from Project-NUEVO/ repository root):
-#   docker compose -f ros2_ws/docker/docker-compose.rpi.yml up -d
+#   docker compose -f ros2_ws/docker/docker-compose.rpi.yml up -d --build --wait
 #
 # First startup builds the ROS workspace with colcon (~60s), then launches the
 # bridge node automatically. Additional ROS nodes can be started with
@@ -73,11 +73,15 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD-SHELL", "test -f /ros2_ws/install/setup.bash && python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\""]
+      test:
+        [
+          "CMD-SHELL",
+          "bash -lc 'source /opt/ros/jazzy/setup.bash && test -f /ros2_ws/install/setup.bash && source /ros2_ws/install/setup.bash && for package in robot sensors bridge bridge_interfaces rplidar_ros; do ros2 pkg prefix \"$$package\" >/dev/null || exit 1; done && python3 -c \"import urllib.request; urllib.request.urlopen(\\\"http://127.0.0.1:8000/health\\\", timeout=3).read()\"'",
+        ]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 90s   # allow time for first-run colcon build and bridge start
+      start_period: 240s   # allow time for first-run colcon build and bridge start on RPi
 
 volumes:
   ros2_runtime_data:

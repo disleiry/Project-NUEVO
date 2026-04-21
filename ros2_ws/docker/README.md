@@ -5,7 +5,7 @@ This folder contains the Docker files for the ROS 2 runtime containers.
 Most students should use the Raspberry Pi setup:
 
 ```bash
-docker compose -f ros2_ws/docker/docker-compose.rpi.yml up -d
+docker compose -f ros2_ws/docker/docker-compose.rpi.yml up -d --build --wait
 ```
 
 The RPi container builds the ROS workspace on startup, starts the bridge launch
@@ -19,13 +19,14 @@ Start or update the RPi container from the repository root:
 ```bash
 COMPOSE=ros2_ws/docker/docker-compose.rpi.yml
 
-docker compose -f $COMPOSE build
-docker compose -f $COMPOSE up -d
+docker compose -f $COMPOSE up -d --build --wait
 docker compose -f $COMPOSE logs -f ros2_runtime
 ```
 
-The first startup can take about a minute while `colcon build` creates the ROS
-workspace install. Later restarts reuse the cached Docker volumes.
+The first startup can take a few minutes on an RPi while `colcon build` creates the ROS
+workspace install. `--wait` keeps the command attached until Docker marks the
+container healthy, which avoids racing `enter_ros2.sh` against the startup
+build. Later restarts reuse the cached Docker volumes.
 
 The RPi container starts:
 
@@ -47,7 +48,7 @@ Run one command from the repository root:
 Expected result:
 
 ```text
-Results: 9 passed, 0 failed
+Results: 10 passed, 0 failed
 ```
 
 The check verifies:
@@ -91,7 +92,7 @@ Stop and start it again:
 
 ```bash
 docker compose -f $COMPOSE down
-docker compose -f $COMPOSE up -d
+docker compose -f $COMPOSE up -d --wait
 ```
 
 Watch logs:
@@ -100,18 +101,30 @@ Watch logs:
 docker compose -f $COMPOSE logs -f ros2_runtime
 ```
 
-Rebuild after Dockerfile or Python dependency changes:
+Rebuild after Dockerfile, entrypoint, or Python dependency changes:
 
 ```bash
-docker compose -f $COMPOSE build
-docker compose -f $COMPOSE up -d
+docker compose -f $COMPOSE up -d --build --wait
+```
+
+If the logs do not show a line like this, the container is probably using an
+old image:
+
+```text
+[entrypoint] Building ROS2 packages: robot sensors bridge bridge_interfaces rplidar_ros
+```
+
+Run:
+
+```bash
+docker compose -f $COMPOSE up -d --build --wait
 ```
 
 Clear cached ROS build/install volumes and rebuild from scratch:
 
 ```bash
 docker compose -f $COMPOSE down -v
-docker compose -f $COMPOSE up -d
+docker compose -f $COMPOSE up -d --build --wait
 ```
 
 ## Docker Healthcheck
@@ -119,7 +132,9 @@ docker compose -f $COMPOSE up -d
 The RPi compose file has a Docker healthcheck. It checks that:
 
 1. `/ros2_ws/install/setup.bash` exists.
-2. The bridge HTTP health endpoint responds inside the container.
+2. `robot`, `sensors`, `bridge`, `bridge_interfaces`, and `rplidar_ros` are
+   available through the ROS install space.
+3. The bridge HTTP health endpoint responds inside the container.
 
 View health status:
 
@@ -205,12 +220,21 @@ docker compose -f ros2_ws/docker/docker-compose.rpi.yml exec ros2_runtime bash -
   'source /ros2_ws/install/setup.bash && ros2 topic echo /scan --once'
 ```
 
+Or use the helper shell, which now waits for the container to become healthy
+before opening:
+
+```bash
+./ros2_ws/docker/enter_ros2.sh rpi
+ros2 launch rplidar_ros rplidar_c1.launch.py
+ros2 topic echo /scan --once
+```
+
 ## Development VM
 
 The VM compose file is for development and mock mode:
 
 ```bash
-docker compose -f ros2_ws/docker/docker-compose.vm.yml up -d
+docker compose -f ros2_ws/docker/docker-compose.vm.yml up -d --build --wait
 ```
 
 It does not manage real RPi hardware.
@@ -220,7 +244,7 @@ It does not manage real RPi hardware.
 The Jetson compose file is for the RealSense global GPS stack:
 
 ```bash
-docker compose -f ros2_ws/docker/docker-compose.jetson.yml up -d
+docker compose -f ros2_ws/docker/docker-compose.jetson.yml up -d --build --wait
 ```
 
 The Jetson publishes local ROS topics inside its own container and pushes robot

@@ -79,6 +79,12 @@ else
     fail "ROS workspace install is missing; wait for first startup build or inspect container logs"
 fi
 
+if compose exec -T "$service" bash -lc 'source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && for package in robot sensors bridge bridge_interfaces rplidar_ros; do ros2 pkg prefix "$package" >/dev/null || exit 1; done'; then
+    pass "expected ROS packages are built"
+else
+    fail "one or more expected ROS packages are missing; inspect entrypoint logs or rebuild the image"
+fi
+
 if compose exec -T "$service" bash -lc 'source /opt/ros/jazzy/setup.bash && source /ros2_ws/install/setup.bash && timeout 10 ros2 node list | grep -Fx /bridge'; then
     pass "ROS /bridge node is visible"
 else

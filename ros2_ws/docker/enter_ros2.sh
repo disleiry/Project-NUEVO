@@ -17,8 +17,9 @@ Behavior:
       vm     -> ros2_ws/docker/docker-compose.vm.yml     (service: ros2_runtime)
       jetson -> ros2_ws/docker/docker-compose.jetson.yml (service: global_gps)
   - Default is rpi.
-  - If /ros2_ws/install/setup.bash is missing inside the container, the script
-    runs a first-time colcon build before entering the shell.
+  - The script runs `docker compose up -d --build --wait` for the selected
+    service before opening a shell, so the container is fully started and
+    healthy before you enter it.
 
 Examples:
   ./ros2_ws/docker/enter_ros2.sh
@@ -62,17 +63,16 @@ else
     esac
 fi
 
+echo "[enter_ros2] Starting ${service} with docker compose up -d --build --wait..."
+docker compose -f "${compose_file}" up -d --build --wait "${service}"
+
 exec docker compose -f "${compose_file}" exec "${service}" bash -lc '
 source /opt/ros/jazzy/setup.bash
 cd /ros2_ws
 
-if [[ ! -f /ros2_ws/install/setup.bash ]]; then
-    echo "[enter_ros2] /ros2_ws/install/setup.bash not found; running first-time build..."
-    colcon build \
-        --symlink-install \
-        --cmake-args -DBUILD_TESTING=OFF
+if [[ -f /ros2_ws/install/setup.bash ]]; then
+    source /ros2_ws/install/setup.bash
 fi
 
-source /ros2_ws/install/setup.bash
 exec bash -i
 '

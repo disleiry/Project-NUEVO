@@ -2,7 +2,7 @@
 # docker-compose.vm.yml — macOS / Windows development (mock mode)
 #
 # Usage (from Project-NUEVO/ repository root):
-#   docker compose -f ros2_ws/docker/docker-compose.vm.yml up -d
+#   docker compose -f ros2_ws/docker/docker-compose.vm.yml up -d --build --wait
 #
 # Runs in mock mode (NUEVO_MOCK=1) — no Arduino required.
 # Use this for ROS2 learning and development on macOS or Windows.
@@ -50,7 +50,11 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD-SHELL", "test -f /ros2_ws/install/setup.bash"]
+      test:
+        [
+          "CMD-SHELL",
+          "bash -lc 'source /opt/ros/jazzy/setup.bash && test -f /ros2_ws/install/setup.bash && source /ros2_ws/install/setup.bash && for package in robot sensors bridge bridge_interfaces rplidar_ros; do ros2 pkg prefix \"$$package\" >/dev/null || exit 1; done'",
+        ]
       interval: 10s
       timeout: 5s
       retries: 3

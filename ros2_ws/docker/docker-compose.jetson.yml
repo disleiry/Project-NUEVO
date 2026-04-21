@@ -2,7 +2,7 @@
 # docker-compose.jetson.yml — Jetson Nano / Orin Nano GPS stack
 #
 # Usage (from Project-NUEVO/ repository root):
-#   docker compose -f ros2_ws/docker/docker-compose.jetson.yml up -d
+#   docker compose -f ros2_ws/docker/docker-compose.jetson.yml up -d --build --wait
 #
 # First startup builds bridge_interfaces + global_gps (~60 s), then the
 # container stays idle.  Start the localizer with:
@@ -52,7 +52,11 @@ services:
     restart: unless-stopped
 
     healthcheck:
-      test: ["CMD-SHELL", "test -f /ros2_ws/install/setup.bash"]
+      test:
+        [
+          "CMD-SHELL",
+          "bash -lc 'source /opt/ros/jazzy/setup.bash && test -f /ros2_ws/install/setup.bash && source /ros2_ws/install/setup.bash && for package in bridge_interfaces global_gps; do ros2 pkg prefix \"$$package\" >/dev/null || exit 1; done'",
+        ]
       interval: 10s
       timeout: 5s
       retries: 3
