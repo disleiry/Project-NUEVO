@@ -118,7 +118,7 @@ python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.
 The RPi compose file has a Docker healthcheck. It checks that:
 
 1. `/ros2_ws/install/setup.bash` exists.
-2. `robot`, `sensors`, `bridge`, `bridge_interfaces`, and `rplidar_ros` are
+2. `robot`, `sensors`, `bridge`, `bridge_interfaces`, `vision`, and `rplidar_ros` are
    available through the ROS install space.
 3. The bridge HTTP health endpoint responds inside the container.
 

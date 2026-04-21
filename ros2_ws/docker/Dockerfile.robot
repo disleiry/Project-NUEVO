@@ -43,6 +43,7 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 # The Pi CSI camera is managed by the native Ubuntu host. The ROS container
 # reads the host's v4l2loopback device at /dev/video10.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-opencv \
         ros-jazzy-v4l2-camera \
         ffmpeg \
         v4l-utils \

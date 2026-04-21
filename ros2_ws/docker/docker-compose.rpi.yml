@@ -76,7 +76,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "bash -lc 'source /opt/ros/jazzy/setup.bash && test -f /ros2_ws/install/setup.bash && source /ros2_ws/install/setup.bash && for package in robot sensors bridge bridge_interfaces rplidar_ros; do ros2 pkg prefix \"$$package\" >/dev/null || exit 1; done && python3 -c \"import urllib.request; urllib.request.urlopen(\\\"http://127.0.0.1:8000/health\\\", timeout=3).read()\"'",
+          "bash -lc 'source /opt/ros/jazzy/setup.bash && test -f /ros2_ws/install/setup.bash && source /ros2_ws/install/setup.bash && for package in robot sensors bridge bridge_interfaces vision rplidar_ros; do ros2 pkg prefix \"$$package\" >/dev/null || exit 1; done && python3 -c \"import urllib.request; urllib.request.urlopen(\\\"http://127.0.0.1:8000/health\\\", timeout=3).read()\"'",
         ]
       interval: 10s
       timeout: 5s

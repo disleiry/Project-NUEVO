@@ -12,7 +12,7 @@ set -e
 source /opt/ros/jazzy/setup.bash
 cd /ros2_ws
 
-packages=( ${NUEVO_ROS_PACKAGES:-robot sensors bridge bridge_interfaces rplidar_ros} )
+packages=( ${NUEVO_ROS_PACKAGES:-robot sensors bridge bridge_interfaces vision rplidar_ros} )
 
 echo "[entrypoint] Building ROS2 packages: ${packages[*]}"
 colcon build \

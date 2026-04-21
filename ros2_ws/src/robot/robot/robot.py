@@ -49,6 +49,7 @@ from bridge_interfaces.msg import (
     SystemState,
     IOInputState,
     TagDetectionArray,
+    VisionDetectionArray,
 )
 from bridge_interfaces.srv import SetFirmwareState
 
@@ -247,6 +248,9 @@ class Robot:
         self._have_io_input: bool = False
         self._obstacles_mm: list[tuple[float, float]] = []
         self._obstacle_provider: Callable[[], list[tuple[float, float]]] | None = None
+        self._vision_detections: list[dict[str, object]] = []
+        self._vision_image_size: tuple[int, int] = (0, 0)
+        self._vision_last_time: float = 0.0
 
         # ── Events ────────────────────────────────────────────────────────────
         self._pose_event: threading.Event = threading.Event()
@@ -299,6 +303,7 @@ class Robot:
         node.create_subscription(IOOutputState,    '/io_output_state',   self._on_io_output,   10)
         node.create_subscription(SysOdomParamRsp,  '/sys_odom_param_rsp', self._on_odom_param_rsp,    10)
         node.create_subscription(TagDetectionArray, '/tag_detections',   self._on_tag_detections,    10)
+        node.create_subscription(VisionDetectionArray, '/vision/detections', self._on_vision_detections, 10)
 
         # ── Service clients ───────────────────────────────────────────────────
         self._set_state_client = node.create_client(SetFirmwareState, '/set_firmware_state')
@@ -581,6 +586,37 @@ class Robot:
             bool(msg.right_motor_dir_inverted),
         )
 
+    def _on_vision_detections(self, msg: VisionDetectionArray) -> None:
+        detections: list[dict[str, object]] = []
+        for det in msg.detections:
+            attribute_scores = list(det.attribute_scores)
+            attributes: dict[str, object] = {}
+            for index, name in enumerate(det.attribute_names):
+                value = det.attribute_values[index] if index < len(det.attribute_values) else ""
+                score = attribute_scores[index] if index < len(attribute_scores) else None
+                attributes[name] = {
+                    "value": value,
+                    "score": score,
+                }
+            detections.append(
+                {
+                    "class_name": det.class_name,
+                    "confidence": float(det.confidence),
+                    "bbox": {
+                        "x": int(det.x),
+                        "y": int(det.y),
+                        "width": int(det.width),
+                        "height": int(det.height),
+                    },
+                    "attributes": attributes,
+                }
+            )
+
+        with self._lock:
+            self._vision_detections = detections
+            self._vision_image_size = (int(msg.image_width), int(msg.image_height))
+            self._vision_last_time = _time.monotonic()
+
     # =========================================================================
     # System
     # =========================================================================
@@ -842,6 +878,64 @@ class Robot:
             raise TypeError("provider must be callable or None")
         with self._lock:
             self._obstacle_provider = provider
+
+    def get_detections(self, class_name: str | None = None) -> list[dict[str, object]]:
+        """Return the latest cached vision detections.
+
+        Each detection is a dict with keys:
+        - `class_name`
+        - `confidence`
+        - `bbox`
+        - `attributes`
+        """
+        with self._lock:
+            detections = [dict(det) for det in self._vision_detections]
+        if class_name is None:
+            return detections
+        return [det for det in detections if det.get("class_name") == class_name]
+
+    def has_detection(self, class_name: str, min_confidence: float = 0.0) -> bool:
+        """Return True if the latest vision snapshot contains the given class."""
+        with self._lock:
+            return any(
+                det["class_name"] == class_name and float(det["confidence"]) >= float(min_confidence)
+                for det in self._vision_detections
+            )
+
+    def get_detection_attribute(
+        self,
+        class_name: str,
+        attribute_name: str,
+        default: str | None = None,
+        min_confidence: float = 0.0,
+    ) -> str | None:
+        """Return the highest-confidence attribute value for a matching detection."""
+        best_confidence = -1.0
+        best_value = default
+        with self._lock:
+            for det in self._vision_detections:
+                confidence = float(det["confidence"])
+                if det["class_name"] != class_name or confidence < float(min_confidence):
+                    continue
+                attributes = det.get("attributes", {})
+                attribute = attributes.get(attribute_name)
+                if attribute is None:
+                    continue
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    best_value = str(attribute.get("value", default))
+        return best_value
+
+    def get_detection_image_size(self) -> tuple[int, int]:
+        """Return the latest vision frame size as (width, height)."""
+        with self._lock:
+            return self._vision_image_size
+
+    def is_vision_active(self, timeout_s: float = 1.0) -> bool:
+        """Return True if a vision detection message arrived recently."""
+        with self._lock:
+            last_time = self._vision_last_time
+        return last_time > 0.0 and (_time.monotonic() - last_time) < float(timeout_s)
 
     # =========================================================================
     # Differential drive — velocity commands

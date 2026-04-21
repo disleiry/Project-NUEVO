@@ -9,6 +9,9 @@ set(msg_files
   # Global GPS / field localizer
   "msg/TagDetection.msg"
   "msg/TagDetectionArray.msg"
+  # Vision detections
+  "msg/VisionDetection.msg"
+  "msg/VisionDetectionArray.msg"
   # Raw bridge telemetry
   "msg/SystemState.msg"
   "msg/SystemPower.msg"
