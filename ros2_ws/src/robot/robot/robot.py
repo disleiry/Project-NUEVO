@@ -240,6 +240,8 @@ class Robot:
         self._have_io_input: bool = False
         self._obstacles_mm: list[tuple[float, float]] = []
         self._obstacle_provider: Callable[[], list[tuple[float, float]]] | None = None
+        self._odom_traj: list[tuple[float, float]] = []
+        self._fused_traj: list[tuple[float, float]] = []
 
         # ── Events ────────────────────────────────────────────────────────────
         self._pose_event: threading.Event = threading.Event()
@@ -425,7 +427,16 @@ class Robot:
             self._fused_x_mm, self._fused_y_mm = self._pos_fusion.update(
                 msg.x, msg.y, gps_x, gps_y
             )
+            _raw_odom = (float(msg.x), float(msg.y))
+            _raw_fused = (self._fused_x_mm, self._fused_y_mm)
 
+        self._odom_traj.append(_raw_odom)
+        self._fused_traj.append(_raw_fused)
+        self._node.get_logger().info(
+            f"odom=({_raw_odom[0]:.1f}, {_raw_odom[1]:.1f}) mm  "
+            f"fused=({_raw_fused[0]:.1f}, {_raw_fused[1]:.1f}) mm",
+            throttle_duration_sec=0.5,
+        )
         self._pose_event.set()
         self._pose_event.clear()
 
@@ -804,6 +815,7 @@ class Robot:
         time.sleep(self._SHUTDOWN_SETTLE_S)
         if self.get_state() == FirmwareState.RUNNING:
             self.set_state(FirmwareState.IDLE, timeout=1.0)
+        self.save_trajectory_image()
 
     def set_left_wheel(self, motor_id: int) -> None:
         """Alias for set_odom_left_motor()."""
@@ -1675,6 +1687,38 @@ class Robot:
         """
         with self._lock:
             self._pos_fusion.alpha = max(0.0, min(1.0, float(alpha)))
+
+    def save_trajectory_image(self, path: str = "trajectory.png") -> None:
+        """Save a PNG comparing raw odometry vs fused trajectory. Requires matplotlib."""
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            self._node.get_logger().error("matplotlib not installed; cannot save trajectory image")
+            return
+
+        odom = list(self._odom_traj)
+        fused = list(self._fused_traj)
+        if not odom:
+            self._node.get_logger().warn("No trajectory data to save")
+            return
+
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ox, oy = zip(*odom)
+        ax.plot(ox, oy, label="odometry (raw)", color="steelblue", linewidth=1.5)
+        if fused:
+            fx, fy = zip(*fused)
+            ax.plot(fx, fy, label="fused (GPS+odom)", color="darkorange", linewidth=1.5, linestyle="--")
+        ax.scatter([ox[0]], [oy[0]], color="green", zorder=5, label="start")
+        ax.scatter([ox[-1]], [oy[-1]], color="red", zorder=5, label="end")
+        ax.set_xlabel("x (mm)")
+        ax.set_ylabel("y (mm)")
+        ax.set_title("Trajectory: raw odometry vs fused")
+        ax.legend()
+        ax.set_aspect("equal")
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+        self._node.get_logger().info(f"Trajectory image saved to {path}")
 
     def is_gps_active(self) -> bool:
         """Return True if a GPS fix for the tracked tag arrived within the staleness window."""
