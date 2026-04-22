@@ -26,6 +26,7 @@ import math
 # Robot build configuration
 # ---------------------------------------------------------------------------
 
+TAG_ID = 11 # set aruco tag ID 11 
 POSITION_UNIT = Unit.MM
 WHEEL_DIAMETER = 74.0
 WHEEL_BASE = 333.0
@@ -49,6 +50,7 @@ def configure_robot(robot: Robot) -> None:
         right_motor_id=RIGHT_WHEEL_MOTOR,
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
+    robot.set_tracked_tag_id(TAG_ID) # set aruco tag ID as the tracked tag for localization
 
 
 def show_idle_leds(robot: Robot) -> None:
@@ -93,11 +95,11 @@ def run(robot: Robot) -> None:
             path1 = densify_polyline(path_control_points, spacing=20.0)
             remaining_path = path1.copy() 
             print("Path is ready, Entering IDLE state.")
+            print("[FSM] IDLE - Press BTN_1 to enter MOVING state.")
             state = "IDLE"
 
         elif state == "IDLE":
             show_idle_leds(robot)
-            print("[FSM] IDLE - Press BTN_1 to enter MOVING state.")
             if robot.get_button(Button.BTN_1):
                 LOOKAHEAD_DIST = 50.0 # Lookahead distance in mm (adjust as needed)
                 ADVANCE_DIST = 20.0
@@ -111,6 +113,9 @@ def run(robot: Robot) -> None:
                 print("Pure Pursuit Planner is initialized. Start Moving!")
                 print("[FSM] MOVING")
                 state = "MOVING"
+            if robot.get_button(Button.BTN_2):
+                print("BTN_2 pressed. Stopping robot and saving trajectory.")
+                robot.shutdown()
 
         elif state == "MOVING":
             show_moving_leds(robot)
