@@ -231,7 +231,7 @@ class PurePursuitPlannerWithAvoidance(PathPlanner):
         return (dist_to_goal < self.goal_tolerance)
 
     def gen_obstacle_waypoint(self, pose, obstacles_r):
-        # Step 1 - Obtain current state: Obtain pose and obstacles in robot frame based on your lidar and robot configurations.
+        # Step 1: Obtain current state: Obtain pose and obstacles in robot frame based on your lidar and robot configurations.
         x, y, theta = pose
         if len(obstacles_r) > 0:
             # lidar orientation due to installation is 180 deg rotated from robot forward, so rotate obstacles accordingly
@@ -239,8 +239,6 @@ class PurePursuitPlannerWithAvoidance(PathPlanner):
             obstacles_r = (np.array([[np.cos(np.pi), -np.sin(np.pi)], [np.sin(np.pi), np.cos(np.pi)]]) @ obstacles_r.T).T 
             
             # since some robot parts (e.g., the arm) may cause obstacles to be detected, we can filter out those obstacles behind the lidar.
-            # obstacles_r = obstacles_r[obstacles_r[:,0]>0]
-            # obstacles_r = obstacles_r[(obstacles_r[:,0]>0) & (np.abs(obstacles_r[:,1])<self.safe_dist),:]
             obstacles_r = obstacles_r[np.abs(np.arctan2(obstacles_r[:,1],obstacles_r[:,0])) <= self.view_angle,:] # only consider obstacles in front of the robot within 180 deg FOV, which can help prevent the robot from being too conservative by reacting to obstacles behind it that are not in its path.
 
             # consider the lidar offset from the robot center
@@ -292,7 +290,7 @@ class PurePursuitPlannerWithAvoidance(PathPlanner):
                         else:
                             self.remaining_path.append((x_-self.offset, y_))
                             self.current_lane = 'Left'
-                    print('Change Lane!!!', self.current_lane)
+                    print('Change Lane!!! Current lane is:', self.current_lane)
                     if np.hypot(x-closest_pt[0], y-closest_pt[1]) < (self.safe_dist+self.obstacles_range)/2:
                         print('Too Closed!!!')
                         if self.current_lane == 'Right':
