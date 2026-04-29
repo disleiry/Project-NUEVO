@@ -26,7 +26,6 @@ except (ImportError, ModuleNotFoundError):
             self.history = history
             self.depth = depth
 import numpy as np
-import matplotlib.pyplot as plt
 
 from bridge_interfaces.msg import (
     DCEnable,
@@ -2080,73 +2079,6 @@ class Robot:
         return not self._nav_cancel.wait(timeout=seconds)
 
 
-    # =========================================================================
-    # Obstacle avoidance — DWA path following  (restored from commit 8894254)
-    # =========================================================================
-
-    def _nav_follow_dwa_path(
-        self,
-        max_vel_mm: float,
-        max_acc_mm: float,
-        max_angular_rad: float,
-        max_angular_acc_rad: float,
-        lookahead_mm: float,
-        advance_radius_mm: float,
-        tolerance_mm: float,
-        gains_of_costs: list,
-        period: float,
-        predict_time: float,
-        predict_velocity_samples_resolution: list,
-        obstacles_range_mm: float,
-        ttc_weight: float,
-    ) -> None:
-        # NOTE (design gap): this method only constructs self.planner and returns
-        # immediately — it does NOT start any navigation loop.  The caller is
-        # expected to drive navigation manually by calling _nav_follow_path_loop()
-        # on every FSM tick (as done in examples/obstacle_avoidance.py).  This is
-        # a non-obvious split: unlike _nav_follow_pure_pursuit_path() which blocks
-        # until the goal is reached, _nav_follow_dwa_path() is a setup-only call.
-        # Consider renaming it _init_dwa_planner() to make the intent explicit.
-        from robot.path_planner import DWAPlanner
-        self.planner = DWAPlanner(
-            lookahead_dist=lookahead_mm,
-            max_linear_speed=max_vel_mm,
-            max_angular_speed=max_angular_rad,
-            max_linear_acc=max_acc_mm,
-            max_angular_acc=max_angular_acc_rad,
-            goal_tolerance=tolerance_mm,
-            gains_of_costs=gains_of_costs,
-            dt=period,
-            predict_time=predict_time,
-            predict_velocity_samples_resolution=predict_velocity_samples_resolution,
-            robot_radius=advance_radius_mm,
-            obstacles_range=obstacles_range_mm,
-            ttc_weight=ttc_weight,
-        )
-
-    def _nav_follow_path_loop(self, path, period: float):
-        with self._lock:
-            obstacles = self._obstacles_mm.copy()
-            # _get_pose_mm() returns (_fused_x_mm, _fused_y_mm, _fused_theta), which
-            # already incorporates GPS/odometry fusion. self._pose is raw odometry and
-            # diverges from the fused position once a GPS anchor is applied, so
-            # DWAPlanner path following should use _get_pose_mm() to avoid navigating
-            # from the wrong starting point.
-            pose = self._pose
-            vel = self._vel
-
-        v, w = self.planner.compute_velocity(path, pose, vel, obstacles, period)
-        # print(f"Computed velocity: linear={v:.1f} mm/s, angular={math.degrees(w):.1f} deg/s")
-        self.set_velocity(v, math.degrees(w))
-        # print(f"Current Pose: ({pose[0]:.1f}, {pose[1]:.1f}, {math.degrees(pose[2]):.1f} deg)")
-
-        if self.planner.TargetReached(path, pose[0], pose[1]):
-            print("MOVING: Target reached! Stopping.")
-            self.stop()
-            return "IDLE"
-
-        return "MOVING"
-
     def _nav_follow_pp_path(
         self,
         lookahead_distance: float,
@@ -2181,42 +2113,6 @@ class Robot:
             obstacle_avoidance=obstacle_avoidance, 
         )
 
-    def _nav_follow_pp_path2(
-        self,
-        lookahead_distance: float,
-        max_linear_speed: float,
-        max_angular_speed: float,
-        goal_tolerance: float,
-        obstacles_range: float,
-        safe_dist: float,
-        max_turning_angle: float,
-        avoidance_delay: int,
-        obstacle_buffer_len: int,
-        obstacle_buffer_delay: int,
-        alpha_Ld: float,
-        alpha_Sd: float,
-        alpha_angle: float,
-        obstacle_avoidance: bool = True,
-    ) -> None:
-
-        from robot.path_planner import PurePursuitPlannerWithAvoidance2
-        self.planner = PurePursuitPlannerWithAvoidance2(
-            lookahead_distance=lookahead_distance,
-            max_linear_speed=max_linear_speed,
-            max_angular_speed=max_angular_speed,
-            goal_tolerance=goal_tolerance,
-            obstacles_range=obstacles_range,
-            safe_dist=safe_dist,
-            max_turning_angle=max_turning_angle,
-            avoidance_delay=avoidance_delay,
-            obstacle_buffer_len=obstacle_buffer_len,
-            obstacle_buffer_delay=obstacle_buffer_delay,
-            alpha_Ld=alpha_Ld,
-            alpha_Sd=alpha_Sd,
-            alpha_angle=alpha_angle,
-            obstacle_avoidance=obstacle_avoidance,
-        )
-    
     def _nav_follow_pp_path_loop(self):
         with self._lock:
             obstacles = self._obstacles_mm.copy()
@@ -2243,6 +2139,12 @@ class Robot:
         return "MOVING"
 
     def _draw_lidar_obstacles(self):
+        try:
+            import matplotlib.pyplot as plt
+        except ImportError:
+            self._node.get_logger().error("matplotlib not installed; cannot draw lidar obstacles")
+            return
+
         with self._lock:
              obstacles_mm = self._obstacles_mm.copy()
              pose = self._pose

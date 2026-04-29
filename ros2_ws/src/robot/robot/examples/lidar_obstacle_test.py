@@ -47,7 +47,8 @@ rotated relative to the robot forward axis, so:
     raw lidar +x  →  robot backward
     raw lidar -x  →  robot forward
 
-After applying the 180° correction (same rotation used in DWAPlanner):
+After applying the 180° correction (same rotation used by the current
+obstacle-avoidance planner):
     x_fwd = -x_raw,  y_fwd = -y_raw
 
 Obstacles with x_fwd > 0 are in front of the robot.  This test filters to a
@@ -169,7 +170,8 @@ def check_forward_obstacle(robot: Robot, stop_dist_mm: float, cone_deg: float):
     Return (obstacle_detected, min_fwd_dist_mm, n_raw, n_fwd).
 
     Reads robot._obstacles_mm under the lock, applies the 180° lidar mount
-    correction (same transform used by DWAPlanner), then checks the forward
+    correction (same transform used by the current obstacle-avoidance planner),
+    then checks the forward
     cone.  The robot frame after correction: +x = forward, +y = left.
     """
     with robot._lock:

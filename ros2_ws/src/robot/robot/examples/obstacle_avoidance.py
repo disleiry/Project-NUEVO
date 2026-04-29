@@ -1,18 +1,29 @@
+"""
+obstacle_avoidance.py — current lane-switch obstacle avoidance reference
+========================================================================
+Reference example for the obstacle-avoidance path that is currently used by the
+released Lab 5 robot flow.
+
+How to run:
+    cp examples/obstacle_avoidance.py main.py
+    ros2 run robot robot
+
+This example is intentionally close to the released lab behavior, but lives in
+`examples/` so the supported obstacle-avoidance configuration is documented in
+one place without editing each student's `main.py`.
+"""
+
 from __future__ import annotations
+
+import math
 import time
 
-from robot.robot import FirmwareState, Robot, Unit
 from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
+from robot.robot import FirmwareState, Robot, Unit
 from robot.util import densify_polyline
-from robot.path_planner import PurePursuitPlanner
-import math
-import numpy as np
 
 
-# ---------------------------------------------------------------------------
-# Robot build configuration
-# ---------------------------------------------------------------------------
-
+TAG_ID = 11
 POSITION_UNIT = Unit.MM
 WHEEL_DIAMETER = 74.0
 WHEEL_BASE = 333.0
@@ -35,6 +46,7 @@ def configure_robot(robot: Robot) -> None:
         right_motor_id=RIGHT_WHEEL_MOTOR,
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
+    robot.set_tracked_tag_id(TAG_ID)
 
 
 def show_idle_leds(robot: Robot) -> None:
@@ -57,28 +69,18 @@ def run(robot: Robot) -> None:
     configure_robot(robot)
 
     state = "INIT"
-    drive_handle = None
     period = 1.0 / float(DEFAULT_FSM_HZ)
-    print(f"FSM period: {period:.3f} seconds")
     next_tick = time.monotonic()
 
     while True:
         if state == "INIT":
             start_robot(robot)
             print("[FSM] INIT (odometry reset)")
-            # center lane
-            # path_control_points = [
-            #     (0.0,   0.0),
-            #     (0.0, 2500.0),
-            #     (1000.0, 2500.0),
-            # ]
-            # left lane
             path_control_points = [
-                (300.0,   0.0),
+                (300.0, 0.0),
                 (300.0, 2500.0),
                 (1300.0, 2500.0),
             ]
-
             path = densify_polyline(path_control_points, spacing=400.0)
 
             robot._nav_follow_pp_path(
@@ -97,7 +99,7 @@ def run(robot: Robot) -> None:
                 x_L=300.0,
             )
             robot.planner.set_path(path)
-            print("Path is ready, Entering IDLE state.")
+            print("Path is ready, entering IDLE state.")
             state = "IDLE"
 
         elif state == "IDLE":
@@ -105,18 +107,16 @@ def run(robot: Robot) -> None:
             robot._draw_lidar_obstacles()
             print("[FSM] IDLE - Press BTN_1 to enter MOVING state.")
             if robot.get_button(Button.BTN_1):
-                print("Start Moving!")
-                print("[FSM] MOVING")
+                print("Start moving.")
                 state = "MOVING"
+            elif robot.get_button(Button.BTN_2):
+                print("BTN_2 pressed. Stopping robot and saving trajectory.")
+                robot.shutdown()
 
         elif state == "MOVING":
             show_moving_leds(robot)
-            # if next_tick % 0.5 < period: # print every half second
-            #     robot._draw_lidar_obstacles()
-            #     print("Obstacle figure updated.")
             state = robot._nav_follow_pp_path_loop()
 
-        # FSM refresh rate control
         next_tick += period
         sleep_s = next_tick - time.monotonic()
         if sleep_s > 0.0:
