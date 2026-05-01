@@ -208,7 +208,6 @@ function Dashboard() {
             <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
               <div className="md:col-span-2 space-y-3">
                 <h3 className="text-sm font-semibold text-white/60 uppercase tracking-wider">RPi Sensors</h3>
-                <SensorSection source="rpi" />
                 <WorldCanvas />
                 <GpsStatusCard />
                 <RosNodesCard />
