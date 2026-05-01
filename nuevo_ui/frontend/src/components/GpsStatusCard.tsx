@@ -17,7 +17,7 @@ export function GpsStatusCard() {
             ? 'bg-emerald-500/20 text-emerald-400'
             : 'bg-rose-500/20 text-rose-400'
         }`}>
-          {detected ? 'YES' : 'NO'}
+          {detected ? 'Detected' : 'Not detected'}
         </span>
       </div>
 
