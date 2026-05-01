@@ -384,6 +384,9 @@ class BridgeNode(Node):
 
         nodes = []
         for name, ns in node_names:
+            # Skip ROS2 internal nodes (CLI daemon, parameter services, etc.)
+            if name.startswith('_'):
+                continue
             full = f"{ns}/{name}".replace("//", "/")
             try:
                 pubs = [
