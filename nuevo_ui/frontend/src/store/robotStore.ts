@@ -252,13 +252,17 @@ function clearedRobotState(connection: ConnectionData | null, serialConnected: b
     fusedPoseTrail: [],
     odometryTrail: [],
     gpsStatus: null,
-    lidarPoints: null,
+    lidarPoints: [],
     rosNodes: [],
   }
 }
 
 // Trail history cap — keeps memory bounded without losing the full session path.
 const MAX_TRAIL_PTS = 5000
+
+// Lidar rolling window — how many consecutive frames to overlay on the canvas.
+// Increase to fill in gaps when the scanner misses angles; decrease for less lag.
+export const LIDAR_WINDOW_FRAMES = 5
 
 interface RobotState {
   connected: boolean
@@ -292,7 +296,7 @@ interface RobotState {
   fusedPoseTrail: Array<[number, number]>   // [x_mm, y_mm] history
   odometryTrail: Array<[number, number]>    // [x_mm, y_mm] from raw kinematics
   gpsStatus: GpsStatusData | null
-  lidarPoints: LidarPointsData | null
+  lidarPoints: LidarPointsData[]   // rolling window — newest last
   rosNodes: RosNodeEntry[]
   dispatch: (topic: string, data: any, ts?: number) => void
   setMotorRecording: (motorIdx: number, active: boolean) => void
@@ -332,7 +336,7 @@ export const useRobotStore = create<RobotState>((set) => ({
   fusedPoseTrail: [],
   odometryTrail: [],
   gpsStatus: null,
-  lidarPoints: null,
+  lidarPoints: [],
   rosNodes: [],
 
   clearErrorLog: () => set({ errorLog: [] }),
@@ -726,8 +730,13 @@ export const useRobotStore = create<RobotState>((set) => ({
         set({ gpsStatus: data as GpsStatusData })
         break
 
-      case 'lidar_world_points':
-        set({ lidarPoints: data as LidarPointsData })
+      case 'lidar_world_points': {
+        const frame = data as LidarPointsData
+        set((state) => ({
+          lidarPoints: [...state.lidarPoints.slice(-(LIDAR_WINDOW_FRAMES - 1)), frame],
+        }))
+        break
+      }
         break
 
       case 'ros_nodes':

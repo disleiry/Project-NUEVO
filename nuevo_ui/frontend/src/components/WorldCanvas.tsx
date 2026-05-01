@@ -5,10 +5,9 @@
  * Canvas style (translucent dark, subtle grid) is the original WorldCanvas design.
  */
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { useRobotStore } from '../store/robotStore'
+import { useRobotStore, LIDAR_WINDOW_FRAMES } from '../store/robotStore'
 
-const PAD_MM          = 200
-const LIDAR_THROTTLE_MS = 200
+const PAD_MM = 200
 
 interface Trails { odom: boolean; gps: boolean; fused: boolean; lidar: boolean }
 
@@ -28,8 +27,7 @@ export function WorldCanvas() {
   const gpsStatus   = useRobotStore((s) => s.gpsStatus)
   const lidarPoints = useRobotStore((s) => s.lidarPoints)
 
-  const scaleRef     = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null)
-  const lastLidarRef = useRef<number>(0)
+  const scaleRef = useRef<{ minX: number; maxX: number; minY: number; maxY: number } | null>(null)
   const [trails, setTrails] = useState<Trails>({ odom: true, gps: true, fused: true, lidar: true })
 
   const toggle = useCallback((key: keyof Trails) => {
@@ -53,9 +51,10 @@ export function WorldCanvas() {
     if (trails.odom)   allPts.push(...odomTrail)
     if (fusedPose)     allPts.push([fusedPose.x, fusedPose.y])
     if (trails.gps && gpsStatus?.is_detected) allPts.push([gpsStatus.x, gpsStatus.y])
-    if (trails.lidar && lidarPoints) {
-      for (let i = 0; i < lidarPoints.xs.length; i++)
-        allPts.push([lidarPoints.xs[i], lidarPoints.ys[i]])
+    if (trails.lidar) {
+      for (const frame of lidarPoints)
+        for (let i = 0; i < frame.xs.length; i++)
+          allPts.push([frame.xs[i], frame.ys[i]])
     }
 
     if (allPts.length > 0) {
@@ -152,14 +151,16 @@ export function WorldCanvas() {
       ctx.fill()
     }
 
-    // Lidar cloud (red, throttled)
-    const now = Date.now()
-    if (trails.lidar && lidarPoints && now - lastLidarRef.current >= LIDAR_THROTTLE_MS) {
-      lastLidarRef.current = now
-      ctx.fillStyle = 'rgba(248,113,113,0.60)'
-      for (let i = 0; i < lidarPoints.xs.length; i++) {
-        const [cx, cy] = toC(lidarPoints.xs[i], lidarPoints.ys[i])
-        ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, Math.PI * 2); ctx.fill()
+    // Lidar cloud — all frames in the rolling window, oldest most transparent
+    if (trails.lidar && lidarPoints.length > 0) {
+      for (let f = 0; f < lidarPoints.length; f++) {
+        const alpha = 0.25 + 0.45 * (f / (LIDAR_WINDOW_FRAMES - 1 || 1))  // 0.25 → 0.70
+        ctx.fillStyle = `rgba(248,113,113,${alpha.toFixed(2)})`
+        const frame = lidarPoints[f]
+        for (let i = 0; i < frame.xs.length; i++) {
+          const [cx, cy] = toC(frame.xs[i], frame.ys[i])
+          ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, Math.PI * 2); ctx.fill()
+        }
       }
     }
 
