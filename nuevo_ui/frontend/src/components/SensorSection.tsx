@@ -723,28 +723,15 @@ function OdometryCard({ kinematics, odomParams }: { kinematics: KinematicsData; 
         </div>
       </div>
 
-      <div className="space-y-1 text-xs">
-        <div className="flex gap-4">
-          <span className="text-white/50">X <span className="font-mono text-white">{distFmt(kinematics.x)}</span></span>
-          <span className="text-white/50">Y <span className="font-mono text-white">{distFmt(kinematics.y)}</span></span>
-          <span className="text-white/50">θ <span className="font-mono text-white">{thetaDeg.toFixed(1)}°</span></span>
-        </div>
-        <div className="flex gap-4">
-          <span className="text-white/50">Vx <span className="font-mono text-white">{spdFmt(kinematics.vx)}</span></span>
-          <span className="text-white/50">Vy <span className="font-mono text-white">{spdFmt(kinematics.vy)}</span></span>
-        </div>
+      <div className="space-y-1">
+        <CompactRow label="Position (X, Y, θ)" value={`${distFmt(kinematics.x)},  ${distFmt(kinematics.y)},  ${thetaDeg.toFixed(1)}°`} />
+        <CompactRow label="Velocity (Vx, Vy)"  value={`${spdFmt(kinematics.vx)},  ${spdFmt(kinematics.vy)}`} />
         {odomParams ? (
           <>
             <div className="my-2 h-px bg-white/10" />
-            <div className="flex gap-4">
-              <span className="text-white/50">Wheel Ø <span className="font-mono text-white">{distFmt(odomParams.wheelDiameterMm)}</span></span>
-              <span className="text-white/50">Base <span className="font-mono text-white">{distFmt(odomParams.wheelBaseMm)}</span></span>
-            </div>
-            <div className="flex gap-4">
-              <span className="text-white/50">Reset θ <span className="font-mono text-white">{odomParams.initialThetaDeg.toFixed(1)}°</span></span>
-              <span className="text-white/50">L <span className="font-mono text-white">M{odomParams.leftMotorNumber}{odomParams.leftMotorDirInverted ? ' inv' : ''}</span></span>
-              <span className="text-white/50">R <span className="font-mono text-white">M{odomParams.rightMotorNumber}{odomParams.rightMotorDirInverted ? ' inv' : ''}</span></span>
-            </div>
+            <CompactRow label="Wheel Ø / Base"  value={`${distFmt(odomParams.wheelDiameterMm)}  /  ${distFmt(odomParams.wheelBaseMm)}`} />
+            <CompactRow label="Reset θ"         value={`${odomParams.initialThetaDeg.toFixed(1)}°`} />
+            <CompactRow label="Left / Right"    value={`M${odomParams.leftMotorNumber}${odomParams.leftMotorDirInverted ? ' (inv)' : ''}  /  M${odomParams.rightMotorNumber}${odomParams.rightMotorDirInverted ? ' (inv)' : ''}`} />
           </>
         ) : (
           <>
