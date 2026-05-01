@@ -724,7 +724,8 @@ function OdometryCard({ kinematics, odomParams }: { kinematics: KinematicsData; 
     canvas.height = H * dpr;
     const ctx = canvas.getContext('2d')!;
     ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
 
     // Bounding box (always in mm — canvas coordinate space stays mm)
     let minX = kinematics.x, maxX = kinematics.x;
@@ -749,8 +750,8 @@ function OdometryCard({ kinematics, odomParams }: { kinematics: KinematicsData; 
 
     // Grid (lines always in mm; label converted to display unit)
     const gridStep = Math.pow(10, Math.ceil(Math.log10(span / 4)));
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = 0.75;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 0.5;
     const gStartX = Math.floor((cx - span / 2) / gridStep) * gridStep;
     const gStartY = Math.floor((cy - span / 2) / gridStep) * gridStep;
     for (let gx = gStartX; gx < cx + span / 2; gx += gridStep) {
@@ -854,7 +855,7 @@ function OdometryCard({ kinematics, odomParams }: { kinematics: KinematicsData; 
         </div>
       </div>
 
-      <canvas ref={canvasRef} className="w-full rounded-lg mb-3" style={{ height: '180px', background: '#0a0a0a' }} />
+      <canvas ref={canvasRef} className="w-full rounded-xl mb-3" style={{ height: '420px' }} />
 
       <div className="space-y-1">
         <CompactRow label="X"  value={distFmt(kinematics.x)} />
