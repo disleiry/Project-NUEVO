@@ -59,8 +59,12 @@ def generate_launch_description() -> LaunchDescription:
         ),
         DeclareLaunchArgument(
             "flip_x_axis",
-            default_value="false",
-            description="Rotate published scan by 180 degrees.",
+            # The C1 driver's angle transform is: ros_angle = π − lidar_angle, which places
+            # the lidar's physical front at ROS 180°. flip_x_axis adds another π, giving
+            # ros_angle = −lidar_angle, so the lidar's front maps to ROS 0° (robot forward).
+            # Keep true when the lidar's front faces the robot's front (standard upright mounting).
+            default_value="true",
+            description="Rotate published scan by 180 degrees (true for standard upright mounting).",
         ),
         Node(
             package="rplidar_ros",

@@ -60,9 +60,11 @@ LIDAR_MOUNT_Y_MM      = 0.0    # lidar y position in robot body frame (mm, +y = 
 LIDAR_MOUNT_THETA_DEG = 0.0    # lidar heading offset relative to robot forward (deg, CCW+)
                                 # use 180.0 if lidar is mounted facing backward
 
-LIDAR_RANGE_MIN_MM     = 150.0  # discard returns closer than this (mm)
-LIDAR_RANGE_MAX_MM     = 6000.0 # discard returns farther than this (mm)
-LIDAR_FOV_DEG          = 360.0  # keep only ±FOV/2 around robot forward; 360 = full scan
+LIDAR_RANGE_MIN_MM     = 150.0          # discard returns closer than this (mm)
+LIDAR_RANGE_MAX_MM     = 6000.0         # discard returns farther than this (mm)
+# FOV window in robot body frame (0° = robot +x forward, CCW positive).
+# (-180, 180) = full scan; (-90, 90) = front hemisphere only.
+LIDAR_FOV_DEG          = (-180.0, 180.0)
 
 # ── GPS / ArUco tag ────────────────────────────────────────────────────────────
 GPS_TAG_ID = -1   # -1 = accept any tag; set to your actual tag ID
@@ -110,7 +112,7 @@ def configure_robot(robot: Robot) -> None:
     robot.set_lidar_filter(
         range_min_mm=LIDAR_RANGE_MIN_MM,
         range_max_mm=LIDAR_RANGE_MAX_MM,
-        fov_deg=LIDAR_FOV_DEG,
+        fov_deg=LIDAR_FOV_DEG,   # tuple (min_deg, max_deg) in robot body frame
     )
     robot.set_tracked_tag_id(GPS_TAG_ID)
 
