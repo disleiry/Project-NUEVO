@@ -5,7 +5,8 @@ Purpose
 -------
 Drive a 2-grid-cell square path while printing live sensor diagnostics so you
 can simultaneously verify:
-  1. Lidar config    — obstacle count printed each tick; cloud appears on UI.
+  1. Lidar config    — obstacle count printed each tick; cloud published to
+                       /lidar_world_points and appears on the World Map canvas.
   2. GPS setup       — tag detection, arena-frame fix, and gps_active flag.
   3. UI plots        — fused trail (blue), odometry trail (green), GPS cross
                        (yellow), and lidar cloud all update during the run.
@@ -30,22 +31,15 @@ HOW TO USE
 6. Press BTN_2 at any time to cancel and return to IDLE.
    Press BTN_1 again from IDLE to run the path again.
 
-GPS CALIBRATION NOTE
---------------------
-`GPS_OFFSET_X_MM` and `GPS_OFFSET_Y_MM` translate raw ArUco detections
-(metres, camera frame) into arena-frame millimetres.  Measure once:
-  - Drive the robot to a point with known arena coordinates (x_known, y_known).
-  - Read the raw GPS fix: (gps_x * 1000, gps_y * 1000).
-  - offset = (x_known − gps_x*1000, y_known − gps_y*1000).
-The defaults (GRID_MM/2, GRID_MM*2.5) are a reasonable first guess based on
-the venue layout — update them once you have a measured fix.
 """
 
 from __future__ import annotations
+import math
 import time
 
 from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
 from robot.robot import FirmwareState, Robot, Unit
+from bridge_interfaces.msg import LidarWorldPoints
 
 
 # ── Robot hardware ─────────────────────────────────────────────────────────────
@@ -60,11 +54,7 @@ RIGHT_WHEEL_MOTOR        = Motor.DC_M2
 RIGHT_WHEEL_DIR_INVERTED = True
 
 # ── GPS / ArUco tag ────────────────────────────────────────────────────────────
-# Venue: 5×6 grid, 610 mm cells, origin at centre of bottom edge of bottom-left cell.
-GRID_MM          = 610.0
-GPS_TAG_ID       = -1       # -1 = accept any tag; set to your actual tag ID
-GPS_OFFSET_X_MM  = GRID_MM / 2       # 305 mm — adjust after first measured fix
-GPS_OFFSET_Y_MM  = GRID_MM * 2.5     # 1525 mm — adjust after first measured fix
+GPS_TAG_ID = -1   # -1 = accept any tag; set to your actual tag ID
 
 # ── Pure-pursuit path ──────────────────────────────────────────────────────────
 # A 2-grid-cell square, centred on the odometry origin (wherever you place the robot).
@@ -102,7 +92,28 @@ def configure_robot(robot: Robot) -> None:
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
     robot.set_tracked_tag_id(GPS_TAG_ID)
-    robot.set_gps_offset(GPS_OFFSET_X_MM, GPS_OFFSET_Y_MM)
+
+
+def _publish_lidar_world(robot: Robot, pub) -> None:
+    """Transform robot-frame lidar obstacles to world frame and publish."""
+    obstacles = robot.get_obstacles()   # robot-frame mm (current unit = MM)
+    fx, fy, ftheta_deg = robot.get_fused_pose()
+    ftheta = math.radians(ftheta_deg)
+    cos_t, sin_t = math.cos(ftheta), math.sin(ftheta)
+
+    xs, ys = [], []
+    for ox, oy in obstacles:
+        xs.append(fx + ox * cos_t - oy * sin_t)
+        ys.append(fy + ox * sin_t + oy * cos_t)
+
+    msg = LidarWorldPoints()
+    msg.header.stamp = robot._node.get_clock().now().to_msg()
+    msg.xs         = xs
+    msg.ys         = ys
+    msg.robot_x    = float(fx)
+    msg.robot_y    = float(fy)
+    msg.robot_theta = float(ftheta)
+    pub.publish(msg)
 
 
 def _print_diagnostics(robot: Robot, label: str) -> None:
@@ -124,7 +135,14 @@ def _print_diagnostics(robot: Robot, label: str) -> None:
 def run(robot: Robot) -> None:
     configure_robot(robot)
 
-    state       = "INIT"
+    from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
+    _lidar_pub = robot._node.create_publisher(
+        LidarWorldPoints, '/lidar_world_points',
+        QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
+                   history=HistoryPolicy.KEEP_LAST, depth=1),
+    )
+
+    state        = "INIT"
     drive_handle = None
     last_diag_t  = 0.0
 
@@ -145,8 +163,7 @@ def run(robot: Robot) -> None:
             robot.wait_for_pose_update(timeout=0.5)
             robot.set_led(LED.ORANGE, 200)
             print("[INIT] Ready — press BTN_1 to start path, BTN_2 to cancel")
-            print(f"       GPS tag: {'any' if GPS_TAG_ID == -1 else GPS_TAG_ID}  "
-                  f"offset=({GPS_OFFSET_X_MM:.0f}, {GPS_OFFSET_Y_MM:.0f}) mm")
+            print(f"       GPS tag: {'any' if GPS_TAG_ID == -1 else GPS_TAG_ID}")
             print(f"       Path: {len(PATH)} waypoints, side={_S:.0f} mm")
             state = "IDLE"
 
@@ -195,6 +212,9 @@ def run(robot: Robot) -> None:
                 _print_diagnostics(robot, "DONE")
                 print("[MOVING→IDLE] Path complete — press BTN_1 to run again")
                 state = "IDLE"
+
+        # ── Publish lidar world points every tick ─────────────────────────────
+        _publish_lidar_world(robot, _lidar_pub)
 
         # ── Tick-rate control (do not modify) ─────────────────────────────────
         next_tick += period

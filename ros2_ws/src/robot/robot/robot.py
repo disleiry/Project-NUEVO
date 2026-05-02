@@ -206,8 +206,12 @@ class Robot:
     DEFAULT_RIGHT_WHEEL_DIR_INVERTED: bool = True
     POSITION_ALPHA = 0.10  # complementary filter GPS weight for position fusion
     ORIENTATION_ALPHA = 0.0  # complementary filter IMU weight for orientation fusion (IMU is not working well, so default to pure odometry for now)
-    TAG_X_OFFSET_MM = 0.0  # ArUco tag position in robot body frame x (mm, forward)
-    TAG_Y_OFFSET_MM = 0.0  # ArUco tag position in robot body frame y (mm, left)
+    TAG_X_OFFSET_MM = 0.0   # ArUco tag position in robot body frame x (mm, forward)
+    TAG_Y_OFFSET_MM = 0.0   # ArUco tag position in robot body frame y (mm, left)
+
+    LIDAR_MOUNT_X_MM:    float = 0.0    # lidar position in robot body frame x (mm, forward)
+    LIDAR_MOUNT_Y_MM:    float = 0.0    # lidar position in robot body frame y (mm, left)
+    LIDAR_MOUNT_THETA_DEG: float = 0.0  # lidar heading offset relative to robot forward (deg, CCW+)
 
     # Servo pulse range (standard hobby servo)
     _SERVO_MIN_US: int = 1000
@@ -263,10 +267,13 @@ class Robot:
         self._gps_y_mm:          float       = 0.0  # latest GPS y in mm (arena frame)
         self._gps_last_time:     float       = 0.0   # monotonic timestamp of last GPS fix
         self._gps_timeout_s:     float       = 1.0   # seconds before GPS is treated as stale
-        self._gps_offset_x_mm:   float       = 304.8   # GPS frame → arena frame translation x
-        self._gps_offset_y_mm:   float       = 1524   # GPS frame → arena frame translation y
-        self._tag_body_offset_x_mm: float    = self.TAG_X_OFFSET_MM   # tag position in robot body frame x (mm, forward)
-        self._tag_body_offset_y_mm: float    = self.TAG_Y_OFFSET_MM   # tag position in robot body frame y (mm, left)
+        self._gps_offset_x_mm:   float       = 0.0   # GPS frame → arena frame translation x
+        self._gps_offset_y_mm:   float       = 0.0   # GPS frame → arena frame translation y
+        self._tag_body_offset_x_mm:  float = self.TAG_X_OFFSET_MM     # tag position in robot body frame x (mm, forward)
+        self._tag_body_offset_y_mm:  float = self.TAG_Y_OFFSET_MM     # tag position in robot body frame y (mm, left)
+        self._lidar_mount_x_mm:      float = self.LIDAR_MOUNT_X_MM    # lidar mount x in robot body frame (mm, forward)
+        self._lidar_mount_y_mm:      float = self.LIDAR_MOUNT_Y_MM    # lidar mount y in robot body frame (mm, left)
+        self._lidar_mount_theta_rad: float = math.radians(self.LIDAR_MOUNT_THETA_DEG)
         self._fused_x_mm:        float       = 0.0   # complementary-filter x output (mm)
         self._fused_y_mm:        float       = 0.0   # complementary-filter y output (mm)
         self._pos_fusion:        PositionComplementaryFilter = PositionComplementaryFilter(alpha=self.POSITION_ALPHA)
@@ -509,28 +516,19 @@ class Robot:
         for det in msg.detections:
             if self._tracked_tag_id == -1 or det.tag_id == self._tracked_tag_id:
                 with self._lock:
-                    warn_offset = (
-                        self._gps_offset_x_mm == 0.0 and self._gps_offset_y_mm == 0.0
-                    )
-                    # Update GPS state unconditionally — the warning is advisory only
-                    # and must not gate the position update.
+                    # Convert metres → mm and apply optional fine-tune arena offset.
                     tag_x = float(det.x) * 1000.0 + self._gps_offset_x_mm
                     tag_y = float(det.y) * 1000.0 + self._gps_offset_y_mm
-                    # Correct for tag not being at the robot body origin.
-                    # Rotate the body-frame tag offset into arena frame and subtract
-                    # so _gps_x/y_mm reflect the robot centre, not the tag centre.
-                    self._gps_x_mm      = tag_x - self._tag_body_offset_x_mm 
-                    self._gps_y_mm      = tag_y - self._tag_body_offset_y_mm
+                    # Correct for the tag not being at the robot body origin.
+                    # Rotate the body-frame mounting offset by the current heading
+                    # before subtracting so the correction is frame-independent.
+                    theta = self._fused_theta  # radians, current heading
+                    cos_t, sin_t = math.cos(theta), math.sin(theta)
+                    ox = self._tag_body_offset_x_mm
+                    oy = self._tag_body_offset_y_mm
+                    self._gps_x_mm      = tag_x - (ox * cos_t - oy * sin_t)
+                    self._gps_y_mm      = tag_y - (ox * sin_t + oy * cos_t)
                     self._gps_last_time = _time.monotonic()
-                # Log outside the lock so a slow or failing logger call cannot
-                # block kinematics callbacks that also acquire the lock.
-                if warn_offset:
-                    self._node.get_logger().warn(
-                        'GPS offset is (0, 0) — arena-frame correction has not been '
-                        'configured. Call set_gps_offset() with the measured offset '
-                        'between the GPS frame and the arena corner origin.',
-                        throttle_duration_sec=10.0,
-                    )
                 break
 
     def _on_io_input(self, msg: IOInputState) -> None:
@@ -639,13 +637,25 @@ class Robot:
         angles = angles[valid]
         ranges = ranges[valid]
 
-        # Convert polar to Cartesian (robot frame, metres -> mm)
-        x = ranges * np.cos(angles)
-        y = ranges * np.sin(angles)
+        # Convert polar → Cartesian in lidar frame (metres → mm)
+        lx = (ranges * np.cos(angles)) * 1000.0
+        ly = (ranges * np.sin(angles)) * 1000.0
+
+        # Apply lidar mounting transform: rotate by mount heading then translate
+        # to robot body origin so all downstream code works in robot frame.
+        with self._lock:
+            ct = math.cos(self._lidar_mount_theta_rad)
+            st = math.sin(self._lidar_mount_theta_rad)
+            mx = self._lidar_mount_x_mm
+            my = self._lidar_mount_y_mm
+
+        rx = ct * lx - st * ly + mx
+        ry = st * lx + ct * ly + my
+
         with self._lock:
             self._obstacles_mm = np.float64(
-                np.concatenate([x[:, np.newaxis], y[:, np.newaxis]], axis=1)
-            ) * 1000.0
+                np.concatenate([rx[:, np.newaxis], ry[:, np.newaxis]], axis=1)
+            )
 
     # =========================================================================
     # System
@@ -1894,6 +1904,24 @@ class Robot:
         with self._lock:
             self._tag_body_offset_x_mm = float(forward_mm)
             self._tag_body_offset_y_mm = float(left_mm)
+
+    def set_lidar_mount(self, forward_mm: float, left_mm: float, theta_deg: float = 0.0) -> None:
+        """
+        Set the lidar mounting position and heading relative to the robot body origin.
+
+        - ``forward_mm`` — positive = lidar is ahead of body centre.
+        - ``left_mm``    — positive = lidar is to the left of body centre.
+        - ``theta_deg``  — heading offset of the lidar relative to robot forward (CCW positive).
+                           Use 180.0 if the lidar is mounted facing backward.
+
+        Applied on every scan so scan points are expressed in the robot body frame
+        before being used by the planner or published as world-frame points.
+        Default is (0, 0, 0) — lidar assumed to be at the body origin, facing forward.
+        """
+        with self._lock:
+            self._lidar_mount_x_mm      = float(forward_mm)
+            self._lidar_mount_y_mm      = float(left_mm)
+            self._lidar_mount_theta_rad = math.radians(float(theta_deg))
 
     def set_position_fusion_strategy(self, strategy: SensorFusion) -> None:
         """
