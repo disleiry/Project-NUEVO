@@ -209,9 +209,15 @@ class Robot:
     TAG_X_OFFSET_MM = 0.0   # ArUco tag position in robot body frame x (mm, forward)
     TAG_Y_OFFSET_MM = 0.0   # ArUco tag position in robot body frame y (mm, left)
 
-    LIDAR_MOUNT_X_MM:    float = 0.0    # lidar position in robot body frame x (mm, forward)
-    LIDAR_MOUNT_Y_MM:    float = 0.0    # lidar position in robot body frame y (mm, left)
-    LIDAR_MOUNT_THETA_DEG: float = 0.0  # lidar heading offset relative to robot forward (deg, CCW+)
+    LIDAR_MOUNT_X_MM:      float = 0.0    # lidar position in robot body frame x (mm, forward)
+    LIDAR_MOUNT_Y_MM:      float = 0.0    # lidar position in robot body frame y (mm, left)
+    LIDAR_MOUNT_THETA_DEG: float = 0.0   # lidar heading offset relative to robot forward (deg, CCW+)
+
+    LIDAR_RANGE_MIN_MM:  float = 150.0   # discard returns closer than this (mm)
+    LIDAR_RANGE_MAX_MM:  float = 6000.0  # discard returns farther than this (mm)
+    # FOV is symmetric around the lidar's forward axis (after mount rotation).
+    # 360.0 = full scan; 180.0 = front hemisphere only.
+    LIDAR_FOV_DEG:       float = 360.0
 
     # Servo pulse range (standard hobby servo)
     _SERVO_MIN_US: int = 1000
@@ -274,6 +280,9 @@ class Robot:
         self._lidar_mount_x_mm:      float = self.LIDAR_MOUNT_X_MM    # lidar mount x in robot body frame (mm, forward)
         self._lidar_mount_y_mm:      float = self.LIDAR_MOUNT_Y_MM    # lidar mount y in robot body frame (mm, left)
         self._lidar_mount_theta_rad: float = math.radians(self.LIDAR_MOUNT_THETA_DEG)
+        self._lidar_range_min_mm:    float = self.LIDAR_RANGE_MIN_MM
+        self._lidar_range_max_mm:    float = self.LIDAR_RANGE_MAX_MM
+        self._lidar_fov_half_rad:    float = math.radians(self.LIDAR_FOV_DEG / 2.0)
         self._fused_x_mm:        float       = 0.0   # complementary-filter x output (mm)
         self._fused_y_mm:        float       = 0.0   # complementary-filter y output (mm)
         self._pos_fusion:        PositionComplementaryFilter = PositionComplementaryFilter(alpha=self.POSITION_ALPHA)
@@ -648,9 +657,25 @@ class Robot:
             st = math.sin(self._lidar_mount_theta_rad)
             mx = self._lidar_mount_x_mm
             my = self._lidar_mount_y_mm
+            r_min = self._lidar_range_min_mm
+            r_max = self._lidar_range_max_mm
+            fov_half = self._lidar_fov_half_rad
 
         rx = ct * lx - st * ly + mx
         ry = st * lx + ct * ly + my
+
+        # Range filter (distance from body origin, not from lidar mount)
+        dist2 = rx * rx + ry * ry
+        keep = (dist2 >= r_min * r_min) & (dist2 <= r_max * r_max)
+
+        # FOV filter — angles relative to robot forward (+x axis), symmetric
+        if fov_half < math.pi:
+            angle_body = np.arctan2(ry, rx)
+            # wrap to [-pi, pi] already done by arctan2
+            keep &= np.abs(angle_body) <= fov_half
+
+        rx = rx[keep]
+        ry = ry[keep]
 
         with self._lock:
             self._obstacles_mm = np.float64(
@@ -1922,6 +1947,29 @@ class Robot:
             self._lidar_mount_x_mm      = float(forward_mm)
             self._lidar_mount_y_mm      = float(left_mm)
             self._lidar_mount_theta_rad = math.radians(float(theta_deg))
+
+    def set_lidar_filter(
+        self,
+        range_min_mm: float | None = None,
+        range_max_mm: float | None = None,
+        fov_deg: float | None = None,
+    ) -> None:
+        """
+        Tune lidar point filtering applied after the mount transform.
+
+        - ``range_min_mm`` — discard points closer than this to the robot body origin (default 150 mm).
+        - ``range_max_mm`` — discard points farther than this (default 6000 mm).
+        - ``fov_deg``      — keep only points within ±fov_deg/2 of robot forward (+x). 360 = full scan.
+
+        Pass only the parameters you want to change; omit the rest to keep current values.
+        """
+        with self._lock:
+            if range_min_mm is not None:
+                self._lidar_range_min_mm = float(range_min_mm)
+            if range_max_mm is not None:
+                self._lidar_range_max_mm = float(range_max_mm)
+            if fov_deg is not None:
+                self._lidar_fov_half_rad = math.radians(float(fov_deg) / 2.0)
 
     def set_position_fusion_strategy(self, strategy: SensorFusion) -> None:
         """

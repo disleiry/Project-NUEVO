@@ -53,6 +53,16 @@ LEFT_WHEEL_DIR_INVERTED  = False
 RIGHT_WHEEL_MOTOR        = Motor.DC_M2
 RIGHT_WHEEL_DIR_INVERTED = True
 
+# ── Lidar mount & filter ───────────────────────────────────────────────────────
+LIDAR_MOUNT_FORWARD_MM = 0.0    # lidar position in robot body frame (mm, forward)
+LIDAR_MOUNT_LEFT_MM    = 0.0    # lidar position in robot body frame (mm, left)
+LIDAR_MOUNT_THETA_DEG  = 0.0    # lidar heading offset relative to robot forward (deg, CCW+)
+                                 # use 180.0 if lidar is mounted facing backward
+
+LIDAR_RANGE_MIN_MM     = 150.0  # discard returns closer than this (mm)
+LIDAR_RANGE_MAX_MM     = 6000.0 # discard returns farther than this (mm)
+LIDAR_FOV_DEG          = 360.0  # keep only ±FOV/2 around robot forward; 360 = full scan
+
 # ── GPS / ArUco tag ────────────────────────────────────────────────────────────
 GPS_TAG_ID = -1   # -1 = accept any tag; set to your actual tag ID
 
@@ -90,6 +100,16 @@ def configure_robot(robot: Robot) -> None:
         left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
         right_motor_id=RIGHT_WHEEL_MOTOR,
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
+    )
+    robot.set_lidar_mount(
+        forward_mm=LIDAR_MOUNT_FORWARD_MM,
+        left_mm=LIDAR_MOUNT_LEFT_MM,
+        theta_deg=LIDAR_MOUNT_THETA_DEG,
+    )
+    robot.set_lidar_filter(
+        range_min_mm=LIDAR_RANGE_MIN_MM,
+        range_max_mm=LIDAR_RANGE_MAX_MM,
+        fov_deg=LIDAR_FOV_DEG,
     )
     robot.set_tracked_tag_id(GPS_TAG_ID)
 
