@@ -1,70 +1,62 @@
 """
-motion_basics.py — drive, turn, read pose, navigate to a point
-==============================================================
-This example introduces all the foundational motion APIs in one mission.
-Read it top to bottom — the states follow the natural robot startup order.
+motion_basics.py — basic motion commands
+=========================================
+Demonstrates the fundamental Robot API calls for wheel-based driving,
+servo control, and direct DC motor commands.
 
-HOW TO RUN
-----------
-Copy this file over main.py, then restart the robot node:
-
+HOW TO RUN:
     cp examples/motion_basics.py main.py
     ros2 run robot robot
 
-WHAT THE ROBOT DOES
--------------------
-Press BTN_1 to start. The robot:
+WHAT THE ROBOT DOES:
+    1. Turns left 90°
+    2. Turns right 90° (back to original heading)
+    3. Moves forward 500 mm
+    4. Moves backward 500 mm (back to start)
+    5. Sweeps servo channel 1 between 0° and 90°
+    6. Runs motor 3 at 200 mm/s for 1 second (if your robot has a third motor)
+    7. Stops cleanly
 
-  1. Moves forward 400 mm
-  2. Turns left (CCW) 90°
-  3. Prints the current odometry pose to the console
-  4. Navigates back to the origin (0, 0)
-
-When done, press BTN_1 again to repeat. BTN_2 cancels at any time.
-
-WHAT THIS TEACHES
------------------
-1. configure_robot()      — set unit, wheel geometry, motor mapping
-2. reset_odometry()       — zero the pose before the mission starts
-3. move_forward()         — blocking motion (waits for completion)
-4. turn_by()              — relative heading change, also blocking
-5. get_pose()             — read current (x, y, theta_deg) from odometry
-6. move_to()              — non-blocking with MotionHandle
-7. handle.is_finished()   — poll completion from the FSM loop
-8. handle.cancel()        — stop a running motion
+WHAT THIS TEACHES:
+    1. High-level differential-drive commands (move_forward, turn_by)
+    2. Servo enable and angle control
+    3. Direct DC motor velocity for non-drive motors
+    4. Odometry parameter configuration
 """
 
 from __future__ import annotations
+
 import time
 
-from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
+from robot.hardware_map import DEFAULT_FSM_HZ, LED, Motor
 from robot.robot import FirmwareState, Robot, Unit
 
 
 # ---------------------------------------------------------------------------
-# Robot hardware configuration — edit these to match your robot
+# Configuration — edit these to match your robot
 # ---------------------------------------------------------------------------
 
 POSITION_UNIT    = Unit.MM
 WHEEL_DIAMETER   = 74.0   # mm
 WHEEL_BASE       = 333.0  # mm
-INITIAL_THETA    = 90.0   # degrees — heading at odometry reset
+INITIAL_THETA_DEG = 90.0  # degrees; 90 = pointing in the +Y direction
 
 LEFT_WHEEL_MOTOR          = Motor.DC_M1
 LEFT_WHEEL_DIR_INVERTED   = False
 RIGHT_WHEEL_MOTOR         = Motor.DC_M2
 RIGHT_WHEEL_DIR_INVERTED  = True
 
+# Motion parameters
+FORWARD_DISTANCE_MM = 500.0   # how far to move forward/backward
+DRIVE_VELOCITY_MM_S = 200.0   # linear drive speed
+DRIVE_TOLERANCE_MM  =  20.0   # position goal tolerance
 
-# ---------------------------------------------------------------------------
-# Mission parameters
-# ---------------------------------------------------------------------------
+# Servo parameters (channel 1–16)
+SERVO_CHANNEL = 1
 
-FORWARD_DISTANCE  = 400.0  # mm
-TURN_DEGREES      = 90.0   # degrees CCW (positive = left turn)
-VELOCITY          = 100.0  # mm/s
-TOLERANCE         = 20.0   # mm — how close is "arrived"
-TOLERANCE_DEG     = 3.0    # degrees — turn completion threshold
+# Extra DC motor (set to None to skip this demo step)
+EXTRA_MOTOR_ID = Motor.DC_M3   # e.g. a gripper or conveyor motor
+EXTRA_MOTOR_VELOCITY_MM_S = 200.0  # mm/s
 
 
 # ---------------------------------------------------------------------------
@@ -72,12 +64,11 @@ TOLERANCE_DEG     = 3.0    # degrees — turn completion threshold
 # ---------------------------------------------------------------------------
 
 def configure_robot(robot: Robot) -> None:
-    """Apply unit and wheel geometry. Called once at startup."""
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(
         wheel_diameter=WHEEL_DIAMETER,
         wheel_base=WHEEL_BASE,
-        initial_theta_deg=INITIAL_THETA,
+        initial_theta_deg=INITIAL_THETA_DEG,
         left_motor_id=LEFT_WHEEL_MOTOR,
         left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
         right_motor_id=RIGHT_WHEEL_MOTOR,
@@ -86,24 +77,11 @@ def configure_robot(robot: Robot) -> None:
 
 
 def start_robot(robot: Robot) -> None:
-    """Put firmware in RUNNING and zero the odometry pose."""
-    current = robot.get_state()
-    if current in (FirmwareState.ESTOP, FirmwareState.ERROR):
+    if robot.get_state() in (FirmwareState.ESTOP, FirmwareState.ERROR):
         robot.reset_estop()
     robot.set_state(FirmwareState.RUNNING)
     robot.reset_odometry()
-    # Wait for the first kinematics message so get_pose() is valid.
     robot.wait_for_pose_update(timeout=0.5)
-
-
-def show_idle_leds(robot: Robot) -> None:
-    robot.set_led(LED.ORANGE, 200)
-    robot.set_led(LED.GREEN, 0)
-
-
-def show_moving_leds(robot: Robot) -> None:
-    robot.set_led(LED.ORANGE, 0)
-    robot.set_led(LED.GREEN, 200)
 
 
 # ---------------------------------------------------------------------------
@@ -112,116 +90,46 @@ def show_moving_leds(robot: Robot) -> None:
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
+    start_robot(robot)
 
-    state = "INIT"
-    move_handle = None  # holds the MotionHandle for non-blocking calls
+    # ── 1. Turn left 90° (CCW) ───────────────────────────────────────────────
+    print("Turning left 90°...")
+    robot.turn_by(90.0)
+    time.sleep(0.5)
 
-    period = 1.0 / float(DEFAULT_FSM_HZ)
-    next_tick = time.monotonic()
+    # ── 2. Turn right 90° (CW) — back to original heading ───────────────────
+    print("Turning right 90°...")
+    robot.turn_by(-90.0)
+    time.sleep(0.5)
 
-    while True:
+    # ── 3. Move forward ──────────────────────────────────────────────────────
+    print(f"Moving forward {FORWARD_DISTANCE_MM:.0f} mm...")
+    robot.move_forward(FORWARD_DISTANCE_MM, DRIVE_VELOCITY_MM_S, DRIVE_TOLERANCE_MM)
+    time.sleep(0.5)
 
-        # ── INIT ──────────────────────────────────────────────────────────
-        if state == "INIT":
-            start_robot(robot)
-            show_idle_leds(robot)
-            print("[FSM] IDLE — press BTN_1 to start, BTN_2 to cancel")
-            state = "IDLE"
+    # ── 4. Move backward ─────────────────────────────────────────────────────
+    print(f"Moving backward {FORWARD_DISTANCE_MM:.0f} mm...")
+    robot.move_backward(FORWARD_DISTANCE_MM, DRIVE_VELOCITY_MM_S, DRIVE_TOLERANCE_MM)
+    time.sleep(0.5)
 
-        # ── IDLE ──────────────────────────────────────────────────────────
-        elif state == "IDLE":
-            if robot.was_button_pressed(Button.BTN_1):
-                show_moving_leds(robot)
-                print("[FSM] LEG_1 — moving forward")
+    # ── 5. Servo demo ─────────────────────────────────────────────────────────
+    print(f"Sweeping servo channel {SERVO_CHANNEL}...")
+    robot.enable_servo(SERVO_CHANNEL)
+    for angle_deg in [0.0, 45.0, 90.0, 45.0, 0.0]:
+        robot.set_servo(SERVO_CHANNEL, angle_deg)
+        print(f"  servo → {angle_deg:.0f}°")
+        time.sleep(0.6)
+    robot.disable_servo(SERVO_CHANNEL)
 
-                # blocking=True makes the call wait here until done.
-                # The FSM loop does NOT advance until the motion finishes.
-                # Simple and readable; use it when nothing else needs to
-                # happen while the robot moves.
-                robot.move_forward(
-                    distance=FORWARD_DISTANCE,
-                    velocity=VELOCITY,
-                    tolerance=TOLERANCE,
-                    blocking=True,
-                )
-                state = "TURNING"
+    # ── 6. Direct DC motor velocity ──────────────────────────────────────────
+    # set_motor_velocity sends a raw velocity command directly to one motor.
+    # Use this for non-drive motors (e.g. a conveyor or arm joint).
+    # For the drive wheels, prefer move_forward / turn_by / set_velocity instead.
+    if EXTRA_MOTOR_ID is not None:
+        print(f"Running motor {EXTRA_MOTOR_ID} at {EXTRA_MOTOR_VELOCITY_MM_S:.0f} mm/s for 1 s...")
+        robot.set_motor_velocity(int(EXTRA_MOTOR_ID), EXTRA_MOTOR_VELOCITY_MM_S)
+        time.sleep(1.0)
+        robot.set_motor_velocity(int(EXTRA_MOTOR_ID), 0.0)
 
-        # ── TURNING ───────────────────────────────────────────────────────
-        elif state == "TURNING":
-            print("[FSM] TURNING — 90° left")
-
-            # turn_by also runs blocking here. The robot turns, then the
-            # FSM advances to PRINT_POSE.
-            robot.turn_by(
-                delta_deg=TURN_DEGREES,
-                blocking=True,
-                tolerance_deg=TOLERANCE_DEG,
-            )
-            state = "PRINT_POSE"
-
-        # ── PRINT_POSE ────────────────────────────────────────────────────
-        elif state == "PRINT_POSE":
-            # get_pose() returns (x, y, theta_deg) in the current unit.
-            x, y, theta_deg = robot.get_pose()
-            print(f"[FSM] pose  x={x:.1f} mm  y={y:.1f} mm  θ={theta_deg:.1f}°")
-
-            print("[FSM] RETURNING — navigating to origin")
-
-            # blocking=False returns a MotionHandle immediately.
-            # The robot starts moving in a background thread.
-            # The FSM continues to the next loop iteration so it can
-            # check for cancellation while the robot is moving.
-            move_handle = robot.move_to(
-                x=0.0,
-                y=0.0,
-                velocity=VELOCITY,
-                tolerance=TOLERANCE,
-                blocking=False,
-            )
-            state = "RETURNING"
-
-        # ── RETURNING ─────────────────────────────────────────────────────
-        elif state == "RETURNING":
-            # BTN_2 cancels the active motion at any time.
-            if robot.get_button(Button.BTN_2):
-                if move_handle is not None:
-                    move_handle.cancel()
-                    move_handle.wait(timeout=1.0)
-                    move_handle = None
-                robot.stop()
-                show_idle_leds(robot)
-                print("[FSM] IDLE — cancelled")
-                state = "IDLE"
-
-            # is_finished() is a non-blocking poll — True once the background
-            # thread reaches the goal or times out.
-            elif move_handle is not None and move_handle.is_finished():
-                move_handle = None
-                robot.stop()
-                show_idle_leds(robot)
-                print("[FSM] DONE — press BTN_1 to run again")
-                state = "DONE"
-
-        # ── DONE ──────────────────────────────────────────────────────────
-        elif state == "DONE":
-            if robot.was_button_pressed(Button.BTN_1):
-                # Reset odometry so the next run starts from (0, 0) again.
-                robot.reset_odometry()
-                robot.wait_for_pose_update(timeout=0.5)
-                show_moving_leds(robot)
-                print("[FSM] LEG_1 — moving forward")
-                robot.move_forward(
-                    distance=FORWARD_DISTANCE,
-                    velocity=VELOCITY,
-                    tolerance=TOLERANCE,
-                    blocking=True,
-                )
-                state = "TURNING"
-
-        # ── Tick-rate control ─────────────────────────────────────────────
-        next_tick += period
-        sleep_s = next_tick - time.monotonic()
-        if sleep_s > 0.0:
-            time.sleep(sleep_s)
-        else:
-            next_tick = time.monotonic()
+    print("Done. Shutting down.")
+    robot.shutdown()

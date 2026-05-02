@@ -46,6 +46,8 @@ def configure_robot(robot: Robot) -> None:
         right_motor_id=RIGHT_WHEEL_MOTOR,
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
+    robot.enable_lidar()
+    robot.enable_gps()
     robot.set_tracked_tag_id(TAG_ID)
 
 

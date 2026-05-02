@@ -16,7 +16,7 @@ HOW TO USE
 1. Copy to main.py:
        cp examples/sensor_verification.py main.py
 
-2. Tune the constants below (robot hardware + GPS calibration).
+2. Tune the constants below (robot hardware + lidar installation).
 
 3. Restart the robot node:
        ros2 run robot robot
@@ -34,12 +34,10 @@ HOW TO USE
 """
 
 from __future__ import annotations
-import math
 import time
 
 from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
 from robot.robot import FirmwareState, Robot, Unit
-from bridge_interfaces.msg import LidarWorldPoints
 
 
 # ── Robot hardware ─────────────────────────────────────────────────────────────
@@ -60,11 +58,11 @@ LIDAR_MOUNT_Y_MM      = 0.0    # lidar y position in robot body frame (mm, +y = 
 LIDAR_MOUNT_THETA_DEG = 0.0    # lidar heading offset relative to robot forward (deg, CCW+)
                                 # use 180.0 if lidar is mounted facing backward
 
-LIDAR_RANGE_MIN_MM     = 150.0          # discard returns closer than this (mm)
-LIDAR_RANGE_MAX_MM     = 6000.0         # discard returns farther than this (mm)
-# FOV window in robot body frame (0° = robot +x forward, CCW positive).
+LIDAR_RANGE_MIN_MM    = 150.0          # discard returns closer than this from lidar origin (mm)
+LIDAR_RANGE_MAX_MM    = 6000.0         # discard returns farther than this from lidar origin (mm)
+# FOV window in robot-aligned frame centred on lidar origin (0° = robot +x forward, CCW positive).
 # (-180, 180) = full scan; (-90, 90) = front hemisphere only.
-LIDAR_FOV_DEG          = (-180.0, 180.0)
+LIDAR_FOV_DEG         = (-180.0, 180.0)
 
 # ── GPS / ArUco tag ────────────────────────────────────────────────────────────
 GPS_TAG_ID = -1   # -1 = accept any tag; set to your actual tag ID
@@ -72,6 +70,7 @@ GPS_TAG_ID = -1   # -1 = accept any tag; set to your actual tag ID
 # ── Pure-pursuit path ──────────────────────────────────────────────────────────
 # A 2-grid-cell square, centred on the odometry origin (wherever you place the robot).
 # The robot starts at (0, 0) after reset and returns there at the end.
+GRID_MM = 610
 _S = GRID_MM * 2   # 1220 mm side length
 PATH = [
     (0.0,  0.0),
@@ -104,6 +103,7 @@ def configure_robot(robot: Robot) -> None:
         right_motor_id=RIGHT_WHEEL_MOTOR,
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
+    robot.enable_lidar()
     robot.set_lidar_mount(
         x_mm=LIDAR_MOUNT_X_MM,
         y_mm=LIDAR_MOUNT_Y_MM,
@@ -112,35 +112,16 @@ def configure_robot(robot: Robot) -> None:
     robot.set_lidar_filter(
         range_min_mm=LIDAR_RANGE_MIN_MM,
         range_max_mm=LIDAR_RANGE_MAX_MM,
-        fov_deg=LIDAR_FOV_DEG,   # tuple (min_deg, max_deg) in robot body frame
+        fov_deg=LIDAR_FOV_DEG,
     )
+    robot.enable_gps()
     robot.set_tracked_tag_id(GPS_TAG_ID)
+    # Publish lidar world points continuously on the ROS spin thread — works
+    # even during blocking navigation calls.
+    robot.start_lidar_world_publisher(topic='/lidar_world_points', hz=10.0)
 
 
-def _publish_lidar_world(robot: Robot, pub) -> None:
-    """Transform robot-frame lidar obstacles to world frame and publish."""
-    obstacles = robot.get_obstacles()   # robot-frame mm (current unit = MM)
-    fx, fy, ftheta_deg = robot.get_fused_pose()
-    ftheta = math.radians(ftheta_deg)
-    cos_t, sin_t = math.cos(ftheta), math.sin(ftheta)
-
-    xs, ys = [], []
-    for ox, oy in obstacles:
-        xs.append(fx + ox * cos_t - oy * sin_t)
-        ys.append(fy + ox * sin_t + oy * cos_t)
-
-    msg = LidarWorldPoints()
-    msg.header.stamp = robot._node.get_clock().now().to_msg()
-    msg.xs         = xs
-    msg.ys         = ys
-    msg.robot_x    = float(fx)
-    msg.robot_y    = float(fy)
-    msg.robot_theta = float(ftheta)
-    pub.publish(msg)
-
-
-def _print_diagnostics(robot: Robot, label: str) -> None:
-    """Print a one-line sensor status for GPS, lidar, and fused pose."""
+def print_diagnostics(robot: Robot, label: str) -> None:
     fx, fy, ftheta = robot.get_fused_pose()
     rx, ry, rtheta = robot.get_pose()
     gps_ok  = robot.is_gps_active()
@@ -157,13 +138,6 @@ def _print_diagnostics(robot: Robot, label: str) -> None:
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
-
-    from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
-    _lidar_pub = robot._node.create_publisher(
-        LidarWorldPoints, '/lidar_world_points',
-        QoSProfile(reliability=ReliabilityPolicy.BEST_EFFORT,
-                   history=HistoryPolicy.KEEP_LAST, depth=1),
-    )
 
     state        = "INIT"
     drive_handle = None
@@ -193,7 +167,7 @@ def run(robot: Robot) -> None:
         # ── IDLE ──────────────────────────────────────────────────────────────
         elif state == "IDLE":
             if now - last_diag_t >= DIAG_INTERVAL_S:
-                _print_diagnostics(robot, "IDLE")
+                print_diagnostics(robot, "IDLE")
                 last_diag_t = now
 
             if robot.was_button_pressed(Button.BTN_1):
@@ -214,7 +188,7 @@ def run(robot: Robot) -> None:
         # ── MOVING ────────────────────────────────────────────────────────────
         elif state == "MOVING":
             if now - last_diag_t >= DIAG_INTERVAL_S:
-                _print_diagnostics(robot, "MOVING")
+                print_diagnostics(robot, "MOVING")
                 last_diag_t = now
 
             if robot.get_button(Button.BTN_2):
@@ -232,12 +206,9 @@ def run(robot: Robot) -> None:
                 robot.stop()
                 robot.set_led(LED.ORANGE, 200)
                 robot.set_led(LED.GREEN, 0)
-                _print_diagnostics(robot, "DONE")
+                print_diagnostics(robot, "DONE")
                 print("[MOVING→IDLE] Path complete — press BTN_1 to run again")
                 state = "IDLE"
-
-        # ── Publish lidar world points every tick ─────────────────────────────
-        _publish_lidar_world(robot, _lidar_pub)
 
         # ── Tick-rate control (do not modify) ─────────────────────────────────
         next_tick += period
