@@ -174,9 +174,9 @@ class APFPlanner:
         self._force_alpha = float(force_ema_alpha)
         self._stop_dist   = float(stop_dist)
 
-        # EMA state for force vector — persists across ticks to suppress oscillation
-        self._smooth_fx: float = 0.0
-        self._smooth_fy: float = 0.0
+        # EMA state for desired heading — None until first call so initial
+        # heading is set directly rather than blended from 0.0.
+        self._desired_heading: float | None = None
 
     def navigate_to_goal(
         self,
@@ -260,14 +260,18 @@ class APFPlanner:
         force_x = attr_x + rep_x + tan_x
         force_y = attr_y + rep_y + tan_y
 
-        # EMA on raw force vector to suppress tick-to-tick direction oscillation
-        self._smooth_fx = self._force_alpha * force_x + (1.0 - self._force_alpha) * self._smooth_fx
-        self._smooth_fy = self._force_alpha * force_y + (1.0 - self._force_alpha) * self._smooth_fy
-
-        if math.hypot(self._smooth_fx, self._smooth_fy) < 1e-6:
+        if math.hypot(force_x, force_y) < 1e-6:
             return 0.0, 0.0
 
-        desired  = math.atan2(self._smooth_fy, self._smooth_fx)
+        # EMA on the desired heading angle (not force components) so opposite
+        # avoidance and attractive vectors can't cancel inside the filter.
+        desired_raw = math.atan2(force_y, force_x)
+        if self._desired_heading is None:
+            self._desired_heading = desired_raw
+        else:
+            delta = (desired_raw - self._desired_heading + math.pi) % (2.0 * math.pi) - math.pi
+            self._desired_heading = (self._desired_heading + self._force_alpha * delta + math.pi) % (2.0 * math.pi) - math.pi
+        desired = self._desired_heading
         ang_err  = (desired - theta + math.pi) % (2.0 * math.pi) - math.pi
 
         forward_scale = max(0.0, math.cos(ang_err))
