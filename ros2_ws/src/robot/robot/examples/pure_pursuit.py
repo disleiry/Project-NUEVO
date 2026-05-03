@@ -1,78 +1,84 @@
 """
-pure_pursuit.py — pure-pursuit path following with optional lidar + GPS
-========================================================================
-Drives the robot along a rectangular waypoint path using the pure-pursuit
-steering law.  Lidar and GPS sensor fusion are off by default; flip the
-two flags below to enable them.
+pure_pursuit.py — FSM-based pure-pursuit path following
+=======================================================
+Waypoint path following with the same `main.py`-style state loop used by the
+older reference example, but updated for the current Robot API.
 
-HOW TO RUN:
+HOW TO RUN
+----------
+Copy this file over main.py, then restart the robot node:
+
     cp examples/pure_pursuit.py main.py
     ros2 run robot robot
 
-SENSOR TOGGLES — change these before running:
-    ENABLE_LIDAR = False  →  True   requires the lidar node to be running
-    ENABLE_GPS   = False  →  True   requires the camera node + ArUco tag TAG_ID
-                                    in view before the robot starts moving
+BTN_1 starts the path. BTN_2 cancels the active run and returns to IDLE.
 
-WHAT THIS TEACHES:
-    1. Pure-pursuit path following with purepursuit_follow_path()
-    2. How to turn on lidar and GPS sensor fusion with a single flag
-    3. How to read odometry pose vs fused pose (when GPS is active)
-    4. Non-blocking motion handles for printing status while moving
+SENSOR TOGGLES
+--------------
+Set these before running if the corresponding nodes are available:
+
+    ENABLE_LIDAR = False  →  True   requires `/scan`
+    ENABLE_GPS   = False  →  True   requires `/tag_detections`
+
+WHAT THIS TEACHES
+-----------------
+1. Pure-pursuit path following inside an FSM loop
+2. Optional lidar and GPS enable flow
+3. Non-blocking `MotionHandle` polling during motion
+4. Periodic status printing while the robot stays responsive to buttons
 """
 
 from __future__ import annotations
 
 import time
 
-from robot.hardware_map import DEFAULT_FSM_HZ, LED, Motor
+from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
 from robot.robot import FirmwareState, Robot, Unit
+from robot.util import densify_polyline  # noqa: F401 - optional helper for students
 
 
 # ---------------------------------------------------------------------------
-# Sensor toggles — flip to True to activate the corresponding sensor
+# Sensor toggles
 # ---------------------------------------------------------------------------
 
-ENABLE_LIDAR = False   # set True if the lidar node is running
-ENABLE_GPS   = False   # set True if the camera node + ArUco tag TAG_ID is visible
-
-TAG_ID = 11            # ArUco tag ID tracked for GPS position fusion
+ENABLE_LIDAR = False
+ENABLE_GPS = False
+TAG_ID = 11
 
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-POSITION_UNIT    = Unit.MM
-WHEEL_DIAMETER   = 74.0   # mm
-WHEEL_BASE       = 333.0  # mm
+POSITION_UNIT = Unit.MM
+WHEEL_DIAMETER = 74.0
+WHEEL_BASE = 333.0
 INITIAL_THETA_DEG = 90.0
 
-LEFT_WHEEL_MOTOR          = Motor.DC_M1
-LEFT_WHEEL_DIR_INVERTED   = False
-RIGHT_WHEEL_MOTOR         = Motor.DC_M2
-RIGHT_WHEEL_DIR_INVERTED  = True
+LEFT_WHEEL_MOTOR = Motor.DC_M1
+LEFT_WHEEL_DIR_INVERTED = False
+RIGHT_WHEEL_MOTOR = Motor.DC_M2
+RIGHT_WHEEL_DIR_INVERTED = True
 
-# Path — list of (x_mm, y_mm) waypoints in the odometry frame.
-# The robot starts at (0, 0) after reset_odometry(), facing INITIAL_THETA_DEG.
-WAYPOINTS_MM = [
-    (   0.0,  500.0),   # straight ahead 500 mm
-    ( 500.0,  500.0),   # right 500 mm
-    ( 500.0,    0.0),   # back to start row
-    (   0.0,    0.0),   # back to start
+PATH_CONTROL_POINTS = [
+    (0.0, 0.0),
+    (0.0, 610.0),
+    (610.0, 610.0),
+    (610.0, 0.0),
+    (0.0, 0.0),
 ]
 
-VELOCITY_MM_S       = 200.0   # maximum forward speed
-LOOKAHEAD_MM        = 200.0   # pure-pursuit lookahead distance
-TOLERANCE_MM        =  30.0   # waypoint goal tolerance (final goal)
-MAX_ANGULAR_RAD_S   =   1.0   # angular-rate clamp (rad/s)
+# Optional: densify long segments for smoother tracking.
+# PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=50.0)
 
-STATUS_PRINT_INTERVAL_S = 0.5  # how often to print pose during motion
+VELOCITY_MM_S = 150.0
+LOOKAHEAD_MM = 120.0
+TOLERANCE_MM = 25.0
+ADVANCE_RADIUS_MM = 80.0
+MAX_ANGULAR_RAD_S = 1.5
 
+STATUS_PRINT_INTERVAL_S = 0.5
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
@@ -86,8 +92,6 @@ def configure_robot(robot: Robot) -> None:
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
 
-    # Sensor subscriptions are opt-in.
-    # Call enable_lidar() / enable_gps() only when the corresponding nodes are running.
     if ENABLE_LIDAR:
         robot.enable_lidar()
         print("[sensor] lidar enabled — subscribing to /scan")
@@ -95,15 +99,29 @@ def configure_robot(robot: Robot) -> None:
     if ENABLE_GPS:
         robot.enable_gps()
         robot.set_tracked_tag_id(TAG_ID)
-        print(f"[sensor] GPS enabled — tracking ArUco tag {TAG_ID} on /tag_detections")
+        print(f"[sensor] GPS enabled — tracking ArUco tag {TAG_ID}")
 
 
 def start_robot(robot: Robot) -> None:
-    if robot.get_state() in (FirmwareState.ESTOP, FirmwareState.ERROR):
+    current = robot.get_state()
+    if current in (FirmwareState.ESTOP, FirmwareState.ERROR):
         robot.reset_estop()
     robot.set_state(FirmwareState.RUNNING)
+
+
+def reset_mission_pose(robot: Robot) -> None:
     robot.reset_odometry()
     robot.wait_for_pose_update(timeout=0.5)
+
+
+def show_idle_leds(robot: Robot) -> None:
+    robot.set_led(LED.ORANGE, 200)
+    robot.set_led(LED.GREEN, 0)
+
+
+def show_moving_leds(robot: Robot) -> None:
+    robot.set_led(LED.ORANGE, 0)
+    robot.set_led(LED.GREEN, 200)
 
 
 def print_status(robot: Robot) -> None:
@@ -118,37 +136,77 @@ def print_status(robot: Robot) -> None:
         print(f"  pose=({x:6.0f}, {y:6.0f}) mm  θ={theta:5.1f}°")
 
 
-# ---------------------------------------------------------------------------
-# run() — entry point called by the robot node
-# ---------------------------------------------------------------------------
-
-def run(robot: Robot) -> None:
-    configure_robot(robot)
-    start_robot(robot)
-
-    print("Starting pure-pursuit path...")
-    print(f"  waypoints : {WAYPOINTS_MM}")
-    print(f"  velocity  : {VELOCITY_MM_S} mm/s")
-    print(f"  lookahead : {LOOKAHEAD_MM} mm")
-
-    # Non-blocking so we can print pose while moving.
-    handle = robot.purepursuit_follow_path(
-        WAYPOINTS_MM,
+def start_path(robot: Robot):
+    return robot.purepursuit_follow_path(
+        waypoints=PATH_CONTROL_POINTS,
         velocity=VELOCITY_MM_S,
         lookahead=LOOKAHEAD_MM,
         tolerance=TOLERANCE_MM,
+        advance_radius=ADVANCE_RADIUS_MM,
         max_angular_rad_s=MAX_ANGULAR_RAD_S,
         blocking=False,
     )
 
-    last_print = time.monotonic()
-    while not handle.is_finished():
-        now = time.monotonic()
-        if now - last_print >= STATUS_PRINT_INTERVAL_S:
-            print_status(robot)
-            last_print = now
-        time.sleep(0.05)
 
-    print("Path complete.")
-    print_status(robot)
-    robot.shutdown()
+def run(robot: Robot) -> None:
+    configure_robot(robot)
+
+    state = "INIT"
+    drive_handle = None
+    last_status_print_at = 0.0
+
+    period = 1.0 / float(DEFAULT_FSM_HZ)
+    next_tick = time.monotonic()
+
+    while True:
+        now = time.monotonic()
+
+        if state == "INIT":
+            start_robot(robot)
+            reset_mission_pose(robot)
+            show_idle_leds(robot)
+            print("[FSM] IDLE — press BTN_1 to start path, BTN_2 to cancel")
+            print(
+                f"[CFG] velocity={VELOCITY_MM_S:.0f} mm/s lookahead={LOOKAHEAD_MM:.0f} mm "
+                f"tolerance={TOLERANCE_MM:.0f} mm advance_radius={ADVANCE_RADIUS_MM:.0f} mm"
+            )
+            state = "IDLE"
+
+        elif state == "IDLE":
+            if robot.was_button_pressed(Button.BTN_1):
+                reset_mission_pose(robot)
+                show_moving_leds(robot)
+                print(f"[FSM] MOVING — {len(PATH_CONTROL_POINTS)} waypoints")
+                drive_handle = start_path(robot)
+                last_status_print_at = now
+                state = "MOVING"
+
+        elif state == "MOVING":
+            if robot.was_button_pressed(Button.BTN_2):
+                if drive_handle is not None:
+                    drive_handle.cancel()
+                    drive_handle.wait(timeout=1.0)
+                    drive_handle = None
+                robot.stop()
+                show_idle_leds(robot)
+                print("[FSM] IDLE — path cancelled")
+                state = "IDLE"
+            else:
+                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                    print_status(robot)
+                    last_status_print_at = now
+                if drive_handle is not None and drive_handle.is_finished():
+                    print("[FSM] DONE — path complete")
+                    print_status(robot)
+                    drive_handle = None
+                    robot.stop()
+                    show_idle_leds(robot)
+                    print("[FSM] IDLE — press BTN_1 to run again")
+                    state = "IDLE"
+
+        next_tick += period
+        sleep_s = next_tick - time.monotonic()
+        if sleep_s > 0.0:
+            time.sleep(sleep_s)
+        else:
+            next_tick = time.monotonic()

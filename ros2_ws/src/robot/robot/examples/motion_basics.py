@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import time
 
-from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
+from robot.hardware_map import Button, DCMotorMode, DEFAULT_FSM_HZ, LED, Motor
 from robot.robot import FirmwareState, Robot, Unit
 
 
@@ -117,6 +117,12 @@ def stop_extra_motor(robot: Robot) -> None:
     robot.set_motor_velocity(int(EXTRA_MOTOR_ID), 0.0)
 
 
+def disable_extra_motor(robot: Robot) -> None:
+    if EXTRA_MOTOR_ID is None:
+        return
+    robot.disable_motor(int(EXTRA_MOTOR_ID))
+
+
 def run(robot: Robot) -> None:
     configure_robot(robot)
 
@@ -136,6 +142,7 @@ def run(robot: Robot) -> None:
             cancel_motion(motion_handle)
             motion_handle = None
             stop_extra_motor(robot)
+            disable_extra_motor(robot)
             robot.disable_servo(SERVO_CHANNEL)
             robot.stop()
             show_idle_leds(robot)
@@ -215,6 +222,7 @@ def run(robot: Robot) -> None:
                         state = "DONE"
                     else:
                         print(f"[FSM] EXTRA_MOTOR motor={int(EXTRA_MOTOR_ID)}")
+                        robot.enable_motor(int(EXTRA_MOTOR_ID), DCMotorMode.VELOCITY)
                         robot.set_motor_velocity(int(EXTRA_MOTOR_ID), EXTRA_MOTOR_VELOCITY_MM_S)
                         extra_motor_stop_at = now + EXTRA_MOTOR_RUN_SEC
                         state = "WAIT_EXTRA_MOTOR"
@@ -225,6 +233,7 @@ def run(robot: Robot) -> None:
         elif state == "WAIT_EXTRA_MOTOR":
             if now >= extra_motor_stop_at:
                 stop_extra_motor(robot)
+                disable_extra_motor(robot)
                 robot.stop()
                 show_idle_leds(robot)
                 print("[FSM] DONE — press BTN_1 to run again")
