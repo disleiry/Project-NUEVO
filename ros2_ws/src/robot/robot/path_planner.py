@@ -257,15 +257,19 @@ class APFPlanner:
                 choose_left = (left_tx * goal_ux + left_ty * goal_uy) >= (right_tx * goal_ux + right_ty * goal_uy)
                 tangent_x = np.where(choose_left, left_tx, right_tx)
                 tangent_y = np.where(choose_left, left_ty, right_ty)
-                tangent_mag = 0.50 * self._rep_gain * proximity * proximity
+                tangent_mag = 0.25 * self._rep_gain * proximity * proximity
                 tan_x = float(np.sum(tangent_mag * tangent_x))
                 tan_y = float(np.sum(tangent_mag * tangent_y))
 
                 nearest_boundary = float(np.min(boundary_dists[in_range]))
                 obstacle_scale = min(1.0, nearest_boundary / self._rep_range)
 
-        force_x = attr_x + rep_x + tan_x
-        force_y = attr_y + rep_y + tan_y
+        # Radial repulsion is intentionally excluded from the force direction.
+        # The robot is already slowed by obstacle_scale; adding a backward
+        # component to the heading target is what causes over-turning.
+        # The tangential component alone steers the robot around the obstacle.
+        force_x = attr_x + tan_x
+        force_y = attr_y + tan_y
 
         if math.hypot(force_x, force_y) < 1e-6:
             return 0.0, 0.0
