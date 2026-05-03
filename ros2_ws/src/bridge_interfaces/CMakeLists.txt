@@ -12,6 +12,8 @@ set(msg_files
   # Fused localisation and lidar output
   "msg/FusedPose.msg"
   "msg/LidarWorldPoints.msg"
+  "msg/TrackedObstacle.msg"
+  "msg/TrackedObstacleArray.msg"
   # Vision detections
   "msg/VisionDetection.msg"
   "msg/VisionDetectionArray.msg"

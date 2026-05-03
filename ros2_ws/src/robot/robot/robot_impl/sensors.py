@@ -17,6 +17,8 @@ from bridge_interfaces.msg import (
     LidarWorldPoints,
     SensorImu,
     TagDetectionArray,
+    TrackedObstacle,
+    TrackedObstacleArray,
 )
 try:
     from bridge_interfaces.msg import VisionDetectionArray
@@ -188,10 +190,13 @@ class SensorsMixin:
         rx = rx + mx
         ry = ry + my
 
+        robot_obstacles = np.float64(
+            np.concatenate([rx[:, np.newaxis], ry[:, np.newaxis]], axis=1)
+        )
         with self._lock:
-            self._obstacles_mm = np.float64(
-                np.concatenate([rx[:, np.newaxis], ry[:, np.newaxis]], axis=1)
-            )
+            self._obstacles_mm = robot_obstacles
+
+        self._update_obstacle_tracks(robot_obstacles)
 
     def _obstacles_robot_to_world_mm(
         self,
@@ -209,6 +214,40 @@ class SensorsMixin:
         wx = x_mm + obstacles[:, 0] * cos_t - obstacles[:, 1] * sin_t
         wy = y_mm + obstacles[:, 0] * sin_t + obstacles[:, 1] * cos_t
         return np.column_stack((wx, wy))
+
+    def _update_obstacle_tracks(self, robot_obstacles_mm: np.ndarray) -> None:
+        """Update tracked obstacle disks from the latest robot-frame lidar cloud."""
+        robot_points = np.asarray(robot_obstacles_mm, dtype=float)
+        if robot_points.ndim != 2 or robot_points.shape[0] == 0:
+            world_points = np.empty((0, 2), dtype=float)
+        else:
+            distances = np.linalg.norm(robot_points, axis=1)
+            in_range = distances <= float(self.OBSTACLE_TRACK_INPUT_RANGE_MM)
+            filtered = robot_points[in_range]
+
+            if filtered.shape[0] > int(self.OBSTACLE_TRACK_MAX_INPUT_POINTS):
+                nearest = np.argsort(np.linalg.norm(filtered, axis=1))[: int(self.OBSTACLE_TRACK_MAX_INPUT_POINTS)]
+                filtered = filtered[nearest]
+
+            world_points = self._obstacles_robot_to_world_mm(filtered, self._get_pose_mm())
+
+        tracks = self._obstacle_tracker.update(world_points, _time.monotonic())
+        with self._lock:
+            self._obstacle_tracks = list(tracks)
+        self._publish_obstacle_tracks()
+
+    def _publish_obstacle_tracks(self) -> None:
+        tracks = self.get_obstacle_tracks(include_unconfirmed=False)
+        msg = TrackedObstacleArray()
+        msg.header.stamp = self._node.get_clock().now().to_msg()
+        for track in tracks:
+            item = TrackedObstacle()
+            item.id = int(track["id"])
+            item.x = float(track["x"])
+            item.y = float(track["y"])
+            item.radius = float(track["radius"])
+            msg.obstacles.append(item)
+        self._pub_obstacle_tracks.publish(msg)
 
     def _on_vision_detections(self, msg: VisionDetectionArray) -> None:
         detections: list[dict[str, object]] = []
@@ -486,6 +525,23 @@ class SensorsMixin:
         msg.robot_y      = float(fy)
         msg.robot_theta  = float(ftheta)
         pub.publish(msg)
+
+    def get_obstacle_tracks(self, include_unconfirmed: bool = False) -> list[dict[str, float | int]]:
+        """Return tracked obstacle disks in world frame."""
+        tracks = self._obstacle_tracker.get_tracks(
+            _time.monotonic(),
+            include_unconfirmed=include_unconfirmed,
+        )
+        return [
+            {
+                "id": int(track.track_id),
+                "x": float(track.x_mm),
+                "y": float(track.y_mm),
+                "radius": float(track.radius_mm),
+                "hits": int(track.hit_count),
+            }
+            for track in tracks
+        ]
 
     # =========================================================================
     # Vision

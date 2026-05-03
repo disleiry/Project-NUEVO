@@ -106,6 +106,8 @@ def _install_fake_robot_dependencies() -> None:
         class _Message:
             def __init__(self) -> None:
                 self.header = types.SimpleNamespace(stamp=None)
+                if name == "TrackedObstacleArray":
+                    self.obstacles = []
 
         _Message.__name__ = name
         return _Message
@@ -129,6 +131,8 @@ def _install_fake_robot_dependencies() -> None:
         "SensorKinematics",
         "FusedPose",
         "LidarWorldPoints",
+        "TrackedObstacle",
+        "TrackedObstacleArray",
         "ServoEnable",
         "ServoSet",
         "ServoStateAll",
@@ -642,7 +646,9 @@ class RobotApiTests(unittest.TestCase):
         sent_commands: list[tuple[float, float]] = []
 
         self.robot._get_pose_mm = lambda: (10.0, 20.0, math.pi / 2.0)
-        self.robot._get_obstacles_mm = lambda: np.array([[100.0, 0.0]], dtype=float)
+        self.robot.get_obstacle_tracks = lambda include_unconfirmed=False: [
+            {"id": 7, "x": 10.0, "y": 120.0, "radius": 75.0, "hits": 3}
+        ]
         self.robot._send_body_velocity_mm = lambda linear, angular: sent_commands.append((linear, angular))
         self.robot._sleep_with_cancel = lambda _seconds: False
         self.robot.stop = lambda: None
@@ -671,7 +677,7 @@ class RobotApiTests(unittest.TestCase):
         args, _kwargs = planner_instance.navigate_to_goal.call_args
         self.assertEqual(args[0], (10.0, 20.0, math.pi / 2.0))
         self.assertEqual(args[1], (500.0, 0.0))
-        np.testing.assert_allclose(args[2], np.array([[10.0, 120.0]]))
+        np.testing.assert_allclose(args[2], np.array([[10.0, 120.0, 75.0]]))
         self.assertEqual(sent_commands, [(42.0, -0.5)])
 
     def test_publish_lidar_world_projects_robot_frame_obstacles(self) -> None:
@@ -691,6 +697,23 @@ class RobotApiTests(unittest.TestCase):
         self.assertEqual(msg.robot_x, 10.0)
         self.assertEqual(msg.robot_y, 20.0)
         self.assertEqual(msg.robot_theta, math.pi / 2.0)
+
+    def test_publish_obstacle_tracks_emits_confirmed_tracks_only(self) -> None:
+        publisher = FakePublisher("/obstacle_tracks")
+        self.robot._pub_obstacle_tracks = publisher
+        self.robot.get_obstacle_tracks = lambda include_unconfirmed=False: [
+            {"id": 2, "x": 300.0, "y": 50.0, "radius": 75.0, "hits": 2}
+        ]
+
+        self.robot._publish_obstacle_tracks()
+
+        self.assertEqual(len(publisher.published), 1)
+        msg = publisher.published[0]
+        self.assertEqual(len(msg.obstacles), 1)
+        self.assertEqual(msg.obstacles[0].id, 2)
+        self.assertEqual(msg.obstacles[0].x, 300.0)
+        self.assertEqual(msg.obstacles[0].y, 50.0)
+        self.assertEqual(msg.obstacles[0].radius, 75.0)
 
     def test_unit_dependent_navigation_parameters_must_be_explicit(self) -> None:
         with self.assertRaises(TypeError):

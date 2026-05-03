@@ -916,15 +916,16 @@ class NavigationMixin:
                 self.stop()
                 return
 
-            obstacles_world = self._obstacles_robot_to_world_mm(
-                self._get_obstacles_mm(),
+            obstacle_disks = self._get_nearest_tracked_obstacle_disks_world_mm(
                 (x_mm, y_mm, theta_rad),
+                repulsion_range_mm + float(self.APF_TRACK_INPUT_MARGIN_MM),
+                int(self.APF_MAX_PLANNER_TRACKS),
             )
 
             linear_mm, angular_rad_s = planner.navigate_to_goal(
                 (x_mm, y_mm, theta_rad),
                 (goal_x_mm, goal_y_mm),
-                obstacles_world,
+                obstacle_disks,
             )
             self._send_body_velocity_mm(linear_mm, angular_rad_s)
             if not self._sleep_with_cancel(dt):
@@ -1047,6 +1048,39 @@ class NavigationMixin:
                 self._node.get_logger().error(f"obstacle provider failed: {exc}")
 
         return cached + dynamic
+
+    def _get_nearest_tracked_obstacle_disks_world_mm(
+        self,
+        pose_mm: tuple[float, float, float],
+        max_distance_mm: float,
+        max_count: int,
+    ) -> np.ndarray:
+        x_mm, y_mm, _theta_rad = pose_mm
+        tracks = self.get_obstacle_tracks(include_unconfirmed=False)
+        if not tracks:
+            return np.empty((0, 3), dtype=float)
+
+        ranked: list[tuple[float, dict[str, float | int]]] = []
+        for track in tracks:
+            cx = float(track["x"])
+            cy = float(track["y"])
+            radius = float(track["radius"])
+            boundary_distance = max(0.0, math.hypot(cx - x_mm, cy - y_mm) - radius)
+            if boundary_distance <= max_distance_mm:
+                ranked.append((boundary_distance, track))
+
+        ranked.sort(key=lambda item: item[0])
+        selected = ranked[: max(0, int(max_count))]
+        if not selected:
+            return np.empty((0, 3), dtype=float)
+
+        return np.asarray(
+            [
+                [float(track["x"]), float(track["y"]), float(track["radius"])]
+                for _distance, track in selected
+            ],
+            dtype=float,
+        )
 
     def _apply_odom_param_snapshot(
         self,

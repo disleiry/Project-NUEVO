@@ -110,6 +110,22 @@ class APFPlannerTests(unittest.TestCase):
         self.assertLessEqual(linear, 1e-6)
         self.assertGreater(abs(angular), 0.0)
 
+    def test_disk_obstacle_ahead_blocks_forward_command(self) -> None:
+        planner = APFPlanner(
+            max_linear=200.0, max_angular=2.0,
+            attraction_gain=1.0, repulsion_gain=800.0,
+            repulsion_range=400.0, goal_tolerance=20.0, heading_gain=2.0,
+        )
+        obstacle_disks = np.array([
+            [220.0, 0.0, 75.0],
+            [220.0, 120.0, 75.0],
+        ])
+
+        linear, angular = planner.navigate_to_goal((0.0, 0.0, 0.0), (500.0, 0.0), obstacle_disks)
+
+        self.assertLessEqual(linear, 1e-6)
+        self.assertGreater(abs(angular), 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

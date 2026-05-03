@@ -66,6 +66,7 @@ from bridge_interfaces.msg import (
     LidarWorldPoints,
     SensorImu,
     TagDetectionArray,
+    TrackedObstacleArray,
 )
 try:
     from bridge_interfaces.msg import VisionDetectionArray
@@ -108,6 +109,7 @@ from robot.hardware_map import (
 )
 
 from robot.robot_impl.hardware import FirmwareState, HardwareMixin
+from robot.obstacle_tracking import ObstacleTracker
 from robot.robot_impl.sensors import SensorsMixin
 from robot.robot_impl.navigation import Unit, MotionHandle, NavigationMixin
 from robot.robot_impl.legacy import LegacyMixin
@@ -169,6 +171,19 @@ class Robot(HardwareMixin, SensorsMixin, NavigationMixin, LegacyMixin):
     LIDAR_RANGE_MAX_MM:  float = LIDAR_RANGE_MAX_MM  # discard lidar returns farther than this (mm)
     LIDAR_FOV_MIN_DEG:   float = LIDAR_FOV_DEG[0]    # FOV window min (deg, 0° = robot +x forward, CCW+)
     LIDAR_FOV_MAX_DEG:   float = LIDAR_FOV_DEG[1]    # FOV window max
+
+    OBSTACLE_TRACK_INPUT_RANGE_MM: float = 1200.0
+    OBSTACLE_TRACK_MAX_INPUT_POINTS: int = 250
+    OBSTACLE_TRACK_CLUSTER_NEIGHBOR_MM: float = 90.0
+    OBSTACLE_TRACK_CLUSTER_MIN_POINTS: int = 3
+    OBSTACLE_TRACK_MAX_DISK_RADIUS_MM: float = 75.0
+    OBSTACLE_TRACK_RADIUS_MARGIN_MM: float = 20.0
+    OBSTACLE_TRACK_ASSOCIATION_DIST_MM: float = 180.0
+    OBSTACLE_TRACK_TTL_S: float = 1.0
+    OBSTACLE_TRACK_MIN_HITS_TO_CONFIRM: int = 2
+    OBSTACLE_TRACK_MAX_TRACKS: int = 12
+    APF_MAX_PLANNER_TRACKS: int = 4
+    APF_TRACK_INPUT_MARGIN_MM: float = 150.0
 
     _SERVO_MIN_US: int = 1000
     _SERVO_MAX_US: int = 2000
@@ -239,6 +254,17 @@ class Robot(HardwareMixin, SensorsMixin, NavigationMixin, LegacyMixin):
         self._lidar_fov_max_rad:     float = math.radians(self.LIDAR_FOV_MAX_DEG)
         self._lidar_world_pub        = None   # set by start_lidar_world_publisher
         self._lidar_world_timer      = None   # ROS timer, fires on spin thread
+        self._obstacle_tracker = ObstacleTracker(
+            cluster_neighbor_mm=self.OBSTACLE_TRACK_CLUSTER_NEIGHBOR_MM,
+            cluster_min_points=self.OBSTACLE_TRACK_CLUSTER_MIN_POINTS,
+            max_disk_radius_mm=self.OBSTACLE_TRACK_MAX_DISK_RADIUS_MM,
+            disk_radius_margin_mm=self.OBSTACLE_TRACK_RADIUS_MARGIN_MM,
+            association_dist_mm=self.OBSTACLE_TRACK_ASSOCIATION_DIST_MM,
+            ttl_s=self.OBSTACLE_TRACK_TTL_S,
+            min_hits_to_confirm=self.OBSTACLE_TRACK_MIN_HITS_TO_CONFIRM,
+            max_tracks=self.OBSTACLE_TRACK_MAX_TRACKS,
+        )
+        self._obstacle_tracks = []
 
         # ── Fused position ────────────────────────────────────────────────────
         self._fused_x_mm:    float = 0.0
@@ -300,6 +326,7 @@ class Robot(HardwareMixin, SensorsMixin, NavigationMixin, LegacyMixin):
         self._odom_param_pub     = node.create_publisher(SysOdomParamSet, '/sys_odom_param_set', 10)
         self._odom_pub     = node.create_publisher(SysOdomReset,   '/sys_odom_reset',   10)
         self._pub_fused_pose = node.create_publisher(FusedPose,    '/fused_pose',       10)
+        self._pub_obstacle_tracks = node.create_publisher(TrackedObstacleArray, '/obstacle_tracks', 10)
 
         # ── Always-on subscriptions ───────────────────────────────────────────
         node.create_subscription(SystemState,      '/sys_state',          self._on_sys_state,      10)

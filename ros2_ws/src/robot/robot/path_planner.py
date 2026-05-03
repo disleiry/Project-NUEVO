@@ -183,8 +183,9 @@ class APFPlanner:
         ----------
         pose      : ``(x_mm, y_mm, theta_rad)`` in world frame
         goal      : ``(x_mm, y_mm)`` target position in world frame
-        obstacles : ``(N, 2)`` float array of world-frame obstacle positions in mm;
-                    pass ``LidarScan.to_world_frame()`` output directly
+        obstacles : ``(N, 2)`` point array or ``(N, 3)`` disk array
+                    in world-frame millimetres. For disks, columns are
+                    ``x_mm, y_mm, radius_mm``.
         """
         px, py, theta = pose
         gx, gy = goal
@@ -210,16 +211,19 @@ class APFPlanner:
         rep_y = 0.0
         obs = np.asarray(obstacles)
         if obs.ndim == 2 and obs.shape[0] > 0:
-            fx = px - obs[:, 0]
-            fy = py - obs[:, 1]
-            dists = np.sqrt(fx * fx + fy * fy)
-            in_range = (dists > 1e-6) & (dists < self._rep_range)
+            centers = obs[:, :2]
+            radii = obs[:, 2] if obs.shape[1] >= 3 else np.zeros(obs.shape[0], dtype=float)
+            fx = px - centers[:, 0]
+            fy = py - centers[:, 1]
+            center_dists = np.sqrt(fx * fx + fy * fy)
+            boundary_dists = np.maximum(center_dists - radii, 0.0)
+            in_range = (center_dists > 1e-6) & (boundary_dists < self._rep_range)
             if np.any(in_range):
-                d = dists[in_range]
+                d = np.maximum(boundary_dists[in_range], 1e-6)
                 proximity = 1.0 - (d / self._rep_range)
                 mag = self._rep_gain * proximity * proximity
-                rep_x = float(np.sum(mag * fx[in_range] / d))
-                rep_y = float(np.sum(mag * fy[in_range] / d))
+                rep_x = float(np.sum(mag * fx[in_range] / center_dists[in_range]))
+                rep_y = float(np.sum(mag * fy[in_range] / center_dists[in_range]))
 
         force_x = attr_x + rep_x
         force_y = attr_y + rep_y
