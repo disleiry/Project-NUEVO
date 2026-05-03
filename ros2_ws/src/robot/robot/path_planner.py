@@ -162,7 +162,9 @@ class APFPlanner:
         attraction_gain: float = 1.0,
         heading_gain: float = 2.0,
         force_ema_alpha: float = 0.35,
-        stop_dist: float = 80.0,
+        stop_dist: float = 50.0,
+        robot_nose_mm: float = 400.0,
+        robot_body_radius_mm: float = 200.0,
     ) -> None:
         self._max_linear  = max_linear
         self._max_angular = max_angular
@@ -173,6 +175,8 @@ class APFPlanner:
         self._heading_gain = heading_gain
         self._force_alpha = float(force_ema_alpha)
         self._stop_dist   = float(stop_dist)
+        self._nose_mm     = float(robot_nose_mm)
+        self._body_radius = float(robot_body_radius_mm)
 
         # EMA state for desired heading — None until first call so initial
         # heading is set directly rather than blended from 0.0.
@@ -212,9 +216,11 @@ class APFPlanner:
 
         # Repulsive force — vectorised over obstacle cloud.
         #
-        # The classical inverse-distance APF gradient becomes vanishingly small
-        # when applied directly in millimetres. Use a bounded proximity falloff
-        # instead so repulsion remains meaningful at robot-scale distances.
+        # Robot is modelled as a capsule: a line segment from the rear axle
+        # (odometry origin) to the nose point (robot_nose_mm forward along
+        # heading) with radius robot_body_radius_mm. Clearances are measured
+        # from the capsule surface to the obstacle surface, so rep_range and
+        # stop_dist are physical air gaps independent of robot geometry.
         rep_x = 0.0
         rep_y = 0.0
         tan_x = 0.0
@@ -224,26 +230,39 @@ class APFPlanner:
         if obs.ndim == 2 and obs.shape[0] > 0:
             centers = obs[:, :2]
             radii = obs[:, 2] if obs.shape[1] >= 3 else np.zeros(obs.shape[0], dtype=float)
-            fx = px - centers[:, 0]
-            fy = py - centers[:, 1]
-            center_dists = np.sqrt(fx * fx + fy * fy)
-            boundary_dists = np.maximum(center_dists - radii, 0.0)
-            in_range = (center_dists > 1e-6) & (boundary_dists < self._rep_range)
+
+            # Nearest point on axle→nose spine to each obstacle center
+            cos_th = math.cos(theta)
+            sin_th = math.sin(theta)
+            to_obs_x = centers[:, 0] - px
+            to_obs_y = centers[:, 1] - py
+            t_abs = np.clip(to_obs_x * cos_th + to_obs_y * sin_th, 0.0, self._nose_mm)
+            near_x = px + t_abs * cos_th
+            near_y = py + t_abs * sin_th
+
+            # Unit vector from each obstacle center toward nearest spine point
+            fx_raw = near_x - centers[:, 0]
+            fy_raw = near_y - centers[:, 1]
+            spine_dists = np.maximum(np.sqrt(fx_raw * fx_raw + fy_raw * fy_raw), 1e-6)
+
+            # Physical clearance between capsule surface and obstacle surface
+            boundary_dists = np.maximum(spine_dists - self._body_radius - radii, 0.0)
+            in_range = boundary_dists < self._rep_range
+
             if np.any(in_range):
                 d = np.maximum(boundary_dists[in_range], 1e-6)
                 proximity = 1.0 - (d / self._rep_range)
                 mag = self._rep_gain * proximity * proximity
-                rep_x = float(np.sum(mag * fx[in_range] / center_dists[in_range]))
-                rep_y = float(np.sum(mag * fy[in_range] / center_dists[in_range]))
 
-                # Add a tangential escape component around each obstacle.
-                # This breaks the head-on APF local minimum where a centered
-                # obstacle only produces a backward force and the robot stalls.
-                ux = fx[in_range] / center_dists[in_range]
-                uy = fy[in_range] / center_dists[in_range]
+                ux = fx_raw[in_range] / spine_dists[in_range]
+                uy = fy_raw[in_range] / spine_dists[in_range]
+                rep_x = float(np.sum(mag * ux))
+                rep_y = float(np.sum(mag * uy))
+
+                # Tangential escape: breaks head-on local minimum.
                 left_tx = -uy
-                left_ty = ux
-                right_tx = uy
+                left_ty =  ux
+                right_tx =  uy
                 right_ty = -ux
                 goal_ux = dx / dist_to_goal
                 goal_uy = dy / dist_to_goal

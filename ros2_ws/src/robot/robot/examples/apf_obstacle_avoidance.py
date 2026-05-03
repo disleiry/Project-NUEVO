@@ -76,8 +76,16 @@ VELOCITY_MM_S = 150.0
 _APF_API_LOOKAHEAD_MM = 50.0  # current APF wrapper still accepts this, but the planner does not use it
 TOLERANCE_MM = 50.0
 MAX_ANGULAR_RAD_S = 1.0
-REPULSION_RANGE_MM = 650.0
+# Clearance buffer (mm of air gap between robot surface and obstacle surface)
+# at which repulsion begins. With the capsule model this is a physical gap,
+# not an axle-to-obstacle-center distance.
+REPULSION_RANGE_MM = 300.0
 REPULSION_GAIN = 1200.0
+# Robot body geometry — must match the physical robot.
+# Nose: distance from rear axle (odometry origin) to front of robot body.
+# Body radius: half-width of the robot body cylinder.
+ROBOT_NOSE_MM = 400.0
+ROBOT_BODY_RADIUS_MM = 200.0
 
 STATUS_PRINT_INTERVAL_S = 0.5
 
@@ -183,6 +191,8 @@ def start_path(robot: Robot):
         repulsion_range=REPULSION_RANGE_MM,
         max_angular_rad_s=MAX_ANGULAR_RAD_S,
         repulsion_gain=REPULSION_GAIN,
+        robot_nose_mm=ROBOT_NOSE_MM,
+        robot_body_radius_mm=ROBOT_BODY_RADIUS_MM,
         blocking=False,
     )
 
@@ -210,6 +220,9 @@ def run(robot: Robot) -> None:
                 f"[CFG] velocity={VELOCITY_MM_S:.0f} mm/s tolerance={TOLERANCE_MM:.0f} mm "
                 f"repulsion_range={REPULSION_RANGE_MM:.0f} mm gain={REPULSION_GAIN:.0f} "
                 f"max_angular={MAX_ANGULAR_RAD_S:.1f} rad/s"
+            )
+            print(
+                f"[CFG] robot capsule: nose={ROBOT_NOSE_MM:.0f} mm body_radius={ROBOT_BODY_RADIUS_MM:.0f} mm"
             )
             if ENABLE_LIDAR:
                 print(

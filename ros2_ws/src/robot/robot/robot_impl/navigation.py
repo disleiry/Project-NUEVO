@@ -650,6 +650,8 @@ class NavigationMixin:
         max_angular_rad_s: float = 1.0,
         repulsion_gain: float = 500.0,
         timeout: float = None,
+        robot_nose_mm: float = 400.0,
+        robot_body_radius_mm: float = 200.0,
         *,
         advance_radius: float | None = None,
     ) -> MotionHandle:
@@ -657,6 +659,12 @@ class NavigationMixin:
         Follow an ordered waypoint path with artificial potential fields.
 
         Obstacles come from set_obstacles() and/or set_obstacle_provider().
+
+        repulsion_range is the physical air-gap clearance (mm) between the
+        robot capsule surface and the obstacle surface at which repulsion begins.
+        robot_nose_mm is the distance from the odometry origin (rear axle) to
+        the front of the robot body. robot_body_radius_mm is the half-width of
+        the robot body cylinder.
         """
         if not waypoints:
             raise ValueError("waypoints must not be empty")
@@ -672,11 +680,14 @@ class NavigationMixin:
         repulsion_range_mm = float(repulsion_range) * self._unit.value
         max_angular        = float(max_angular_rad_s)
         repulsion_gain     = float(repulsion_gain)
+        nose_mm            = float(robot_nose_mm)
+        body_radius_mm     = float(robot_body_radius_mm)
 
         def target():
             self._nav_follow_apf_path(
                 path_mm, vel_mm, lookahead_mm, advance_radius_mm, tolerance_mm,
                 repulsion_range_mm, max_angular, repulsion_gain,
+                nose_mm, body_radius_mm,
             )
 
         return self._start_nav(target, blocking, timeout)
@@ -885,6 +896,8 @@ class NavigationMixin:
         repulsion_range_mm: float,
         max_angular_rad_s: float,
         repulsion_gain: float,
+        nose_mm: float = 400.0,
+        body_radius_mm: float = 200.0,
         update_hz: float = float(DEFAULT_NAV_HZ),
     ) -> None:
         """Navigation thread body: APF path following via sequential single-goal APF.
@@ -901,9 +914,15 @@ class NavigationMixin:
             repulsion_gain=repulsion_gain,
             repulsion_range=repulsion_range_mm,
             goal_tolerance=tolerance_mm,
+            robot_nose_mm=nose_mm,
+            robot_body_radius_mm=body_radius_mm,
         )
         remaining_path = list(waypoints_mm)
         dt = 1.0 / update_hz
+
+        # Fetch obstacles within capsule reach: rep_range clearance off the
+        # nose tip is the farthest point that can be in range from the axle.
+        fetch_radius_mm = repulsion_range_mm + nose_mm + body_radius_mm + float(self.APF_TRACK_INPUT_MARGIN_MM)
 
         while not self._nav_cancel.is_set():
             x_mm, y_mm, theta_rad = self._get_pose_mm()
@@ -918,7 +937,7 @@ class NavigationMixin:
 
             obstacle_disks = self._get_nearest_tracked_obstacle_disks_world_mm(
                 (x_mm, y_mm, theta_rad),
-                repulsion_range_mm + float(self.APF_TRACK_INPUT_MARGIN_MM),
+                fetch_radius_mm,
                 int(self.APF_MAX_PLANNER_TRACKS),
             )
 
