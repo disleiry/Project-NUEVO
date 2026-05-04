@@ -77,13 +77,13 @@ def run(robot: Robot) -> None:
             # left lane
             path_control_points = [
                 (0.0,   0.0), # start
-                (0.0, 3050), # Waypoint 1
-                (610, 3050), # Waypoint 2
-                (610, 0.0)
+                (0.0, 3400), # Waypoint 1
+                (550, 3400), # Waypoint 2
+                (550, 0.0)
                 (0.0, 0.0), # Return to start
             ]
 
-            path = densify_polyline(path_control_points, spacing=400.0)
+            path = densify_polyline(path_control_points, spacing=100.0)
 
             robot._nav_follow_pp_path(
                 lookahead_distance=100.0,
