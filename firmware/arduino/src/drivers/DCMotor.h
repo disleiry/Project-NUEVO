@@ -213,6 +213,14 @@ public:
      */
     void setTargetVelocity(float velocity);
 
+    /**
+     * @brief Set the position-mode velocity clamp in ticks/second.
+     *
+     * This limits the output of the outer position loop before it is passed to
+     * the inner velocity loop.
+     */
+    void setPositionVelocityLimit(int32_t maxVelocityTicksPerSec);
+
     // ========================================================================
     // PID TUNING
     // ========================================================================
@@ -427,6 +435,7 @@ private:
 
     // Fast-loop cached state shared with TIMER1 ISR
     volatile int32_t targetVelocityQ16_;    // Velocity setpoint in Q16.16
+    volatile int32_t positionVelLimitQ16_;  // Position-loop velocity clamp in Q16.16
     volatile int32_t feedbackVelocityQ16_;  // Latest measured velocity in Q16.16
     volatile int32_t latchedPosition_;      // Encoder count captured in TIMER1 ISR
     volatile bool    positionLatched_;      // True once ISR has latched feedback at least once

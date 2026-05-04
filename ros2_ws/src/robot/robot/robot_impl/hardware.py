@@ -609,15 +609,26 @@ class HardwareMixin:
             time.sleep(0.02)
 
     def _wait_stepper_idle(self, stepper_id: int, timeout: float) -> bool:
-        """Wait until stepper motion_state == 0 (idle)."""
+        """
+        Wait for a stepper command to start, then return to idle.
+
+        This avoids the false-success case where the cached state is already
+        idle when the command is sent, but the first non-idle telemetry update
+        has not arrived yet.
+        """
         stepper_idx = stepper_id - 1
         deadline = time.monotonic() + timeout if timeout else None
+        saw_active = False
         time.sleep(0.1)
         while True:
             with self._lock:
                 step = self._step_state
-            if step is not None and step.steppers[stepper_idx].motion_state == int(StepperMotionState.IDLE):
-                return True
+            if step is not None:
+                motion_state = step.steppers[stepper_idx].motion_state
+                if motion_state != int(StepperMotionState.IDLE):
+                    saw_active = True
+                elif saw_active:
+                    return True
             if deadline and time.monotonic() > deadline:
                 return False
             time.sleep(0.02)

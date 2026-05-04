@@ -143,6 +143,7 @@ DCMotor::DCMotor()
     , maPerVolt_(1000.0f)
     , encoder_(nullptr)
     , targetVelocityQ16_(0)
+    , positionVelLimitQ16_(VEL_LIMIT_Q16)
     , feedbackVelocityQ16_(0)
     , latchedPosition_(0)
     , positionLatched_(false)
@@ -308,6 +309,15 @@ void DCMotor::setTargetVelocity(float velocity) {
     }
 }
 
+void DCMotor::setPositionVelocityLimit(int32_t maxVelocityTicksPerSec) {
+    if (maxVelocityTicksPerSec < 1) {
+        maxVelocityTicksPerSec = 1;
+    }
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        positionVelLimitQ16_ = floatToQ16((float)maxVelocityTicksPerSec);
+    }
+}
+
 void DCMotor::setPositionPID(float kp, float ki, float kd) {
     float dt = controlDtSeconds();
 
@@ -449,6 +459,7 @@ void DCMotor::service() {
     int16_t directPwm;
     int32_t targetPosition;
     int32_t targetVelocityQ16;
+    int32_t positionVelLimitQ16;
     int32_t feedbackVelocityQ16;
 
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -456,6 +467,7 @@ void DCMotor::service() {
         directPwm = directPwm_;
         targetPosition = targetPosition_;
         targetVelocityQ16 = targetVelocityQ16_;
+        positionVelLimitQ16 = positionVelLimitQ16_;
         feedbackVelocityQ16 = feedbackVelocityQ16_;
     }
 
@@ -500,7 +512,9 @@ void DCMotor::service() {
             int32_t posErrQ16 = (targetPosition - currentPosition) << 16;
             velocitySetpointQ16 = pidStepQ16(posIAccQ16_, posPrevErrQ16_,
                                              posKpQ16_, posKiDtQ16_, posKdDivDtQ16_,
-                                             posErrQ16, -VEL_LIMIT_Q16, VEL_LIMIT_Q16);
+                                             posErrQ16,
+                                             -positionVelLimitQ16,
+                                             positionVelLimitQ16);
         }
 
         int32_t velErrQ16 = velocitySetpointQ16 - feedbackVelocityQ16;

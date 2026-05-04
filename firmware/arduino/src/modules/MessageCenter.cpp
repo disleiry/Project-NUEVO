@@ -1318,6 +1318,7 @@ void MessageCenter::handleDCSetPosition(const PayloadDCSetPosition *payload)
     if (motor.getMode() != DC_MODE_POSITION)
         motor.enable(DC_MODE_POSITION);
 
+    motor.setPositionVelocityLimit(payload->maxVelTicks);
     motor.setTargetPosition(payload->targetTicks);
 }
 
