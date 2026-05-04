@@ -80,7 +80,7 @@ def run(robot: Robot) -> None:
                 (0.0, 3400), # Waypoint 1
                 (550, 3400), # Waypoint 2
                 (550, 0.0),
-                (0.0, 0.0), # Return to start
+                #(0.0, 0.0), # Return to start
             ]
 
             path = densify_polyline(path_control_points, spacing=100.0)
