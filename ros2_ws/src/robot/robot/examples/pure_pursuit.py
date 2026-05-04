@@ -79,10 +79,11 @@ RIGHT_WHEEL_DIR_INVERTED = True
 # ---------------------------------------------------------------------------
 
 PATH_CONTROL_POINTS = [
-    (0.0,   0.0),   # start (matches odometry origin after reset)
-    (0.0, 600.0),   # leg 1 — straight forward
-    (500.0, 300.0), # leg 2 — diagonal
-    (0.0,   0.0),   # leg 3 — back to origin
+     (0.0,   0.0), # start
+     (0.0, 3050), # Waypoint 1
+     (610, 3050), # Waypoint 2
+     (610, 0.0)
+     (0.0, 0.0), # Return to start
 ]
 
 # Optional: insert densely spaced intermediate points between control points.

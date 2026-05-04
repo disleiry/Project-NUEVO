@@ -1,127 +1,229 @@
+"""
+pure_pursuit.py — waypoint path following with pure pursuit
+============================================================
+This example uses purepursuit_follow_path() to drive a closed triangular
+path. It shows how to tune the key parameters and how to use a non-blocking
+MotionHandle to keep the FSM responsive during a long path.
+
+HOW TO RUN
+----------
+Copy this file over main.py, then restart the robot node:
+
+    cp examples/pure_pursuit.py main.py
+    ros2 run robot robot
+
+WHAT THE ROBOT DOES
+-------------------
+BTN_1 starts the path. The robot drives a triangle:
+
+    origin (0, 0)  →  (0, 600)  →  (500, 300)  →  back to (0, 0)
+
+BTN_2 cancels the path at any time and returns to IDLE.
+The green LED pulses while moving; the orange LED is on at rest.
+
+WHAT THIS TEACHES
+-----------------
+1. purepursuit_follow_path()  — multi-waypoint path with tunable parameters
+2. Key parameters explained    — velocity, lookahead, tolerance, advance_radius
+3. densify_polyline()          — optional: insert intermediate points for
+                                 smoother tracking on curves or long segments
+4. Non-blocking MotionHandle   — keep the FSM loop alive during a long path
+
+PARAMETER GUIDE
+---------------
+velocity        Forward speed in user units/s. Higher = faster but harder to
+                stay on path at turns.
+
+lookahead       The "carrot" distance ahead on the path that the robot steers
+                toward. Larger = smoother but cuts corners more. A good
+                starting value is 1–2× the robot width.
+
+tolerance       Arrival threshold for the FINAL waypoint in user units. The
+                robot stops when it gets this close to the last point.
+
+advance_radius  Radius in user units for dropping INTERMEDIATE waypoints.
+                When the robot gets within advance_radius of a waypoint, it
+                stops targeting that waypoint and moves to the next one.
+                Defaults to tolerance if not set. Increase it to prevent the
+                robot from decelerating toward every intermediate point.
+
+max_angular_rad_s  Angular rate clamp in rad/s. Lower = gentler turns but
+                   may cause the robot to cut corners on tight paths.
+"""
+
 from __future__ import annotations
 import time
 
-from robot.robot import FirmwareState, Robot, Unit
 from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
-from robot.util import densify_polyline
-from robot.path_planner import PurePursuitPlanner
-import math
-import numpy as np
+from robot.robot import FirmwareState, Robot, Unit
+from robot.util import densify_polyline  # noqa: F401 — used in the optional line below
 
 
 # ---------------------------------------------------------------------------
-# Robot build configuration
+# Robot hardware configuration — edit these to match your robot
 # ---------------------------------------------------------------------------
 
-TAG_ID = 11 # set aruco tag ID 11 
-POSITION_UNIT = Unit.MM
-WHEEL_DIAMETER = 74.0
-WHEEL_BASE = 333.0
-INITIAL_THETA_DEG = 90.0
+POSITION_UNIT   = Unit.MM
+WHEEL_DIAMETER  = 74.0   # mm
+WHEEL_BASE      = 333.0  # mm
+INITIAL_THETA   = 90.0   # degrees
 
-LEFT_WHEEL_MOTOR = Motor.DC_M1
-LEFT_WHEEL_DIR_INVERTED = False
-RIGHT_WHEEL_MOTOR = Motor.DC_M2
+LEFT_WHEEL_MOTOR         = Motor.DC_M1
+LEFT_WHEEL_DIR_INVERTED  = False
+RIGHT_WHEEL_MOTOR        = Motor.DC_M2
 RIGHT_WHEEL_DIR_INVERTED = True
 
+
+# ---------------------------------------------------------------------------
+# Path definition — (x, y) in mm, starting from the origin
+# ---------------------------------------------------------------------------
+
+PATH_CONTROL_POINTS = [
+     (0.0,   0.0),    # start
+     (0.0,   500.0),
+     (0.0,  1000.0),
+     (0.0,  1500.0),
+     (0.0,  2000.0),
+     (0.0,  2500.0),
+     (0.0,  3000.0),
+     (0.0,  3400.0),  # top left
+
+     (150.0, 3400.0),
+     (300.0, 3400.0),
+     (450.0, 3400.0),
+     (550.0, 3400.0), # top right
+
+     (550.0, 3000.0),
+     (550.0, 2500.0),
+     (550.0, 2000.0),
+     (550.0, 1500.0),
+     (550.0, 1000.0),
+     (550.0,  500.0),
+     (550.0,   0.0),  # bottom right
+
+     (500.0,   0.0),
+     (450.0,   0.0),
+     (300.0,   0.0),
+     (150.0,   0.0),
+     (0.0,     0.0),  # return to start
+]
+
+# Optional: insert densely spaced intermediate points between control points.
+# Useful when individual segments are long and the robot drifts off the line,
+# or when a curved segment needs finer tracking.
+# Uncomment the next line to enable:
+# PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=50.0)
+
+
+# ---------------------------------------------------------------------------
+# Motion parameters — tune these for your robot and floor surface
+# ---------------------------------------------------------------------------
+
+VELOCITY         = 150.0  # mm/s
+LOOKAHEAD        = 120.0  # mm  — steer toward a point this far ahead
+TOLERANCE        = 25.0   # mm  — stop threshold at the final waypoint
+ADVANCE_RADIUS   = 80.0   # mm  — drop intermediate waypoints at this radius
+MAX_ANGULAR_RAD_S = 1.5   # rad/s — angular rate clamp
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(
         wheel_diameter=WHEEL_DIAMETER,
         wheel_base=WHEEL_BASE,
-        initial_theta_deg=INITIAL_THETA_DEG,
+        initial_theta_deg=INITIAL_THETA,
         left_motor_id=LEFT_WHEEL_MOTOR,
         left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
         right_motor_id=RIGHT_WHEEL_MOTOR,
         right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
-    robot.set_tracked_tag_id(TAG_ID) # set aruco tag ID as the tracked tag for localization
+
+
+def start_robot(robot: Robot) -> None:
+    current = robot.get_state()
+    if current in (FirmwareState.ESTOP, FirmwareState.ERROR):
+        robot.reset_estop()
+    robot.set_state(FirmwareState.RUNNING)
+    robot.reset_odometry()
+    robot.wait_for_pose_update(timeout=0.5)
 
 
 def show_idle_leds(robot: Robot) -> None:
+    robot.set_led(LED.ORANGE, 200)
     robot.set_led(LED.GREEN, 0)
-    robot.set_led(LED.ORANGE, 255)
 
 
 def show_moving_leds(robot: Robot) -> None:
     robot.set_led(LED.ORANGE, 0)
-    robot.set_led(LED.GREEN, 255)
+    robot.set_led(LED.GREEN, 200)
 
 
-def start_robot(robot: Robot) -> None:
-    robot.set_state(FirmwareState.RUNNING)
-    robot.reset_odometry()
-    robot.wait_for_pose_update(timeout=0.2)
-
+# ---------------------------------------------------------------------------
+# run() — entry point called by the robot node
+# ---------------------------------------------------------------------------
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
 
     state = "INIT"
     drive_handle = None
+
     period = 1.0 / float(DEFAULT_FSM_HZ)
-    print(f"FSM period: {period:.3f} seconds")
     next_tick = time.monotonic()
 
     while True:
+
+        # ── INIT ──────────────────────────────────────────────────────────
         if state == "INIT":
             start_robot(robot)
-            print("[FSM] INIT (odometry reset)")
-            # center lane
-            # path_control_points = [
-            #     (0.0,   0.0),
-            #     (0.0, 2500.0),
-            #     (1000.0, 2500.0),
-            # ]
-            # left lane
-            path_control_points = [
-                (300.0,   0.0),
-                (300.0, 2500.0),
-                (1300.0, 2500.0),
-            ]
-
-            path = densify_polyline(path_control_points, spacing=400.0)
-
-            robot._nav_follow_pp_path(
-                lookahead_distance=100.0,
-                max_linear_speed=140.0,
-                max_angular_speed=1.5,
-                goal_tolerance=20.0,
-                obstacles_range=450.0,
-                view_angle=math.radians(70.0),
-                safe_dist=250.0,
-                avoidance_delay=150,
-                alpha_Ld=0.7,
-                offset=270.0,
-                lane_width=500.0,
-                obstacle_avoidance=True,
-                x_L=300.0,
-            )
-            robot.planner.set_path(path)
-            print("Path is ready, Entering IDLE state.")
-            print("[FSM] IDLE - Press BTN_1 to enter MOVING state.")
+            show_idle_leds(robot)
+            print("[FSM] IDLE — press BTN_1 to start path, BTN_2 to cancel")
             state = "IDLE"
 
+        # ── IDLE ──────────────────────────────────────────────────────────
         elif state == "IDLE":
-            show_idle_leds(robot)
-            robot._draw_lidar_obstacles()
-            if robot.get_button(Button.BTN_1):
-                print("Start Moving!")
-                print("[FSM] MOVING")
+            if robot.was_button_pressed(Button.BTN_1):
+                show_moving_leds(robot)
+                print(f"[FSM] MOVING — {len(PATH_CONTROL_POINTS)} waypoints")
+
+                drive_handle = robot.purepursuit_follow_path(
+                    waypoints=PATH_CONTROL_POINTS,
+                    velocity=VELOCITY,
+                    lookahead=LOOKAHEAD,
+                    tolerance=TOLERANCE,
+                    advance_radius=ADVANCE_RADIUS,
+                    max_angular_rad_s=MAX_ANGULAR_RAD_S,
+                    blocking=False,
+                )
                 state = "MOVING"
-            if robot.get_button(Button.BTN_2):
-                print("BTN_2 pressed. Stopping robot and saving trajectory.")
-                robot.shutdown()
 
+        # ── MOVING ────────────────────────────────────────────────────────
         elif state == "MOVING":
-            show_moving_leds(robot)
-            # if next_tick % 0.5 < period: # print every half second
-            #     robot._draw_lidar_obstacles()
-            #     print("Obstacle figure updated.")
-            state = robot._nav_follow_pp_path_loop()
 
-        # FSM refresh rate control
+            if robot.get_button(Button.BTN_2):
+                if drive_handle is not None:
+                    drive_handle.cancel()
+                    drive_handle.wait(timeout=1.0)
+                    drive_handle = None
+                robot.stop()
+                show_idle_leds(robot)
+                print("[FSM] IDLE — path cancelled")
+                state = "IDLE"
+
+            elif drive_handle is not None and drive_handle.is_finished():
+                x, y, theta_deg = robot.get_pose()
+                print(f"[FSM] path complete  x={x:.1f}  y={y:.1f}  θ={theta_deg:.1f}°")
+                drive_handle = None
+                robot.stop()
+                show_idle_leds(robot)
+                print("[FSM] IDLE — press BTN_1 to run again")
+                state = "IDLE"
+
+        # ── Tick-rate control ─────────────────────────────────────────────
         next_tick += period
         sleep_s = next_tick - time.monotonic()
         if sleep_s > 0.0:
