@@ -32,15 +32,14 @@ from __future__ import annotations
 
 import time
 
-from robot.hardware_map import DEFAULT_FSM_HZ, LED
-from robot.robot import FirmwareState, Robot, Unit
+from robot.hardware_map import DEFAULT_FSM_HZ, LED, POSITION_UNIT
+from robot.robot import FirmwareState, Robot
 
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-POSITION_UNIT = Unit.MM
 LED_BRIGHTNESS = 255
 LIGHT_HOLD_SEC = 2.0
 VISION_STALE_SEC = 3.0

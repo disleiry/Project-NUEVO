@@ -18,23 +18,24 @@ from __future__ import annotations
 import math
 import time
 
-from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, Motor
-from robot.robot import FirmwareState, Robot, Unit
+from robot.hardware_map import (
+    Button,
+    DEFAULT_FSM_HZ,
+    LED,
+    INITIAL_THETA_DEG,
+    LEFT_WHEEL_DIR_INVERTED,
+    LEFT_WHEEL_MOTOR,
+    POSITION_UNIT,
+    RIGHT_WHEEL_DIR_INVERTED,
+    RIGHT_WHEEL_MOTOR,
+    WHEEL_BASE,
+    WHEEL_DIAMETER,
+)
+from robot.robot import FirmwareState, Robot
 from robot.util import densify_polyline
 
 
 TAG_ID = 11
-POSITION_UNIT = Unit.MM
-WHEEL_DIAMETER = 74.0
-WHEEL_BASE = 333.0
-INITIAL_THETA_DEG = 90.0
-
-LEFT_WHEEL_MOTOR = Motor.DC_M1
-LEFT_WHEEL_DIR_INVERTED = False
-RIGHT_WHEEL_MOTOR = Motor.DC_M2
-RIGHT_WHEEL_DIR_INVERTED = True
-
-
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(

@@ -102,17 +102,25 @@ from robot.hardware_map import (
     LIDAR_RANGE_MAX_MM,
     LIDAR_RANGE_MIN_MM,
     LIMIT_COUNT,
+    INITIAL_THETA_DEG as HW_INITIAL_THETA_DEG,
+    LEFT_WHEEL_DIR_INVERTED as HW_LEFT_WHEEL_DIR_INVERTED,
+    LEFT_WHEEL_MOTOR as HW_LEFT_WHEEL_MOTOR,
     Motor,
+    RIGHT_WHEEL_DIR_INVERTED as HW_RIGHT_WHEEL_DIR_INVERTED,
+    RIGHT_WHEEL_MOTOR as HW_RIGHT_WHEEL_MOTOR,
     StepMoveType,
     StepperMotionState,
     TAG_BODY_OFFSET_X_MM,
     TAG_BODY_OFFSET_Y_MM,
+    Unit,
+    WHEEL_BASE as HW_WHEEL_BASE,
+    WHEEL_DIAMETER as HW_WHEEL_DIAMETER,
 )
 
 from robot.robot_impl.hardware import FirmwareState, HardwareMixin
 from robot.obstacle_tracking import ObstacleTracker
 from robot.robot_impl.sensors import SensorsMixin
-from robot.robot_impl.navigation import Unit, MotionHandle, NavigationMixin
+from robot.robot_impl.navigation import MotionHandle, NavigationMixin
 from robot.robot_impl.legacy import LegacyMixin
 
 
@@ -140,7 +148,7 @@ class Robot(HardwareMixin, SensorsMixin, NavigationMixin, LegacyMixin):
         robot.enable_imu()     — subscribe to /sensor_imu, populate orientation fusion
         robot.enable_vision()  — subscribe to /vision/detections, populate get_detections()
 
-    Hardware defaults match firmware/arduino/src/config.h:
+    Hardware defaults match robot/hardware_map.py and firmware/arduino/src/config.h:
         WHEEL_DIAMETER_MM = 74.0
         WHEEL_BASE_MM     = 333.0
         ENCODER_PPR       = 1440  (4× mode)
@@ -150,15 +158,15 @@ class Robot(HardwareMixin, SensorsMixin, NavigationMixin, LegacyMixin):
         IMU_Z_DOWN        = False  (Z-axis points up)
     """
 
-    WHEEL_DIAMETER_MM: float = 74.0
-    WHEEL_BASE_MM:     float = 333.0
+    WHEEL_DIAMETER_MM: float = HW_WHEEL_DIAMETER
+    WHEEL_BASE_MM:     float = HW_WHEEL_BASE
     ENCODER_PPR:       int   = 1440
-    INITIAL_THETA_DEG: float = 90.0
+    INITIAL_THETA_DEG: float = HW_INITIAL_THETA_DEG
     IMU_Z_DOWN:        bool  = False
-    DEFAULT_LEFT_WHEEL_MOTOR:  int = int(Motor.DC_M1)
-    DEFAULT_RIGHT_WHEEL_MOTOR: int = int(Motor.DC_M2)
-    DEFAULT_LEFT_WHEEL_DIR_INVERTED:  bool = False
-    DEFAULT_RIGHT_WHEEL_DIR_INVERTED: bool = True
+    DEFAULT_LEFT_WHEEL_MOTOR:  int = int(HW_LEFT_WHEEL_MOTOR)
+    DEFAULT_RIGHT_WHEEL_MOTOR: int = int(HW_RIGHT_WHEEL_MOTOR)
+    DEFAULT_LEFT_WHEEL_DIR_INVERTED:  bool = HW_LEFT_WHEEL_DIR_INVERTED
+    DEFAULT_RIGHT_WHEEL_DIR_INVERTED: bool = HW_RIGHT_WHEEL_DIR_INVERTED
     POSITION_ALPHA    = 0.10   # complementary filter GPS weight for position fusion
     ORIENTATION_ALPHA = 0.0    # complementary filter IMU weight for orientation fusion
     TAG_X_OFFSET_MM   = TAG_BODY_OFFSET_X_MM   # ArUco tag x in robot body frame (mm, +x = forward)

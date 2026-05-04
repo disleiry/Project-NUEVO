@@ -44,15 +44,13 @@ from __future__ import annotations
 
 import time
 
-from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, LEDMode
-from robot.robot import FirmwareState, Robot, Unit
+from robot.hardware_map import Button, DEFAULT_FSM_HZ, LED, LEDMode, POSITION_UNIT
+from robot.robot import FirmwareState, Robot
 
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-POSITION_UNIT = Unit.MM
 
 # How bright the onboard LEDs glow (0–255)
 LED_BRIGHTNESS = 220

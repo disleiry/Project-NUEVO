@@ -2,8 +2,8 @@
 robot_impl/navigation.py — NavigationMixin
 
 Odometry, sensor fusion callbacks, pose API, drive commands, and
-higher-level path following.  Also defines Unit and MotionHandle since
-they are tightly coupled to this layer.
+higher-level path following. Also defines MotionHandle since it is tightly
+coupled to this layer.
 All state lives in Robot.__init__; this mixin only defines methods.
 """
 from __future__ import annotations
@@ -12,7 +12,6 @@ import math
 import threading
 import time
 from collections.abc import Callable
-from enum import Enum
 
 import numpy as np
 
@@ -26,19 +25,8 @@ from bridge_interfaces.msg import (
     VirtualTarget,
 )
 
-from robot.hardware_map import DEFAULT_NAV_HZ
+from robot.hardware_map import DEFAULT_NAV_HZ, Unit
 from robot.robot_impl.hardware import FirmwareState
-
-
-# =============================================================================
-# Public types
-# =============================================================================
-
-class Unit(Enum):
-    MM   = 1.0
-    INCH = 25.4
-    AMERICAN = INCH
-    REST_OF_THE_WORLD = MM
 
 
 class MotionHandle:

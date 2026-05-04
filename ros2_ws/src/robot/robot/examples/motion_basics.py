@@ -45,23 +45,31 @@ from robot.hardware_map import (
     Button,
     DEFAULT_FSM_HZ,
     LED,
+    INITIAL_THETA_DEG,
     LIDAR_FOV_DEG,
     LIDAR_MOUNT_THETA_DEG,
     LIDAR_MOUNT_X_MM,
     LIDAR_MOUNT_Y_MM,
     LIDAR_RANGE_MAX_MM,
     LIDAR_RANGE_MIN_MM,
-    Motor,
+    LEFT_WHEEL_DIR_INVERTED,
+    LEFT_WHEEL_MOTOR,
+    POSITION_UNIT,
+    RIGHT_WHEEL_DIR_INVERTED,
+    RIGHT_WHEEL_MOTOR,
     TAG_BODY_OFFSET_X_MM,
     TAG_BODY_OFFSET_Y_MM,
+    WHEEL_BASE,
+    WHEEL_DIAMETER,
 )
-from robot.robot import FirmwareState, Robot, Unit
+from robot.robot import FirmwareState, Robot
 
 
-# Shared lidar/GPS hardware calibration lives in robot/hardware_map.py.
-# If you need to change lidar mount, lidar self-filtering, or GPS tag body
-# offset values, edit ros2_ws/src/robot/robot/hardware_map.py.
-# You can also just set those values here locally if you want.
+# Shared drive-base and lidar/GPS hardware calibration lives in
+# robot/hardware_map.py. If you need to change wheel geometry, wheel motors,
+# lidar mount, lidar self-filtering, or GPS tag body offset values, edit
+# ros2_ws/src/robot/robot/hardware_map.py. You can also just set those values
+# here locally if you want.
 ENABLE_LIDAR = False
 
 ENABLE_GPS = False
@@ -73,16 +81,6 @@ TAG_ID = -1
 # ---------------------------------------------------------------------------
 # Configuration — edit these to match your robot
 # ---------------------------------------------------------------------------
-
-POSITION_UNIT = Unit.MM
-WHEEL_DIAMETER = 74.0
-WHEEL_BASE = 333.0
-INITIAL_THETA_DEG = 90.0
-
-LEFT_WHEEL_MOTOR = Motor.DC_M1
-LEFT_WHEEL_DIR_INVERTED = False
-RIGHT_WHEEL_MOTOR = Motor.DC_M2
-RIGHT_WHEEL_DIR_INVERTED = True
 
 TURN_DEGREES = 90.0
 FORWARD_DISTANCE_MM = 500.0

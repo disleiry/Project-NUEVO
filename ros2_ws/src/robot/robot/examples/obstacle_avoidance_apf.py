@@ -28,53 +28,50 @@ from robot.hardware_map import (
     Button,
     DEFAULT_FSM_HZ,
     LED,
+    INITIAL_THETA_DEG,
     LIDAR_FOV_DEG,
     LIDAR_MOUNT_THETA_DEG,
     LIDAR_MOUNT_X_MM,
     LIDAR_MOUNT_Y_MM,
     LIDAR_RANGE_MAX_MM,
     LIDAR_RANGE_MIN_MM,
-    Motor,
+    LEFT_WHEEL_DIR_INVERTED,
+    LEFT_WHEEL_MOTOR,
+    POSITION_UNIT,
+    RIGHT_WHEEL_DIR_INVERTED,
+    RIGHT_WHEEL_MOTOR,
     TAG_BODY_OFFSET_X_MM,
     TAG_BODY_OFFSET_Y_MM,
+    WHEEL_BASE,
+    WHEEL_DIAMETER,
 )
-from robot.robot import FirmwareState, Robot, Unit
+from robot.robot import FirmwareState, Robot
 
 
-# Shared lidar/GPS hardware calibration lives in robot/hardware_map.py.
-# If you need to change lidar mount, lidar self-filtering, or GPS tag body
-# offset values, edit ros2_ws/src/robot/robot/hardware_map.py.
+# Shared drive-base and lidar/GPS hardware calibration lives in
+# robot/hardware_map.py. If you need to change wheel geometry, wheel motors,
+# lidar mount, lidar self-filtering, or GPS tag body offset values, edit
+# ros2_ws/src/robot/robot/hardware_map.py.
 ENABLE_LIDAR = True
 ENABLE_GPS = False
 
 # IMPORTANT: update TAG_ID to match your robot when GPS is enabled.
 TAG_ID = -1
 
-
-POSITION_UNIT = Unit.MM
-WHEEL_DIAMETER = 74.0
-WHEEL_BASE = 333.0
-INITIAL_THETA_DEG = 90.0
-
-LEFT_WHEEL_MOTOR = Motor.DC_M1
-LEFT_WHEEL_DIR_INVERTED = False
-RIGHT_WHEEL_MOTOR = Motor.DC_M2
-RIGHT_WHEEL_DIR_INVERTED = True
-
-GOAL_MM = (0.0, 2000.0)
+GOAL_MM = (610.0, 610.0*5)
 VELOCITY_MM_S = 150.0
 TOLERANCE_MM = 50.0
 MAX_ANGULAR_RAD_S = 1.0
 
 # Edit these directly while tuning LAPF behavior.
-LEASH_LENGTH_MM = 400.0
-REPULSION_RANGE_MM = 700.0
+LEASH_LENGTH_MM = 400.0 # This is for a front wheel drive; make it ~50 mm for a rear wheel drive
+REPULSION_RANGE_MM = 300.0
 TARGET_SPEED_MM_S = 200.0
-REPULSION_GAIN = 800.0
+REPULSION_GAIN = 550.0
 ATTRACTION_GAIN = 1.0
 FORCE_EMA_ALPHA = 0.35
-INFLATION_MARGIN_MM = 200.0
-LEASH_HALF_ANGLE_DEG = 60.0
+INFLATION_MARGIN_MM = 150.0
+LEASH_HALF_ANGLE_DEG = 25.0
 
 STATUS_PRINT_INTERVAL_S = 0.5
 
