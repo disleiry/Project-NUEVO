@@ -79,7 +79,7 @@ def run(robot: Robot) -> None:
                 (0.0,   0.0), # start
                 (0.0, 3400), # Waypoint 1
                 (550, 3400), # Waypoint 2
-                (550, 0.0)
+                (550, 0.0),
                 (0.0, 0.0), # Return to start
             ]
 
