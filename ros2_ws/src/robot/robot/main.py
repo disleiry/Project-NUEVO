@@ -119,13 +119,17 @@ def run(robot: Robot) -> None:
         elif state == "MOVING":
             show_moving_leds(robot)
             
-            # --- DEBUG: compute velocity exactly as controller does ---
-            v, w = robot._obstacle_avoidance_planner.compute_velocity(
-                robot._pose,
-                robot._obstacles_mm.copy()
-            )
+            print("pose:", robot._pose)
+            print("first path point:", robot._obstacle_avoidance_planner.remaining_path[0])
+            print("last path point:", robot._obstacle_avoidance_planner.remaining_path[-1])
 
-            print("v,w:", v, w)
+            import numpy as np
+
+            pose = np.array(robot._pose[:2])
+            start = np.array(robot._obstacle_avoidance_planner.remaining_path[0])
+
+            print("DIST TO START:", np.linalg.norm(pose - start))
+        
             # if next_tick % 0.5 < period: # print every half second
             #     robot._draw_lidar_obstacles()
             #     print("Obstacle figure updated.")
