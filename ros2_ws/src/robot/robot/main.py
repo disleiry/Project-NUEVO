@@ -76,7 +76,7 @@ def run(robot: Robot) -> None:
             # 
             # left lane
             path_control_points = [
-                (0.0,   0.0), # start
+                #(0.0,   0.0), # start
                 (0.0, 3400), # Waypoint 1
                 (550, 3400), # Waypoint 2
                 (550, 0.0),
