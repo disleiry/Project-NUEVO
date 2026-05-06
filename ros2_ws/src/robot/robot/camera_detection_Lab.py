@@ -37,15 +37,15 @@ from robot.robot import FirmwareState, Robot
 # Configuration
 # ---------------------------------------------------------------------------
 
-LED_BRIGHTNESS          = 255
-LIGHT_HOLD_SEC          = 2.0    # seconds to keep LEDs on after last detection
-VISION_STALE_SEC        = 3.0    # seconds before vision is considered stale
-MIN_TRAFFIC_CONFIDENCE  = 0.50   # minimum YOLO confidence for traffic light
-DRIVE_LINEAR_SPEED      = 100.0  # mm/s forward speed (Task 4)
+LED_BRIGHTNESS         = 255
+LIGHT_HOLD_SEC         = 2.0    # seconds to keep LEDs on after last detection
+VISION_STALE_SEC       = 3.0    # seconds before vision is considered stale
+MIN_TRAFFIC_CONFIDENCE = 0.50   # minimum YOLO confidence for traffic light
+DRIVE_LINEAR_SPEED     = 100.0  # mm/s forward speed (Task 4)
 
 
 # ---------------------------------------------------------------------------
-# Helpers  (unchanged from traffic_light_leds.py except configure_robot)
+# Helpers
 # ---------------------------------------------------------------------------
 
 def configure_robot(robot: Robot) -> None:
@@ -115,8 +115,8 @@ def find_traffic_light_color(robot: Robot) -> str | None:
 def run(robot: Robot) -> None:
     configure_robot(robot)
 
-    state           = "INIT"
-    lights_off_at   = 0.0
+    state            = "INIT"
+    lights_off_at    = 0.0
     last_shown_color = None
 
     period    = 1.0 / float(DEFAULT_FSM_HZ)
@@ -124,18 +124,19 @@ def run(robot: Robot) -> None:
 
     while True:
 
-        # ── INIT ────────────────────────────────────────────────────────────
+        # ── INIT ─────────────────────────────────────────────────────────────
         if state == "INIT":
             start_robot(robot)
             dim_all_leds(robot)
+            robot.stop()
             print("[FSM] WATCHING — show a red or green traffic light")
             state = "WATCHING"
 
-        # ── WATCHING ─────────────────────────────────────────────────────────
+        # ── WATCHING ──────────────────────────────────────────────────────────
         elif state == "WATCHING":
             now = time.monotonic()
 
-            # ── Task 5 (Bonus): stop sign takes absolute priority ────────────
+            # Task 5 (Bonus): stop sign takes absolute priority over everything
             if robot.get_detections("stop sign"):
                 robot.stop()
                 robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
@@ -145,11 +146,11 @@ def run(robot: Robot) -> None:
                 print("[VISION] stop sign — robot stopped, red LED blinking")
 
             else:
-                # ── Tasks 3 & 4: traffic light logic ─────────────────────────
+                # Tasks 3 & 4: traffic light logic
                 traffic_light_color = find_traffic_light_color(robot)
 
                 if traffic_light_color in ("red", "green"):
-                    # Task 3: mirror LED
+                    # Task 3: mirror the LED color
                     show_traffic_light_color(robot, traffic_light_color)
                     lights_off_at = now + LIGHT_HOLD_SEC
 
@@ -161,21 +162,18 @@ def run(robot: Robot) -> None:
                     if traffic_light_color == "green":
                         robot.set_velocity(DRIVE_LINEAR_SPEED, 0)
                     else:
+                        # red detected — stop
                         robot.stop()
 
                 elif lights_off_at > 0.0 and now >= lights_off_at:
-                    # Hold expired — no recent detection
+                    # Hold timer expired — no fresh detection for LIGHT_HOLD_SEC
                     robot.stop()
                     dim_all_leds(robot)
                     lights_off_at = 0.0
                     if last_shown_color is not None:
-                        print("[VISION] no recent red/green light — LEDs off, robot stopped")
+                        print("[VISION] no recent light — LEDs off, robot stopped")
                     last_shown_color = None
 
-        # ── Tick-rate control (do not modify) ────────────────────────────────
-        next_tick += period
-        sleep_s = next_tick - time.monotonic()
-        if sleep_s > 0.0:
-            time.sleep(sleep_s)
-        else:
-            next_tick = time.monotonic()
+                else:
+                    # No detection at all, hold timer not yet expired —
+                    # stop immediately to be safe (fixes the gap
