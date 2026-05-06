@@ -45,9 +45,9 @@ from robot.util import densify_polyline  # noqa: F401 - optional helper for stud
 # ---------------------------------------------------------------------------
 
 ENABLE_LIDAR = False
-ENABLE_GPS   = False
+ENABLE_GPS   = True
 
-TAG_ID = -1  # IMPORTANT: set to the ArUco marker ID on your robot
+TAG_ID = 25  # IMPORTANT: set to the ArUco marker ID on your robot
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,7 @@ TAG_ID = -1  # IMPORTANT: set to the ArUco marker ID on your robot
 # To tune: watch θ_odom vs θ_fused in the status output while running.
 # ---------------------------------------------------------------------------
 
-GPS_POSITION_ALPHA           = 0.10
+GPS_POSITION_ALPHA           = 0.30
 ENABLE_GPS_TANGENT_HEADING   = False
 GPS_TANGENT_ALPHA            = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
@@ -80,17 +80,12 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 # ---------------------------------------------------------------------------
 
 PATH_CONTROL_POINTS = [
-<<<<<<< HEAD
-     (0.0,   0.0), # start
-     (0.0, 3050), # Waypoint 1
-     (610, 3050), # Waypoint 2
-     (610, 0.0)
+     (0.0,  0.0), # start
+     (0.0, 3400), # Waypoint 1
+     (550, 3400), # Waypoint 2
+     (550, 0.0)
      (0.0, 0.0), # Return to start
-=======
-    (0.0, 0.0),
-    (0.0, 610*6),
-    (610.0, 610*6),
->>>>>>> upstream/main
+
 ]
 
 # Optional: densify long segments for smoother tracking.
