@@ -119,13 +119,6 @@ def run(robot: Robot) -> None:
         elif state == "MOVING":
             show_moving_leds(robot)
             
-            pl = robot._obstacle_avoidance_planner
-
-            print("remaining_path[0]:", pl.remaining_path[0])
-            print("remaining_path[-1]:", pl.remaining_path[-1])
-            print("path len:", len(pl.remaining_path))
-
-            print("lookahead_distance:", pl.lookahead_distance)
         
             # if next_tick % 0.5 < period: # print every half second
             #     robot._draw_lidar_obstacles()
