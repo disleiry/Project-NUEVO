@@ -93,7 +93,7 @@ def run(robot: Robot) -> None:
                 max_linear_speed=140.0,
                 max_angular_speed=1.5,
                 goal_tolerance=20.0,
-                obstacles_range=50.0,
+                obstacles_range=250.0,
                 view_angle=math.radians(70.0),
                 safe_dist=150.0,
                 avoidance_delay=150,
