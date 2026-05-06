@@ -70,7 +70,7 @@ TAG_ID = 25  # IMPORTANT: set to the ArUco marker ID on your robot
 # ---------------------------------------------------------------------------
 
 GPS_POSITION_ALPHA           = 0.30
-ENABLE_GPS_TANGENT_HEADING   = False
+ENABLE_GPS_TANGENT_HEADING   = True
 GPS_TANGENT_ALPHA            = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
@@ -89,7 +89,7 @@ PATH_CONTROL_POINTS = [
 ]
 
 # Optional: densify long segments for smoother tracking.
-# PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=50.0)
+PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=50.0)
 
 VELOCITY_MM_S      = 150.0
 LOOKAHEAD_MM       = 120.0
