@@ -82,8 +82,8 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 PATH_CONTROL_POINTS = [
      (0.0,  0.0), # start
      (0.0, 3250), # Waypoint 1
-     (550, 3250), # Waypoint 2
-     (550, 0.0),
+     (500, 3250), # Waypoint 2
+     (500, 0.0),
      (0.0, 0.0), # Return to start
 
 ]
