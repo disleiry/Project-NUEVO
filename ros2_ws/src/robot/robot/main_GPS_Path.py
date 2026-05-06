@@ -69,10 +69,10 @@ TAG_ID = 25  # IMPORTANT: set to the ArUco marker ID on your robot
 # To tune: watch θ_odom vs θ_fused in the status output while running.
 # ---------------------------------------------------------------------------
 
-GPS_POSITION_ALPHA           = 0.30
+GPS_POSITION_ALPHA           = 0.05
 ENABLE_GPS_TANGENT_HEADING   = True
-GPS_TANGENT_ALPHA            = 0.30
-GPS_TANGENT_MIN_DISPLACEMENT_MM = 100.0
+GPS_TANGENT_ALPHA            = 0.15
+GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 
 # ---------------------------------------------------------------------------
@@ -80,10 +80,10 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 100.0
 # ---------------------------------------------------------------------------
 
 PATH_CONTROL_POINTS = [
-     (0.0,  0.0), # start
+     #(0.0,  0.0), # start
      (0.0, 3250), # Waypoint 1
-     (290, 3250), # Waypoint 2
-     (290, 0.0),
+     (600, 3250), # Waypoint 2
+     (600, 0.0),
      (0.0, 0.0), # Return to start
 
 ]
