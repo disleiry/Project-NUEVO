@@ -71,8 +71,8 @@ TAG_ID = 25  # IMPORTANT: set to the ArUco marker ID on your robot
 
 GPS_POSITION_ALPHA           = 0.30
 ENABLE_GPS_TANGENT_HEADING   = True
-GPS_TANGENT_ALPHA            = 0.15
-GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
+GPS_TANGENT_ALPHA            = 0.30
+GPS_TANGENT_MIN_DISPLACEMENT_MM = 100.0
 
 
 # ---------------------------------------------------------------------------
@@ -82,8 +82,8 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 PATH_CONTROL_POINTS = [
      (0.0,  0.0), # start
      (0.0, 3250), # Waypoint 1
-     (400, 3250), # Waypoint 2
-     (400, 0.0),
+     (300, 3250), # Waypoint 2
+     (300, 0.0),
      (0.0, 0.0), # Return to start
 
 ]
