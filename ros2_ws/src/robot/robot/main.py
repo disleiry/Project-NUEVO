@@ -35,7 +35,7 @@ from robot.robot import FirmwareState, Robot
 from robot.util import densify_polyline
 
 
-TAG_ID = 25
+TAG_ID = 11
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(
