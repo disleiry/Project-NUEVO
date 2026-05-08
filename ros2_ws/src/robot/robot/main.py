@@ -56,7 +56,7 @@ ENABLE_LIDAR = True
 ENABLE_GPS = False
 
 # IMPORTANT: update TAG_ID to match your robot when GPS is enabled.
-TAG_ID = -1
+TAG_ID = 25
 
 GOAL_MM = (610.0, 610.0*5)
 VELOCITY_MM_S = 150.0
