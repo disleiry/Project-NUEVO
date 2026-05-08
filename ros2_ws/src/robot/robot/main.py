@@ -53,7 +53,7 @@ from robot.robot import FirmwareState, Robot
 # lidar mount, lidar self-filtering, or GPS tag body offset values, edit
 # ros2_ws/src/robot/robot/hardware_map.py.
 ENABLE_LIDAR = True
-ENABLE_GPS = False
+ENABLE_GPS = True
 
 # IMPORTANT: update TAG_ID to match your robot when GPS is enabled.
 TAG_ID = 25
@@ -64,7 +64,7 @@ TOLERANCE_MM = 50.0
 MAX_ANGULAR_RAD_S = 1.0
 
 # Edit these directly while tuning LAPF behavior.
-LEASH_LENGTH_MM = 400.0 # This is for a front wheel drive; make it ~50 mm for a rear wheel drive
+LEASH_LENGTH_MM = 50.0 # This is for a front wheel drive; make it ~50 mm for a rear wheel drive
 REPULSION_RANGE_MM = 300.0
 TARGET_SPEED_MM_S = 200.0
 REPULSION_GAIN = 550.0
