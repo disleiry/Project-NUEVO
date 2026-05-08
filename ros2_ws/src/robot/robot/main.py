@@ -61,7 +61,7 @@ TAG_ID = 25
 GOAL_MM = (610.0, 610.0*5)
 VELOCITY_MM_S = 150.0
 TOLERANCE_MM = 50.0
-MAX_ANGULAR_RAD_S = 1.0
+MAX_ANGULAR_RAD_S = 0.6
 
 # Edit these directly while tuning LAPF behavior.
 LEASH_LENGTH_MM = 50.0 # This is for a front wheel drive; make it ~50 mm for a rear wheel drive
