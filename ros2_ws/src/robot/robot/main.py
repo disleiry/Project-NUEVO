@@ -94,7 +94,7 @@ def run(robot: Robot) -> None:
                 obstacles_range=450.0,
                 view_angle=math.radians(70.0),
                 safe_dist=250.0,
-                avoidance_delay=150,
+                avoidance_delay=300,
                 alpha_Ld=0.7,
                 offset=270.0,
                 lane_width=610.0,
