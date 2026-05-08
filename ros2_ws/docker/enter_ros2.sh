@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# enter_ros2.sh — open a shell inside the ROS2 Docker container.
+#
+# If the container is already running, attaches to it directly.
+# If not, starts it first with `docker compose up -d --wait`.
+# Pass --build to rebuild the image before entering (use this after
+# pulling new code or changing Dockerfile dependencies).
+#
+# Usage:
+#   ./ros2_ws/docker/enter_ros2.sh              # default: rpi target
+#   ./ros2_ws/docker/enter_ros2.sh rpi
+#   ./ros2_ws/docker/enter_ros2.sh --build rpi  # rebuild image, then enter
+#   ./ros2_ws/docker/enter_ros2.sh vm
 
 set -euo pipefail
 

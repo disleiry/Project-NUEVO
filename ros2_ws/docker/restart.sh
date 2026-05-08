@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
-# Restart the ROS2 container without rebuilding the image.
-# Run from anywhere — detects Pi vs VM by checking for the rpi compose file arg or hostname.
+# restart.sh — restart the ROS2 container without rebuilding the image.
+#
+# Use this after editing Python source files under ros2_ws/src — the container
+# rebuilds the ROS2 workspace on startup so changes are picked up automatically.
+#
+# If the Docker image itself changed (e.g. after pulling new code that adds
+# dependencies or modifies the Dockerfile), use enter_ros2.sh --build instead:
+#   ./ros2_ws/docker/enter_ros2.sh --build rpi
+#
+# Usage:
+#   ./ros2_ws/docker/restart.sh        # default: rpi
+#   ./ros2_ws/docker/restart.sh rpi
+#   ./ros2_ws/docker/restart.sh vm
+#
+# Run from anywhere — detects Pi vs VM by the argument passed.
 set -e
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
