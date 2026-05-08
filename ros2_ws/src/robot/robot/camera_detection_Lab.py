@@ -1,16 +1,26 @@
 """
-main.py — Vision Node Lab Tasks 3, 4, and 5
-=============================================
+camera_detection_lab.py — Vision Node Lab Tasks 3, 4, and 5
+=============================================================
 Task 3 (Deliverable i):  Traffic light LED demo.
-Task 4 (Deliverable ii): Drive forward on green, stop on red / no signal.
+Task 4 (Deliverable ii): Drive forward on green continuously, stop on red.
 Task 5 (Deliverable iii, Bonus): Stop sign overrides everything.
 
 HOW TO RUN
 ----------
-Terminal A — start the vision node:
+Host SSH terminal:
+    cp camera_detection_Lab.py main.py
+
+Docker Terminal A — start the vision node:
     ros2 launch vision vision_production.launch.py
 
-Terminal B — run the robot node:
+Docker Terminal B — start the bridge:
+    ros2 run robot bridge
+
+Docker Terminal C — rebuild and run the robot node:
+    cd /ros2_ws
+    rm -rf build/robot install/robot
+    colcon build --packages-select robot
+    source install/setup.bash
     ros2 run robot robot
 """
 
@@ -38,11 +48,10 @@ from robot.robot import FirmwareState, Robot
 # ---------------------------------------------------------------------------
 
 LED_BRIGHTNESS         = 255
-LIGHT_HOLD_SEC         = 2.0    # seconds to keep LEDs on after last detection
-VISION_STALE_SEC       = 3.0    # seconds before vision is considered stale
-MIN_TRAFFIC_CONFIDENCE = 0.50   # minimum YOLO confidence for traffic light
-DRIVE_LINEAR_SPEED     = 100.0  # mm/s forward speed (Task 4)
-
+LIGHT_HOLD_SEC         = 2.0
+VISION_STALE_SEC       = 3.0
+MIN_TRAFFIC_CONFIDENCE = 0.50
+DRIVE_LINEAR_SPEED     = 100.0  # mm/s
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +59,6 @@ DRIVE_LINEAR_SPEED     = 100.0  # mm/s forward speed (Task 4)
 
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
-    # Task 4 requires odometry parameters to be set
     robot.set_odometry_parameters(
         wheel_diameter=WHEEL_DIAMETER,
         wheel_base=WHEEL_BASE,
@@ -84,7 +92,7 @@ def show_traffic_light_color(robot: Robot, color: str) -> None:
         robot.set_led(LED.GREEN, LED_BRIGHTNESS)
 
 
-def find_traffic_light_color(robot: Robot) -> str | None:
+def find_traffic_light_color(robot: Robot):
     """Return the highest-confidence red/green traffic-light color, or None."""
     if not robot.is_vision_active(timeout_s=VISION_STALE_SEC):
         return None
@@ -132,48 +140,77 @@ def run(robot: Robot) -> None:
             print("[FSM] WATCHING — show a red or green traffic light")
             state = "WATCHING"
 
-        # ── WATCHING ──────────────────────────────────────────────────────────
+        # ── WATCHING ─────────────────────────────────────────────────────────
+        # Robot is stopped, waiting for a traffic light signal
         elif state == "WATCHING":
             now = time.monotonic()
 
-            # Task 5 (Bonus): stop sign takes absolute priority over everything
+            # Task 5: stop sign takes absolute priority
             if robot.get_detections("stop sign"):
                 robot.stop()
                 robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
                 robot.set_led(LED.GREEN, 0)
                 last_shown_color = None
                 lights_off_at    = 0.0
-                print("[VISION] stop sign — robot stopped, red LED blinking")
+                print("[VISION] stop sign detected — robot stopped")
 
             else:
-                # Tasks 3 & 4: traffic light logic
                 traffic_light_color = find_traffic_light_color(robot)
 
-                if traffic_light_color in ("red", "green"):
-                    # Task 3: mirror the LED color
-                    show_traffic_light_color(robot, traffic_light_color)
-                    lights_off_at = now + LIGHT_HOLD_SEC
+                if traffic_light_color == "green":
+                    # green seen — transition to DRIVING
+                    # reset lights_off_at so timer never fires in WATCHING
+                    show_traffic_light_color(robot, "green")
+                    last_shown_color = "green"
+                    lights_off_at    = 0.0
+                    print("[VISION] green light — starting to drive")
+                    state = "DRIVING"
 
-                    if traffic_light_color != last_shown_color:
-                        print(f"[VISION] traffic light: {traffic_light_color}")
-                    last_shown_color = traffic_light_color
+                elif traffic_light_color == "red":
+                    robot.stop()
+                    show_traffic_light_color(robot, "red")
+                    last_shown_color = "red"
+                    lights_off_at    = now + LIGHT_HOLD_SEC
+                    print("[VISION] red light — stopped")
 
-                    # Task 4: drive on green, stop on red
-                    if traffic_light_color == "green":
-                        robot.set_velocity(DRIVE_LINEAR_SPEED, 0)
-                    else:
-                        # red detected — stop
-                        robot.stop()
-
-                elif lights_off_at > 0.0 and now >= lights_off_at:
-                    # Hold timer expired — no fresh detection for LIGHT_HOLD_SEC
+                elif lights_off_at > 10.0 and now >= lights_off_at:
                     robot.stop()
                     dim_all_leds(robot)
-                    lights_off_at = 0.0
+                    lights_off_at    = 0.0
                     if last_shown_color is not None:
                         print("[VISION] no recent light — LEDs off, robot stopped")
                     last_shown_color = None
 
                 else:
-                    # No detection at all, hold timer not yet expired —
-                    # stop immediately to be safe (fixes the gap
+                    robot.stop()
+
+        # ── DRIVING ──────────────────────────────────────────────────────────
+        # Robot drives continuously — ONLY stops on red or stop sign
+        # Signal lost or no detection = keep driving forever
+        elif state == "DRIVING":
+            robot.set_velocity(DRIVE_LINEAR_SPEED, 0)
+            robot.set_led(LED.GREEN, LED_BRIGHTNESS)
+
+            # Task 5: stop sign takes priority even while driving
+            if robot.get_detections("stop sign"):
+                robot.stop()
+                robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
+                robot.set_led(LED.GREEN, 0)
+                print("[VISION] stop sign detected while driving — robot stopped")
+                state = "WATCHING"
+
+            elif find_traffic_light_color(robot) == "red":
+                robot.stop()
+                show_traffic_light_color(robot, "red")
+                print("[VISION] red light — stopping")
+                state = "WATCHING"
+
+            # green, None, or any other result = keep driving, do nothing
+
+        # ── Tick-rate control (do not modify) ─────────────────────────────────
+        next_tick += period
+        sleep_s = next_tick - time.monotonic()
+        if sleep_s > 0.0:
+            time.sleep(sleep_s)
+        else:
+            next_tick = time.monotonic()
