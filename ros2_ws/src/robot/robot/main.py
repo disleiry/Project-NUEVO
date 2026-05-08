@@ -82,7 +82,6 @@ def run(robot: Robot) -> None:
             path_control_points = [
                 (305.0, 0.0),
                 (305.0, 2500.0),
-                (1300.0, 2500.0),
             ]
             path = densify_polyline(path_control_points, spacing=50.0)
 
