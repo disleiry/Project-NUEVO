@@ -80,8 +80,8 @@ def run(robot: Robot) -> None:
             start_robot(robot)
             print("[FSM] INIT (odometry reset)")
             path_control_points = [
-                (300.0, 0.0),
-                (300.0, 2500.0),
+                (305.0, 0.0),
+                (305.0, 2500.0),
                 (1300.0, 2500.0),
             ]
             path = densify_polyline(path_control_points, spacing=50.0)
@@ -97,9 +97,9 @@ def run(robot: Robot) -> None:
                 avoidance_delay=150,
                 alpha_Ld=0.7,
                 offset=270.0,
-                lane_width=500.0,
+                lane_width=610.0,
                 obstacle_avoidance=True,
-                x_L=300.0,
+                x_L=305.0,
             )
             robot._set_obstacle_avoidance_path(path)
             print("Path is ready, entering IDLE state.")
