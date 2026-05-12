@@ -418,7 +418,7 @@ def run(robot: Robot) -> None:
 
             # ── BTN_2 = jog UP ────────────────────────────────────────────
             if robot.was_button_pressed(Button.BTN_2):
-                target = current_ticks - JOG_STEP_TICKS
+                target = current_ticks + JOG_STEP_TICKS
                 if target > SOFT_MAX_TICKS:
                     print(f"[JOG] Soft limit reached ({SOFT_MAX_TICKS} ticks) — cannot go higher")
                 else:
@@ -430,7 +430,7 @@ def run(robot: Robot) -> None:
 
             # ── BTN_3 = jog DOWN ──────────────────────────────────────────
             elif robot.was_button_pressed(Button.BTN_3):
-                target = current_ticks + JOG_STEP_TICKS
+                target = current_ticks - JOG_STEP_TICKS
                 if target < 0:
                     print("[JOG] Already at or below origin — cannot go lower")
                 else:
