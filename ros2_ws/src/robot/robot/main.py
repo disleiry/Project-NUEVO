@@ -91,7 +91,7 @@ LIFT_HOME_LIMIT = Limit.LIM_1   # change to match your wiring
 
 # Homing direction: -1 = motor runs in the direction that lowers the lift.
 # If homing moves the lift the wrong way, flip the sign.
-HOME_DIRECTION = -1
+HOME_DIRECTION = 1
 
 # Slow velocity used only for homing (ticks/s).  Keep it gentle.
 HOME_VELOCITY_TICKS = 80
@@ -101,7 +101,7 @@ JOG_VELOCITY_TICKS = 200
 
 # How many ticks each BTN_2 / BTN_3 press moves the lift.
 # Smaller = more precise alignment; increase for faster coarse moves.
-JOG_STEP_TICKS = 300
+JOG_STEP_TICKS = 1000
 
 # Position tolerance accepted as "at target" (ticks).
 POSITION_TOLERANCE = 30
