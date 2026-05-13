@@ -80,8 +80,8 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 PATH_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
     (0.0, 3250.0),      # Waypoint 1: home straight
-    (600.0, 3250.0)
-    (600.0, 100.0) 
+    (600.0, 3250.0),
+    (600.0, 100.0), 
     (1200.0, 100.0),    # entrance toward obstacle course
     (1200.0, 3250.0),   # end obstacle course
 ]
