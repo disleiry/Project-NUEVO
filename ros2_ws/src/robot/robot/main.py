@@ -1,28 +1,26 @@
 """
-main.py — waypoint-guided LAPF arena navigation
-===============================================
+main.py — pure-pursuit entry + LAPF obstacle-course navigation
+===============================================================
 
-This combines the waypoint idea from pure pursuit with the obstacle-avoidance
-behavior from LAPF:
+This version uses two navigation modes:
 
-- PATH_CONTROL_POINTS describe the intended path through the arena.
-- The robot drives to each waypoint using lapf_to_goal().
-- LiDAR lets LAPF move around obstacles while still progressing toward the
-  current waypoint.
-- GPS/fused pose is enabled for global position feedback.
+1. Pure pursuit for the straight/ramp sections where the path is mostly clear.
+2. LAPF for the obstacle-course section where the robot needs LiDAR-based
+   obstacle avoidance while still moving toward waypoint goals.
 
 How to run:
     cp main.py ros2_ws/src/robot/main.py
     ros2 run robot robot
 
 Controls:
-    BTN_1 starts the waypoint mission.
+    BTN_1 starts the mission.
     BTN_2 cancels the active motion and returns to IDLE.
 """
 
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from robot.hardware_map import (
     Button,
@@ -61,48 +59,70 @@ TAG_ID = 25
 
 # GPS tuning from the pure-pursuit example.
 GPS_POSITION_ALPHA = 0.05
-ENABLE_GPS_TANGENT_HEADING = False
+ENABLE_GPS_TANGENT_HEADING = True
 GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 
 # ---------------------------------------------------------------------------
-# Waypoint path through the arena
+# Waypoint paths through the arena
 # ---------------------------------------------------------------------------
 # Units are millimeters.
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 #
-# These waypoints should trace the intended path. The robot will still be able
-# to move around obstacles because each waypoint is reached using LAPF.
+# PURE_PURSUIT_CONTROL_POINTS:
+#   Used for the clear straight/ramp sections. This is smoother than LAPF for
+#   long straight paths because pure pursuit follows the whole path instead of
+#   stopping at many small local goals.
 #
-# Edit these to match your course measurements.
+# LAPF_CONTROL_POINTS:
+#   Used only once the robot enters the obstacle course. Each point is sent to
+#   lapf_to_goal(), so LiDAR can push the robot around obstacles while it still
+#   progresses toward the intended path.
 
-PATH_CONTROL_POINTS = [
+PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
     (0.0, 3250.0),      # Waypoint 1: home straight
-    (600.0, 3250.0),
-    (600.0, 100.0), 
-    (1200.0, 100.0),    # entrance toward obstacle course
-    (1200.0, 3250.0),   # end obstacle course
+    (600.0, 3250.0),    # Waypoint 2: transition / turn
+    (600.0, 100.0),     # Waypoint 3: ramp / return direction
+    (1200.0, 100.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
-# Optional: densify long segments for smoother tracking.
-PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=100.0)
+# Optional: densify long pure-pursuit segments for smoother tracking.
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
+
+# Do NOT densify these too much. LAPF will drive to each one as a separate goal.
+LAPF_CONTROL_POINTS = [
+    (1200.0, 3250.0),    # Obstacle waypoint 1
+]
+
+# Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
+LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=100.0)
 
 
 # ---------------------------------------------------------------------------
-# LAPF movement tuning
+# Pure pursuit tuning for straight/ramp sections
 # ---------------------------------------------------------------------------
 
-VELOCITY_MM_S = 150.0
-TOLERANCE_MM = 50.0
-MAX_ANGULAR_RAD_S = 0.6
+PURE_PURSUIT_VELOCITY_MM_S = 150.0
+LOOKAHEAD_MM = 120.0
+PURE_PURSUIT_TOLERANCE_MM = 25.0
+ADVANCE_RADIUS_MM = 80.0
+PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
-# LAPF obstacle avoidance tuning.
-LEASH_LENGTH_MM = 50.0
+
+# ---------------------------------------------------------------------------
+# LAPF tuning for obstacle-course section
+# ---------------------------------------------------------------------------
+
+LAPF_VELOCITY_MM_S = 150.0
+LAPF_TOLERANCE_MM = 50.0
+LAPF_MAX_ANGULAR_RAD_S = 0.6
+
+LEASH_LENGTH_MM = 150.0
 REPULSION_RANGE_MM = 300.0
 TARGET_SPEED_MM_S = 200.0
-REPULSION_GAIN = 550.0
+REPULSION_GAIN = 350.0
 ATTRACTION_GAIN = 1.0
 FORCE_EMA_ALPHA = 0.35
 INFLATION_MARGIN_MM = 150.0
@@ -110,6 +130,24 @@ LEASH_HALF_ANGLE_DEG = 25.0
 
 STATUS_PRINT_INTERVAL_S = 0.5
 STAGE_PAUSE_S = 0.00
+
+
+MISSION_STAGES: list[dict[str, Any]] = [
+    {
+        "name": "Straight/ramp pure pursuit",
+        "type": "pure_pursuit",
+        "waypoints": PURE_PURSUIT_CONTROL_POINTS,
+    },
+]
+
+for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
+    MISSION_STAGES.append(
+        {
+            "name": f"Obstacle course LAPF waypoint {i}",
+            "type": "lapf",
+            "waypoint": waypoint,
+        }
+    )
 
 
 def resolve_lapf_config() -> dict[str, float]:
@@ -207,9 +245,14 @@ def get_best_pose(robot: Robot) -> tuple[str, float, float, float]:
     return "odom ", x, y, theta
 
 
-def print_status(robot: Robot, waypoint_index: int) -> None:
+def print_status(robot: Robot, stage_index: int) -> None:
+    stage = MISSION_STAGES[stage_index]
     label, x, y, theta = get_best_pose(robot)
-    goal_x, goal_y = PATH_CONTROL_POINTS[waypoint_index]
+
+    if stage["type"] == "lapf":
+        goal_x, goal_y = stage["waypoint"]
+    else:
+        goal_x, goal_y = stage["waypoints"][-1]
 
     virtual_target = robot.get_virtual_target()
     obstacle_tracks = robot.get_obstacle_tracks()
@@ -237,30 +280,48 @@ def print_status(robot: Robot, waypoint_index: int) -> None:
         gps_summary = f" gps={'fresh' if robot.is_gps_active() else 'stale'}"
 
     print(
-        f"  waypoint {waypoint_index + 1}/{len(PATH_CONTROL_POINTS)} goal=({goal_x:.0f}, {goal_y:.0f}) mm | "
+        f"  stage {stage_index + 1}/{len(MISSION_STAGES)} {stage['name']} "
+        f"goal=({goal_x:.0f}, {goal_y:.0f}) mm | "
         f"{label}=({x:6.0f}, {y:6.0f}) mm θ={theta:5.1f}°"
         f"{gps_summary}{vt_summary}{track_summary}"
     )
 
 
-def start_waypoint(robot: Robot, waypoint_index: int):
+def start_pure_pursuit_stage(robot: Robot, stage: dict[str, Any]):
+    waypoints = stage["waypoints"]
+    print(
+        f"[FSM] MOVING — pure pursuit stage with {len(waypoints)} waypoints "
+        f"ending at ({waypoints[-1][0]:.0f}, {waypoints[-1][1]:.0f}) mm"
+    )
+
+    return robot.purepursuit_follow_path(
+        waypoints=waypoints,
+        velocity=PURE_PURSUIT_VELOCITY_MM_S,
+        lookahead=LOOKAHEAD_MM,
+        tolerance=PURE_PURSUIT_TOLERANCE_MM,
+        advance_radius=ADVANCE_RADIUS_MM,
+        max_angular_rad_s=PURE_PURSUIT_MAX_ANGULAR_RAD_S,
+        blocking=False,
+    )
+
+
+def start_lapf_stage(robot: Robot, stage: dict[str, Any]):
     cfg = resolve_lapf_config()
-    goal_x, goal_y = PATH_CONTROL_POINTS[waypoint_index]
+    goal_x, goal_y = stage["waypoint"]
 
     print(
-        f"[FSM] MOVING — waypoint {waypoint_index + 1}/{len(PATH_CONTROL_POINTS)} "
-        f"goal=({goal_x:.0f}, {goal_y:.0f}) mm"
+        f"[FSM] MOVING — LAPF obstacle waypoint goal=({goal_x:.0f}, {goal_y:.0f}) mm"
     )
 
     return robot.lapf_to_goal(
         goal_x,
         goal_y,
-        velocity=VELOCITY_MM_S,
-        tolerance=TOLERANCE_MM,
+        velocity=LAPF_VELOCITY_MM_S,
+        tolerance=LAPF_TOLERANCE_MM,
         leash_length_mm=cfg["leash_length_mm"],
         repulsion_range_mm=cfg["repulsion_range_mm"],
         target_speed_mm_s=cfg["target_speed_mm_s"],
-        max_angular_rad_s=MAX_ANGULAR_RAD_S,
+        max_angular_rad_s=LAPF_MAX_ANGULAR_RAD_S,
         repulsion_gain=cfg["repulsion_gain"],
         attraction_gain=cfg["attraction_gain"],
         force_ema_alpha=cfg["force_ema_alpha"],
@@ -270,16 +331,36 @@ def start_waypoint(robot: Robot, waypoint_index: int):
     )
 
 
+def start_stage(robot: Robot, stage_index: int):
+    stage = MISSION_STAGES[stage_index]
+
+    if stage["type"] == "pure_pursuit":
+        return start_pure_pursuit_stage(robot, stage)
+
+    if stage["type"] == "lapf":
+        return start_lapf_stage(robot, stage)
+
+    raise ValueError(f"Unknown stage type: {stage['type']}")
+
+
 def print_config(robot: Robot) -> None:
     lapf_cfg = resolve_lapf_config()
 
-    print("[CFG] Waypoint mission:")
-    for i, waypoint in enumerate(PATH_CONTROL_POINTS, start=1):
+    print("[CFG] Pure pursuit control points:")
+    for i, waypoint in enumerate(PURE_PURSUIT_CONTROL_POINTS, start=1):
+        print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
+
+    print("[CFG] LAPF obstacle-course control points:")
+    for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
         print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
 
     print(
-        f"[CFG] velocity={VELOCITY_MM_S:.0f} mm/s tolerance={TOLERANCE_MM:.0f} mm "
-        f"max_angular={MAX_ANGULAR_RAD_S:.2f} rad/s"
+        f"[CFG] pure_pursuit velocity={PURE_PURSUIT_VELOCITY_MM_S:.0f} mm/s "
+        f"lookahead={LOOKAHEAD_MM:.0f} mm tolerance={PURE_PURSUIT_TOLERANCE_MM:.0f} mm"
+    )
+    print(
+        f"[CFG] LAPF velocity={LAPF_VELOCITY_MM_S:.0f} mm/s "
+        f"tolerance={LAPF_TOLERANCE_MM:.0f} mm max_angular={LAPF_MAX_ANGULAR_RAD_S:.2f} rad/s"
     )
     print(
         f"[CFG] LAPF leash={lapf_cfg['leash_length_mm']:.0f} mm "
@@ -321,7 +402,7 @@ def run(robot: Robot) -> None:
 
     state = "INIT"
     motion_handle = None
-    waypoint_index = 0
+    stage_index = 0
     last_status_print_at = 0.0
 
     period = 1.0 / float(DEFAULT_FSM_HZ)
@@ -335,15 +416,15 @@ def run(robot: Robot) -> None:
             reset_mission_pose(robot)
             show_idle_leds(robot)
             print_config(robot)
-            print("[FSM] IDLE — press BTN_1 to start waypoint/LAPF mission, BTN_2 to cancel")
+            print("[FSM] IDLE — press BTN_1 to start pure-pursuit/LAPF mission, BTN_2 to cancel")
             state = "IDLE"
 
         elif state == "IDLE":
             if robot.was_button_pressed(Button.BTN_1):
                 reset_mission_pose(robot)
                 show_running_leds(robot)
-                waypoint_index = 0
-                motion_handle = start_waypoint(robot, waypoint_index)
+                stage_index = 0
+                motion_handle = start_stage(robot, stage_index)
                 last_status_print_at = now
                 state = "MOVING"
 
@@ -352,29 +433,29 @@ def run(robot: Robot) -> None:
                 cancel_motion(robot, motion_handle)
                 motion_handle = None
                 show_idle_leds(robot)
-                print("[FSM] IDLE — waypoint mission cancelled")
+                print("[FSM] IDLE — mission cancelled")
                 state = "IDLE"
 
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
-                    print_status(robot, waypoint_index)
+                    print_status(robot, stage_index)
                     last_status_print_at = now
 
                 if motion_handle is not None and motion_handle.is_finished():
-                    print(f"[FSM] DONE — waypoint {waypoint_index + 1}/{len(PATH_CONTROL_POINTS)} reached")
-                    print_status(robot, waypoint_index)
+                    print(f"[FSM] DONE — stage {stage_index + 1}/{len(MISSION_STAGES)} complete")
+                    print_status(robot, stage_index)
 
                     robot.stop()
                     time.sleep(STAGE_PAUSE_S)
 
-                    waypoint_index += 1
-                    if waypoint_index >= len(PATH_CONTROL_POINTS):
+                    stage_index += 1
+                    if stage_index >= len(MISSION_STAGES):
                         motion_handle = None
                         show_idle_leds(robot)
-                        print("[FSM] IDLE — full waypoint/LAPF mission complete. Press BTN_1 to run again")
+                        print("[FSM] IDLE — full mission complete. Press BTN_1 to run again")
                         state = "IDLE"
                     else:
-                        motion_handle = start_waypoint(robot, waypoint_index)
+                        motion_handle = start_stage(robot, stage_index)
                         last_status_print_at = time.monotonic()
 
         next_tick += period
