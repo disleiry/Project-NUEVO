@@ -1,45 +1,58 @@
-import cv2
+"""
+test_gender_detection.py
+
+Standalone test for gender detection.
+No ROS2, no robot, no bridge needed.
+
+Run from Docker terminal:
+    python3 /ros2_ws/src/vision/vision/test_gender_detection.py
+"""
+
+import sys
 import time
-from robot.robot import Robot
+import cv2
+
+sys.path.insert(0, '/ros2_ws/src/vision')
 from vision.gender_detection import GenderDetector
 
-def run_test():
-    robot = Robot()
-    robot.enable_vision()
+
+def main():
     detector = GenderDetector()
 
-    print("\n--- VISION TEST STARTING ---")
-    print("1. Stand in front of the camera.")
-    print("2. Wait for 'person' detection (YOLO).")
-    print("3. System will then classify gender.")
+    cap = cv2.VideoCapture('/dev/video10')
+    if not cap.isOpened():
+        print("ERROR: Cannot open /dev/video10")
+        return
 
-    while True:
-        frame = robot.get_camera_frame()
-        if frame is None: continue
+    print("\n--- GENDER DETECTION TEST ---")
+    print("Stand in front of the camera.")
+    print("Customer A = Female")
+    print("Customer B = Male")
+    print("Press Ctrl+C to stop.\n")
 
-        # Check YOLO for person detection
-        person_seen = robot.get_detections("person")
-        
-        display_frame = frame.copy()
-        
-        if person_seen:
-            # We found a person, now look for gender
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                print("[ERROR] Frame capture failed")
+                time.sleep(0.5)
+                continue
+
             gender, conf = detector.detect(frame)
-            
+
             if gender:
-                color = (0, 255, 0) if gender == "Female" else (255, 0, 0)
-                label = f"CUSTOMER: {gender} ({conf:.2f})"
-                cv2.putText(display_frame, label, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-                print(f"[LIVE] {gender} detected - Confidence: {conf:.2f}")
-        else:
-            cv2.putText(display_frame, "STATUS: No Person in view", (50, 50), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                customer = "Customer A" if gender == "Female" else "Customer B"
+                print(f"[DETECTED] {gender} ({conf:.2f}) → deliver to {customer}")
+            else:
+                print("[WAITING]  No face detected")
 
-        cv2.imshow("Vision Pipeline Test", display_frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            time.sleep(0.5)
 
-    cv2.destroyAllWindows()
+    except KeyboardInterrupt:
+        print("\nTest stopped.")
+    finally:
+        cap.release()
+
 
 if __name__ == "__main__":
-    run_test()
+    main()
