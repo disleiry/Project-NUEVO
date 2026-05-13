@@ -109,7 +109,7 @@ INFLATION_MARGIN_MM = 150.0
 LEASH_HALF_ANGLE_DEG = 25.0
 
 STATUS_PRINT_INTERVAL_S = 0.5
-STAGE_PAUSE_S = 0.10
+STAGE_PAUSE_S = 0.00
 
 
 def resolve_lapf_config() -> dict[str, float]:
