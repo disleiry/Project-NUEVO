@@ -87,7 +87,7 @@ PATH_CONTROL_POINTS = [
 ]
 
 # Optional: densify long segments for smoother tracking.
-PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=50.0)
+PATH_CONTROL_POINTS = densify_polyline(PATH_CONTROL_POINTS, spacing=100.0)
 
 
 # ---------------------------------------------------------------------------
