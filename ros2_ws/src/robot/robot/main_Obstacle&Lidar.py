@@ -169,7 +169,7 @@ def configure_robot(robot: Robot) -> None:
     robot.set_odometry_parameters(
         wheel_diameter=WHEEL_DIAMETER,
         wheel_base=WHEEL_BASE,
-        initial_theta_deg=INITIAL_THETA_DEG,
+        initial_theta_deg=INITIAL_THETA_DEG + START_HEADING_OFFSET_DEG,
         left_motor_id=LEFT_WHEEL_MOTOR,
         left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
         right_motor_id=RIGHT_WHEEL_MOTOR,
