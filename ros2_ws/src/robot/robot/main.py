@@ -80,8 +80,15 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 #   lapf_to_goal(), so LiDAR can push the robot around obstacles while it still
 #   progresses toward the intended path.
 
+ALIGN_FORWARD_MM = 500.0
+ALIGN_LEFT_OFFSET_MM = -134.0
+
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
+
+    (ALIGN_LEFT_OFFSET_MM, ALIGN_FORWARD_MM),  # Alignment 1: move ~15 degrees left
+    (0.0, 2.0 * ALIGN_FORWARD_MM),             # Alignment 2: face forward again
+   
     (0.0, 3250.0),      # Waypoint 1: home straight
     (600.0, 3250.0),    # Waypoint 2: transition / turn
     (600.0, 400.0),     # Waypoint 3: ramp / return direction
@@ -162,14 +169,13 @@ def resolve_lapf_config() -> dict[str, float]:
         "leash_half_angle_deg": float(LEASH_HALF_ANGLE_DEG),
     }
 
-START_HEADING_OFFSET_DEG = 15.0 # line added
 
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(
         wheel_diameter=WHEEL_DIAMETER,
         wheel_base=WHEEL_BASE,
-        initial_theta_deg=INITIAL_THETA_DEG + START_HEADING_OFFSET_DEG,
+        initial_theta_deg=INITIAL_THETA_DEG,
         left_motor_id=LEFT_WHEEL_MOTOR,
         left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
         right_motor_id=RIGHT_WHEEL_MOTOR,
