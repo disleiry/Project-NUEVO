@@ -337,6 +337,7 @@ def _print_save_status(
 
 
 def run(robot: Robot) -> None:
+    global JOG_STEP_TICKS  
     robot.set_unit(POSITION_UNIT)
 
     state = "INIT"
