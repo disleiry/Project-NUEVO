@@ -97,11 +97,11 @@ HOME_DIRECTION = -1
 HOME_VELOCITY_TICKS = 80
 
 # Velocity used for jog moves and return-to-origin (ticks/s).
-JOG_VELOCITY_TICKS = 1000
+JOG_VELOCITY_TICKS = 500
 
 # How many ticks each BTN_2 / BTN_3 press moves the lift.
 # Smaller = more precise alignment; increase for faster coarse moves.
-JOG_STEP_TICKS = 1000
+JOG_STEP_TICKS = 500
 
 # Position tolerance accepted as "at target" (ticks).
 POSITION_TOLERANCE = 30
