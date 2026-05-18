@@ -429,17 +429,26 @@ def run(robot: Robot) -> None:
         elif state == "JOG":
             current_ticks = get_lift_ticks(robot)
 
+            # ── BTN_1 = Toggle Step Size (500 vs 100) ─────────────────────
+            if robot.was_button_pressed(Button.BTN_1):
+                if JOG_STEP_TICKS == 500:
+                    JOG_STEP_TICKS = 100
+                    print("\n[JOG Mode] Switched to FINE adjustments (100 ticks per press)")
+                else:
+                    JOG_STEP_TICKS = 500
+                    print("\n[JOG Mode] Switched to COARSE adjustments (500 ticks per press)")
+
             # ── BTN_2 = jog UP ────────────────────────────────────────────
-            if robot.was_button_pressed(Button.BTN_2):
+            elif robot.was_button_pressed(Button.BTN_2):
                 target = current_ticks + JOG_STEP_TICKS
                 if target > SOFT_MAX_TICKS:
                     print(f"[JOG] Soft limit reached ({SOFT_MAX_TICKS} ticks) — cannot go higher")
                 else:
-                    print(f"[JOG] UP  → {target} ticks")
+                    print(f"[JOG] UP  → {target} ticks (step: {JOG_STEP_TICKS})")
                     move_lift_to(robot, target)
                     new_pos = get_lift_ticks(robot)
                     print(f"[JOG] Position now: {new_pos} ticks")
-                    session_log.append(f"Jog UP  → {new_pos} ticks")
+                    session_log.append(f"Jog UP  → {new_pos} ticks (step {JOG_STEP_TICKS})")
 
             # ── BTN_3 = jog DOWN ──────────────────────────────────────────
             elif robot.was_button_pressed(Button.BTN_3):
@@ -447,11 +456,11 @@ def run(robot: Robot) -> None:
                 if target < 0:
                     print("[JOG] Already at or below origin — cannot go lower")
                 else:
-                    print(f"[JOG] DOWN → {target} ticks")
+                    print(f"[JOG] DOWN → {target} ticks (step: {JOG_STEP_TICKS})")
                     move_lift_to(robot, target)
                     new_pos = get_lift_ticks(robot)
                     print(f"[JOG] Position now: {new_pos} ticks")
-                    session_log.append(f"Jog DOWN → {new_pos} ticks")
+                    session_log.append(f"Jog DOWN → {new_pos} ticks (step {JOG_STEP_TICKS})")
 
             # ── BTN_4 = save LIFT_CARRY_TICKS ────────────────────────────
             elif robot.was_button_pressed(Button.BTN_4):
