@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-manual_test.py — Pure Manual Lift Movement Tester
-==================================================
-A clean tool to test raw encoder movement and steps without calibration logic.
+manual_test_no_limits.py — Pure Manual Lift Movement Tester (No Limits)
+========================================================================
+A tool to test raw encoder movement and steps without any boundary constraints.
 
 CONTROLS:
   BTN_1  — Toggle step size (500 -> 100 -> 50 -> 500)
@@ -25,7 +25,6 @@ from robot.robot import FirmwareState, Robot
 LIFT_MOTOR = Motor.DC_M3
 JOG_VELOCITY_TICKS = 1000
 POSITION_TOLERANCE = 30
-SOFT_MAX_TICKS = 20000
 
 def get_lift_ticks(robot: Robot) -> int:
     """Return the current inverted encoder position of the lift motor."""
@@ -35,12 +34,11 @@ def get_lift_ticks(robot: Robot) -> int:
     return -int(dc.motors[LIFT_MOTOR - 1].position)
 
 def move_lift_to(robot: Robot, ticks: int) -> bool:
-    """Move the lift to an absolute encoder position with clamping safety."""
-    clamped = max(0, min(int(ticks), SOFT_MAX_TICKS))
+    """Move the lift to an absolute encoder position with NO CLAMPING LIMITS."""
     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
     return robot.set_motor_position(
         LIFT_MOTOR,
-        -clamped,
+        -int(ticks),  # No max or min limits applied here anymore
         max_vel_ticks=JOG_VELOCITY_TICKS,
         tolerance_ticks=POSITION_TOLERANCE,
         blocking=True,
@@ -67,7 +65,7 @@ def run(robot: Robot) -> None:
     current_step = STEP_OPTIONS[step_index]
 
     print("=" * 60)
-    print(" PURE MANUAL LIFT MOVEMENT TEST RUNNING")
+    print(" UNLIMITED MANUAL LIFT MOVEMENT TEST RUNNING")
     print("=" * 60)
     print(f" Initial position set to 0 ticks.")
     print(f" Current Step Size: {current_step} ticks")
@@ -75,6 +73,7 @@ def run(robot: Robot) -> None:
     print("   BTN_1 : Toggle step size (500 -> 100 -> 50)")
     print("   BTN_2 : Move UP")
     print("   BTN_3 : Move DOWN")
+    print(" WARNING: All software limits are REMOVED. Watch your hard stops!")
     print("=" * 60)
 
     period = 1.0 / float(DEFAULT_FSM_HZ)
@@ -90,25 +89,19 @@ def run(robot: Robot) -> None:
                 current_step = STEP_OPTIONS[step_index]
                 print(f"\n[STEP CHANGED] Mode: {current_step} ticks per press")
 
-            # --- BTN_2: Move UP ---
+            # --- BTN_2: Move UP (No soft limits) ---
             elif robot.was_button_pressed(Button.BTN_2):
                 target = current_ticks + current_step
-                if target > SOFT_MAX_TICKS:
-                    print(f"[LIMIT] Blocked: exceeding soft max ({SOFT_MAX_TICKS} ticks)")
-                else:
-                    print(f"[MOVE] UP to target: {target} ticks (Using step: {current_step})")
-                    move_lift_to(robot, target)
-                    print(f"[READOUT] Actual position reached: {get_lift_ticks(robot)} ticks")
+                print(f"[MOVE] UP to target: {target} ticks (Using step: {current_step})")
+                move_lift_to(robot, target)
+                print(f"[READOUT] Actual position reached: {get_lift_ticks(robot)} ticks")
 
-            # --- BTN_3: Move DOWN ---
+            # --- BTN_3: Move DOWN (Allows negative values below 0) ---
             elif robot.was_button_pressed(Button.BTN_3):
                 target = current_ticks - current_step
-                if target < 0:
-                    print("[LIMIT] Blocked: cannot move below encoder 0 origin")
-                else:
-                    print(f"[MOVE] DOWN to target: {target} ticks (Using step: {current_step})")
-                    move_lift_to(robot, target)
-                    print(f"[READOUT] Actual position reached: {get_lift_ticks(robot)} ticks")
+                print(f"[MOVE] DOWN to target: {target} ticks (Using step: {current_step})")
+                move_lift_to(robot, target)
+                print(f"[READOUT] Actual position reached: {get_lift_ticks(robot)} ticks")
 
             # Timing loop control
             next_tick += period
@@ -121,6 +114,5 @@ def run(robot: Robot) -> None:
     except KeyboardInterrupt:
         print("\nStopping script cleanly...")
     finally:
-        # Emergency safety cutoff on exit to stop manual motor hum
         robot.disable_motor(LIFT_MOTOR)
         print("Motor safely deactivated.")
