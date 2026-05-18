@@ -97,11 +97,11 @@ HOME_DIRECTION = -1
 HOME_VELOCITY_TICKS = 80
 
 # Velocity used for jog moves and return-to-origin (ticks/s).
-JOG_VELOCITY_TICKS = 500
+JOG_VELOCITY_TICKS = 200
 
 # How many ticks each BTN_2 / BTN_3 press moves the lift.
 # Smaller = more precise alignment; increase for faster coarse moves.
-JOG_STEP_TICKS = 500
+JOG_STEP_TICKS = 50
 
 # Position tolerance accepted as "at target" (ticks).
 POSITION_TOLERANCE = 30
@@ -109,7 +109,7 @@ POSITION_TOLERANCE = 30
 # Safety: how many ticks above origin the lift is allowed to travel.
 # Acts as a soft upper limit during calibration to protect the mechanism.
 # Set to a generous value — you will save the real heights via BTN_4/6/7 in JOG mode.
-SOFT_MAX_TICKS = 15000
+SOFT_MAX_TICKS = 8000
 
 # Timeouts
 HOME_TIMEOUT_S     = 15.0   # homing can take a while
