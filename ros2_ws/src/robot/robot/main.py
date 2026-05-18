@@ -257,10 +257,8 @@ def home_lift(robot: Robot) -> bool:
 
 def return_to_origin(robot: Robot) -> None:
     """
-    Move the lift back to encoder position 0 (the homed origin) and then
-    disable the motor so the next power-on also reads 0 at that position.
-
-    Call this before every shutdown — calibration or mission.
+    Move the lift back to encoder position 0 by stepping downward,
+    preventing 16-bit integer overflows when coming down from high tick counts.
     """
     print("\n[ORIGIN] ── Returning lift to origin before shutdown ──")
     current = get_lift_ticks(robot)
@@ -268,17 +266,40 @@ def return_to_origin(robot: Robot) -> None:
 
     if abs(current) <= POSITION_TOLERANCE:
         print("[ORIGIN] Already at origin — no move needed.")
+        robot.disable_motor(LIFT_MOTOR)
+        return
+
+    print("[ORIGIN] Descending to 0 ticks via controlled stepping...")
+    
+    # Step downward using your known working JOG logic until we hit 0
+    while current > POSITION_TOLERANCE:
+        # Calculate a safe downward step (clamped to 1000 ticks or the remaining distance)
+        step = min(1000, current)
+        target = current - step
+        
+        # Use your proven working move function
+        move_lift_to(robot, target)
+        
+        # Check new position
+        new_current = get_lift_ticks(robot)
+        
+        # Safety check: If it didn't move or moved UP, break to prevent a loop
+        if new_current >= current and target != 0:
+            print("[warn] ORIGIN — Lift is not descending. Aborting step-down for safety.")
+            break
+            
+        current = new_current
+        time.sleep(0.05) # Tiny pause between steps to let the firmware breathe
+
+    # Final verification
+    final_pos = get_lift_ticks(robot)
+    if abs(final_pos) <= POSITION_TOLERANCE:
+        print(f"[ORIGIN] Lift successfully reached origin ({final_pos} ticks).")
     else:
-        # Use your wrapper function instead of calling robot.set_motor_position directly
-        ok = move_lift_to(robot, 0, timeout=RETURN_TIMEOUT_S)
-        if ok:
-            print("[ORIGIN] Lift reached origin (0 ticks).")
-        else:
-            print("[warn] ORIGIN — lift may not have reached 0 — check mechanism.")
+        print(f"[warn] ORIGIN — Lift stopped at {final_pos} ticks. Check mechanism.")
 
     robot.disable_motor(LIFT_MOTOR)
-    print("[ORIGIN] Motor disabled.  Safe to power off.")
-
+    print("[ORIGIN] Motor disabled. Safe to power off.")
 # ===========================================================================
 # STARTUP
 # ===========================================================================
