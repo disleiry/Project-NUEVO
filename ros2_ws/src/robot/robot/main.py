@@ -84,7 +84,7 @@ ALIGN_FORWARD_MM = 500.0
 ALIGN_LEFT_OFFSET_MM = -134.0
 
 PURE_PURSUIT_CONTROL_POINTS = [
-    #(0.0, 0.0),        # start
+    (0.0, 0.0),        # start
 
     (ALIGN_LEFT_OFFSET_MM, ALIGN_FORWARD_MM),  # Alignment 1: move ~15 degrees left
     (0.0, 2.0 * ALIGN_FORWARD_MM),             # Alignment 2: face forward again
