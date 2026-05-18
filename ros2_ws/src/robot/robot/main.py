@@ -269,15 +269,8 @@ def return_to_origin(robot: Robot) -> None:
     if abs(current) <= POSITION_TOLERANCE:
         print("[ORIGIN] Already at origin — no move needed.")
     else:
-        robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-        ok = robot.set_motor_position(
-            LIFT_MOTOR,
-            0,
-            max_vel_ticks=JOG_VELOCITY_TICKS,
-            tolerance_ticks=POSITION_TOLERANCE,
-            blocking=True,
-            timeout=RETURN_TIMEOUT_S,
-        )
+        # Use your wrapper function instead of calling robot.set_motor_position directly
+        ok = move_lift_to(robot, 0, timeout=RETURN_TIMEOUT_S)
         if ok:
             print("[ORIGIN] Lift reached origin (0 ticks).")
         else:
@@ -285,7 +278,6 @@ def return_to_origin(robot: Robot) -> None:
 
     robot.disable_motor(LIFT_MOTOR)
     print("[ORIGIN] Motor disabled.  Safe to power off.")
-
 
 # ===========================================================================
 # STARTUP
