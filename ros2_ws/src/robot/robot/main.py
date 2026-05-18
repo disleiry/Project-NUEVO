@@ -24,7 +24,7 @@ from robot.robot import FirmwareState, Robot
 # --- CONFIGURATION ---
 LIFT_MOTOR = Motor.DC_M3
 JOG_VELOCITY_TICKS = 1000
-POSITION_TOLERANCE = 30
+POSITION_TOLERANCE = 10
 
 def get_lift_ticks(robot: Robot) -> int:
     """Return the current inverted encoder position of the lift motor."""
