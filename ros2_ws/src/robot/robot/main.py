@@ -101,7 +101,7 @@ JOG_VELOCITY_TICKS = 200
 
 # How many ticks each BTN_2 / BTN_3 press moves the lift.
 # Smaller = more precise alignment; increase for faster coarse moves.
-JOG_STEP_TICKS = 50
+JOG_STEP_TICKS = 500
 
 # Position tolerance accepted as "at target" (ticks).
 POSITION_TOLERANCE = 30
