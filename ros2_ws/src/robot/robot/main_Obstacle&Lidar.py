@@ -162,7 +162,7 @@ def resolve_lapf_config() -> dict[str, float]:
         "leash_half_angle_deg": float(LEASH_HALF_ANGLE_DEG),
     }
 
-START_HEADING_OFFSET_DEG = -15.0 # line added
+START_HEADING_OFFSET_DEG = 15.0 # line added
 
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
