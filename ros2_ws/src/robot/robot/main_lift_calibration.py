@@ -97,11 +97,11 @@ HOME_DIRECTION = -1
 HOME_VELOCITY_TICKS = 80
 
 # Velocity used for jog moves and return-to-origin (ticks/s).
-JOG_VELOCITY_TICKS = 1000
+JOG_VELOCITY_TICKS = 500
 
 # How many ticks each BTN_2 / BTN_3 press moves the lift.
 # Smaller = more precise alignment; increase for faster coarse moves.
-JOG_STEP_TICKS = 1000
+JOG_STEP_TICKS = 500
 
 # Position tolerance accepted as "at target" (ticks).
 POSITION_TOLERANCE = 30
@@ -114,7 +114,7 @@ SOFT_MAX_TICKS = 20000
 # Timeouts
 HOME_TIMEOUT_S     = 15.0   # homing can take a while
 MOVE_TIMEOUT_S     = 10.0   # position moves
-RETURN_TIMEOUT_S   = 12.0   # return-to-origin on shutdown
+RETURN_TIMEOUT_S   = 30.0   # return-to-origin on shutdown
 
 # Backoff after homing: move this many ticks away from the limit switch so
 # the switch is no longer pressed when we call reset_motor_position().
@@ -257,10 +257,8 @@ def home_lift(robot: Robot) -> bool:
 
 def return_to_origin(robot: Robot) -> None:
     """
-    Move the lift back to encoder position 0 (the homed origin) and then
-    disable the motor so the next power-on also reads 0 at that position.
-
-    Call this before every shutdown — calibration or mission.
+    Move the lift back to encoder position 0 by stepping downward,
+    preventing 16-bit integer overflows when coming down from high tick counts.
     """
     print("\n[ORIGIN] ── Returning lift to origin before shutdown ──")
     current = get_lift_ticks(robot)
@@ -268,25 +266,40 @@ def return_to_origin(robot: Robot) -> None:
 
     if abs(current) <= POSITION_TOLERANCE:
         print("[ORIGIN] Already at origin — no move needed.")
+        robot.disable_motor(LIFT_MOTOR)
+        return
+
+    print("[ORIGIN] Descending to 0 ticks via controlled stepping...")
+    
+    # Step downward using your known working JOG logic until we hit 0
+    while current > POSITION_TOLERANCE:
+        # Calculate a safe downward step (clamped to 1000 ticks or the remaining distance)
+        step = min(1000, current)
+        target = current - step
+        
+        # Use your proven working move function
+        move_lift_to(robot, target)
+        
+        # Check new position
+        new_current = get_lift_ticks(robot)
+        
+        # Safety check: If it didn't move or moved UP, break to prevent a loop
+        if new_current >= current and target != 0:
+            print("[warn] ORIGIN — Lift is not descending. Aborting step-down for safety.")
+            break
+            
+        current = new_current
+        time.sleep(0.05) # Tiny pause between steps to let the firmware breathe
+
+    # Final verification
+    final_pos = get_lift_ticks(robot)
+    if abs(final_pos) <= POSITION_TOLERANCE:
+        print(f"[ORIGIN] Lift successfully reached origin ({final_pos} ticks).")
     else:
-        robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-        ok = robot.set_motor_position(
-            LIFT_MOTOR,
-            0,
-            max_vel_ticks=JOG_VELOCITY_TICKS,
-            tolerance_ticks=POSITION_TOLERANCE,
-            blocking=True,
-            timeout=RETURN_TIMEOUT_S,
-        )
-        if ok:
-            print("[ORIGIN] Lift reached origin (0 ticks).")
-        else:
-            print("[warn] ORIGIN — lift may not have reached 0 — check mechanism.")
+        print(f"[warn] ORIGIN — Lift stopped at {final_pos} ticks. Check mechanism.")
 
     robot.disable_motor(LIFT_MOTOR)
-    print("[ORIGIN] Motor disabled.  Safe to power off.")
-
-
+    print("[ORIGIN] Motor disabled. Safe to power off.")
 # ===========================================================================
 # STARTUP
 # ===========================================================================
@@ -324,6 +337,7 @@ def _print_save_status(
 
 
 def run(robot: Robot) -> None:
+    global JOG_STEP_TICKS  
     robot.set_unit(POSITION_UNIT)
 
     state = "INIT"
@@ -416,17 +430,26 @@ def run(robot: Robot) -> None:
         elif state == "JOG":
             current_ticks = get_lift_ticks(robot)
 
+            # ── BTN_1 = Toggle Step Size (500 vs 100) ─────────────────────
+            if robot.was_button_pressed(Button.BTN_1):
+                if JOG_STEP_TICKS == 500:
+                    JOG_STEP_TICKS = 100
+                    print("\n[JOG Mode] Switched to FINE adjustments (100 ticks per press)")
+                else:
+                    JOG_STEP_TICKS = 500
+                    print("\n[JOG Mode] Switched to COARSE adjustments (500 ticks per press)")
+
             # ── BTN_2 = jog UP ────────────────────────────────────────────
-            if robot.was_button_pressed(Button.BTN_2):
+            elif robot.was_button_pressed(Button.BTN_2):
                 target = current_ticks + JOG_STEP_TICKS
                 if target > SOFT_MAX_TICKS:
                     print(f"[JOG] Soft limit reached ({SOFT_MAX_TICKS} ticks) — cannot go higher")
                 else:
-                    print(f"[JOG] UP  → {target} ticks")
+                    print(f"[JOG] UP  → {target} ticks (step: {JOG_STEP_TICKS})")
                     move_lift_to(robot, target)
                     new_pos = get_lift_ticks(robot)
                     print(f"[JOG] Position now: {new_pos} ticks")
-                    session_log.append(f"Jog UP  → {new_pos} ticks")
+                    session_log.append(f"Jog UP  → {new_pos} ticks (step {JOG_STEP_TICKS})")
 
             # ── BTN_3 = jog DOWN ──────────────────────────────────────────
             elif robot.was_button_pressed(Button.BTN_3):
@@ -434,11 +457,11 @@ def run(robot: Robot) -> None:
                 if target < 0:
                     print("[JOG] Already at or below origin — cannot go lower")
                 else:
-                    print(f"[JOG] DOWN → {target} ticks")
+                    print(f"[JOG] DOWN → {target} ticks (step: {JOG_STEP_TICKS})")
                     move_lift_to(robot, target)
                     new_pos = get_lift_ticks(robot)
                     print(f"[JOG] Position now: {new_pos} ticks")
-                    session_log.append(f"Jog DOWN → {new_pos} ticks")
+                    session_log.append(f"Jog DOWN → {new_pos} ticks (step {JOG_STEP_TICKS})")
 
             # ── BTN_4 = save LIFT_CARRY_TICKS ────────────────────────────
             elif robot.was_button_pressed(Button.BTN_4):
