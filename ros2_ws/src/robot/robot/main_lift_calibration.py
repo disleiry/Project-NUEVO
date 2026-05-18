@@ -104,7 +104,7 @@ JOG_VELOCITY_TICKS = 500
 JOG_STEP_TICKS = 500
 
 # Position tolerance accepted as "at target" (ticks).
-POSITION_TOLERANCE = 30
+POSITION_TOLERANCE = 10
 
 # Safety: how many ticks above origin the lift is allowed to travel.
 # Acts as a soft upper limit during calibration to protect the mechanism.
