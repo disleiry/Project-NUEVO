@@ -36,11 +36,11 @@ from robot.robot import FirmwareState, Robot
 # ===========================================================================
 
 LIFT_MOTOR         = Motor.DC_M3
-LIFT_CARRY_TICKS   = -4500   # TODO: PUT YOUR CALIBRATED VALUE HERE
-LIFT_PICKUP_TICKS  = -2500    # TODO: PUT YOUR CALIBRATED VALUE HERE
-LIFT_DROPOFF_TICKS = -2500    # TODO: PUT YOUR CALIBRATED VALUE HERE
+LIFT_CARRY_TICKS   = -11500   # TODO: PUT YOUR CALIBRATED VALUE HERE
+LIFT_PICKUP_TICKS  = -7500    # TODO: PUT YOUR CALIBRATED VALUE HERE
+LIFT_DROPOFF_TICKS = -7500    # TODO: PUT YOUR CALIBRATED VALUE HERE
 LIFT_DOWN_TICKS    = 0       
-LIFT_MAX_VEL       = 200     
+LIFT_MAX_VEL       = 800     
 LIFT_TOLERANCE     = 30      
 LIFT_JOG_STEP      = 100      
 LIFT_TIMEOUT_S     = 10.0    # 10-second timeout to allow full travel
