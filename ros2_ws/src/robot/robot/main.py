@@ -1,61 +1,51 @@
 """
-lift_calibration.py — Interactive Lift Motor Calibration
-=========================================================
-Use this tool to find and verify all encoder tick values for the lift motor
-before running the full mission.
+test_burger_pickup.py — Burger Pickup Isolated Test
+====================================================
+Runs ONLY Section 1 of the full mission so you can test and tune the
+pickup sequence independently, without the ramp / obstacle / drop-off code
+getting in the way.
 
-TICK VALUES THIS TOOL MEASURES
--------------------------------
-  LIFT_CARRY_TICKS   — height the lift holds while the robot is driving
-                       (burger gripped, arm clear of the floor)
-  LIFT_PICKUP_TICKS  — height the claw lowers to in order to grab an
-                       ingredient off the shelf
-  LIFT_DROPOFF_TICKS — height the claw lowers to for the final drop-off
-                       placement
-
-  LIFT_DOWN_TICKS    — always 0 (the Sharpie-mark origin); no save button
-                       needed, this value never changes.
-
-ENCODER / ORIGIN RULE
+What this script does
 ---------------------
-The Arduino does NOT persist encoder positions across power cycles.
-Every power-on resets the encoder to 0 at whatever physical position the
-lift happens to be in.
+  1. INIT        — interactive lift alignment to the Sharpie mark (same as
+                   main_full_mission.py so encoder discipline is preserved)
+  2. WAIT_GREEN  — waits for a green traffic light, or BTN_5 to skip
+  3. BURGER_PICKUP → ... → PICK_UP_BURGER
+                 — drives to the shelf row, picks each ingredient in order,
+                   stacks them at the assembly slot, grips the assembled burger
+  4. HOLD        — lift stays at carry height, robot stops in place.
+                   This is the position it would be in just before the ramp.
+                   Press BTN_5 to trigger the safe shutdown sequence.
+  5. RETURN_HOME — drives the lift back to the Sharpie-mark origin and
+                   disables the motor. Safe to power off.
 
-To keep the saved tick values valid across runs, the lift carriage must be
-at the Sharpie-mark origin before every power-off.  This tool enforces that:
+Controls
+--------
+  INIT_JOG state:
+    BTN_1   jog lift UP   (+LIFT_JOG_STEP ticks)
+    BTN_2   jog lift DOWN (-LIFT_JOG_STEP ticks)
+    BTN_10  confirm Sharpie-mark alignment → zero encoder → proceed
 
-  • At startup it jogs the lift interactively to the Sharpie mark and zeros
-    the encoder there (BTN_1 → HOMING state does this automatically with the
-    limit switch, or you confirm manually when USE_LIMIT_SWITCH = False).
-  • All tick values are measured relative to that zeroed origin.
-  • Before exit it always returns the lift to the origin so the next
-    power-on starts from the same physical height.
+  WAIT_GREEN state:
+    BTN_5   skip traffic-light detection (bench-test override)
+
+  HOLD state (test complete, burger gripped):
+    BTN_5   return lift to origin and exit
+
+  Any active state (except INIT / INIT_JOG / WAIT_GREEN):
+    BTN_2   emergency stop → lift returns to origin → halt
 
 HOW TO RUN
 ----------
-  cp lift_calibration.py main.py
+  cp test_burger_pickup.py main.py
   ros2 run robot robot
 
-CONTROLS  (active in JOG mode)
---------
-  BTN_1  — start calibration / retry homing
-  BTN_2  — jog lift UP   (+JOG_STEP_TICKS per press)
-  BTN_3  — jog lift DOWN (-JOG_STEP_TICKS per press)
-  BTN_4  — save current position as LIFT_CARRY_TICKS
-  BTN_6  — save current position as LIFT_PICKUP_TICKS
-  BTN_7  — save current position as LIFT_DROPOFF_TICKS
-  BTN_5  — return to Sharpie-mark origin and print results (also on exit)
-
-READING YOUR RESULTS
---------------------
-At the end of the session the tool prints a config block to copy directly
-into main_full_mission.py:
-
-    LIFT_CARRY_TICKS   = <value>
-    LIFT_PICKUP_TICKS  = <value>
-    LIFT_DROPOFF_TICKS = <value>
-    LIFT_DOWN_TICKS    = 0        # always 0 — the Sharpie-mark origin
+PRE-RUN CHECKLIST
+-----------------
+  1. Run lift_calibration.py first — paste the resulting tick values below.
+  2. Align the robot at the start position (before the traffic light).
+  3. Confirm INGREDIENT_SLOTS distances match the physical shelf.
+  4. Confirm DIST_TO_INGREDIENT_AREA matches the distance from start to shelf.
 """
 
 from __future__ import annotations
@@ -66,59 +56,94 @@ from robot.hardware_map import (
     Button,
     DCMotorMode,
     DEFAULT_FSM_HZ,
+    INITIAL_THETA_DEG,
     LED,
     LEDMode,
+    LEFT_WHEEL_DIR_INVERTED,
+    LEFT_WHEEL_MOTOR,
     Limit,
     Motor,
     POSITION_UNIT,
+    RIGHT_WHEEL_DIR_INVERTED,
+    RIGHT_WHEEL_MOTOR,
+    ServoChannel,
+    WHEEL_BASE,
+    WHEEL_DIAMETER,
 )
 from robot.robot import FirmwareState, Robot
 
 
 # ===========================================================================
-# CALIBRATION CONFIGURATION — edit these to match your build
+# LIFT MOTOR — paste values from lift_calibration.py
 # ===========================================================================
 
-# Which DC motor drives the lift.
-LIFT_MOTOR = Motor.DC_M3
+LIFT_MOTOR         = Motor.DC_M3
+LIFT_CARRY_TICKS   = 11500   # TODO: paste from lift_calibration.py
+LIFT_PICKUP_TICKS  = 7500    # TODO: paste from lift_calibration.py
+LIFT_DROPOFF_TICKS = 7500    # TODO: paste from lift_calibration.py
+LIFT_DOWN_TICKS    = 0      # always 0 — the Sharpie-mark origin
+LIFT_MAX_VEL       = 500    # ticks/s
+LIFT_TOLERANCE     = 10     # ticks
+LIFT_JOG_STEP      = 50     # ticks per BTN press in INIT_JOG
 
-# Set True if a limit switch is wired at the BOTTOM of the lift travel.
-# Set False if you have no limit switch and will manually lower the lift first.
-USE_LIMIT_SWITCH = False   # set True only if you have a physical limit switch
 
-# Which limit-switch input the bottom-of-travel switch is wired to.
-LIFT_HOME_LIMIT = Limit.LIM_1   # change to match your wiring
+# ===========================================================================
+# CLAW SERVO
+# ===========================================================================
 
-# Homing direction: -1 = motor runs in the direction that lowers the lift.
-# If homing moves the lift the wrong way, flip the sign.
-HOME_DIRECTION = -1
+CLAW_SERVO      = ServoChannel.CH_1
+CLAW_OPEN_DEG   = 30.0    # TODO: calibrate
+CLAW_CLOSE_DEG  = 80.0    # TODO: calibrate
 
-# Slow velocity used only for homing (ticks/s).  Keep it gentle.
-HOME_VELOCITY_TICKS = 80
 
-# Velocity used for jog moves and return-to-origin (ticks/s).
-JOG_VELOCITY_TICKS = 500
+# ===========================================================================
+# ULTRASONIC SENSOR ON CLAW
+# ===========================================================================
 
-# How many ticks each BTN_2 / BTN_3 press moves the lift.
-# Smaller = more precise alignment; increase for faster coarse moves.
-JOG_STEP_TICKS = 500
+CLAW_ULTRASONIC_LIM = Limit.LIM_2
+CLAW_GRAB_CONFIRMED = True   # polarity: True = object detected
 
-# Position tolerance accepted as "at target" (ticks).
-POSITION_TOLERANCE = 10
 
-# Safety: how many ticks above origin the lift is allowed to travel.
-# Acts as a soft upper limit during calibration to protect the mechanism.
-# Set to a generous value — you will save the real heights via BTN_4/6/7 in JOG mode.
-SOFT_MAX_TICKS = 20000
+# ===========================================================================
+# DRIVE BASE
+# ===========================================================================
 
-# Timeouts
-HOME_TIMEOUT_S     = 15.0   # homing can take a while
-MOVE_TIMEOUT_S     = 10.0   # position moves
-RETURN_TIMEOUT_S   = 30.0   # return-to-origin on shutdown
+DRIVE_VELOCITY     = 100.0   # mm/s — general cruise
+APPROACH_VELOCITY  = 60.0    # mm/s — shelf approach creep
+TURN_TOLERANCE_DEG = 3.0     # degrees
+POS_TOLERANCE_MM   = 20.0    # mm
 
-# Backoff after homing: move this many ticks away from the limit switch so
-# the switch is no longer pressed when we call reset_motor_position().
-HOME_BACKOFF_TICKS = 30
+
+# ===========================================================================
+# BURGER PICKUP PARAMETERS — match these to main_full_mission.py
+# ===========================================================================
+
+# Distance along Row 1 from the start position to the ingredient shelf row.
+DIST_TO_INGREDIENT_AREA = 610.0    # TODO: measure (mm)
+
+# How far the robot creeps toward the shelf after turning 90° to face it.
+APPROACH_SHELF_DIST = 200.0        # TODO: measure (mm)
+
+# Ingredient slot positions — distance from the shelf-row entry point to each
+# slot, measured forward along the row (not toward the shelf).
+# 0.0 = the slot the robot faces when it first stops at the shelf row.
+INGREDIENT_SLOTS = {
+    "bun_bottom": 0.0,    # TODO: measure (mm)
+    "meat":       150.0,  # TODO: measure (mm)
+    "bun_top":    300.0,  # TODO: measure (mm)
+}
+
+# Order in which to pick ingredients.  First item becomes the stack base.
+INGREDIENT_ORDER = ["bun_bottom", "meat", "bun_top"]
+
+# Slot used as the stacking / assembly zone.
+ASSEMBLY_SLOT = "bun_bottom"
+
+# Maximum pick attempts before the FSM gives up and moves on.
+MAX_PICK_ATTEMPTS = 3
+
+# E-stop immune states (BTN_2 is jog-down during INIT_JOG)
+_ESTOP_IMMUNE = frozenset({"INIT", "INIT_JOG", "WAIT_GREEN"})
 
 
 # ===========================================================================
@@ -139,18 +164,12 @@ def led_moving(robot: Robot) -> None:
     robot.set_led(LED.BLUE, 0)
 
 
-def led_jog(robot: Robot) -> None:
+def led_hold(robot: Robot) -> None:
+    """Slow blue blink = test done, holding position, waiting for BTN_5."""
     robot.set_led(LED.ORANGE, 0)
     robot.set_led(LED.GREEN, 0)
     robot.set_led(LED.RED, 0)
-    robot.set_led(LED.BLUE, 200)
-
-
-def led_done(robot: Robot) -> None:
-    robot.set_led(LED.ORANGE, 0)
-    robot.set_led(LED.GREEN, 200, mode=LEDMode.BLINK, period_ms=400)
-    robot.set_led(LED.RED, 0)
-    robot.set_led(LED.BLUE, 0)
+    robot.set_led(LED.BLUE, 200, mode=LEDMode.BLINK, period_ms=800)
 
 
 def led_error(robot: Robot) -> None:
@@ -160,426 +179,530 @@ def led_error(robot: Robot) -> None:
     robot.set_led(LED.BLUE, 0)
 
 
-# ===========================================================================
-# LOW-LEVEL MOTOR HELPERS
-# ===========================================================================
-
-def get_lift_ticks(robot: Robot) -> int:
-    """Return the current encoder position of the lift motor (ticks)."""
-    dc = robot.get_dc_state()
-    if dc is None:
-        return 0
-    return -int(dc.motors[LIFT_MOTOR - 1].position)
+def led_done(robot: Robot) -> None:
+    robot.set_led(LED.ORANGE, 0)
+    robot.set_led(LED.GREEN, 200, mode=LEDMode.BLINK, period_ms=400)
+    robot.set_led(LED.RED, 0)
+    robot.set_led(LED.BLUE, 0)
 
 
-def move_lift_to(robot: Robot, ticks: int, timeout: float = MOVE_TIMEOUT_S) -> bool:
-    """
-    Move the lift to an absolute encoder position.
-    Clamps to [0, SOFT_MAX_TICKS] to protect the mechanism.
-    Returns True if the target was reached within tolerance.
-    """
-    clamped = max(0, min(int(ticks), SOFT_MAX_TICKS))
-    if clamped != ticks:
-        print(f"[warn] Target {ticks} ticks clamped to {clamped} (soft limit)")
-    robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-    ok = robot.set_motor_position(
-        LIFT_MOTOR,
-        -clamped,
-        max_vel_ticks=JOG_VELOCITY_TICKS,
-        tolerance_ticks=POSITION_TOLERANCE,
-        blocking=True,
-        timeout=timeout,
-    )
-    if not ok:
-        print(f"[warn] Lift did not reach {clamped} ticks within {timeout:.1f}s")
-    return ok
-
-
-# ===========================================================================
-# HOMING — RETURN TO ORIGIN
-# ===========================================================================
-
-def home_lift(robot: Robot) -> bool:
-    """
-    Drive the lift to the origin (lowest position) and zero the encoder there.
-
-    Option A  (USE_LIMIT_SWITCH = True):
-        Runs the motor in HOME_DIRECTION at HOME_VELOCITY_TICKS until the
-        limit switch fires, then backs off HOME_BACKOFF_TICKS and zeroes.
-
-    Option B  (USE_LIMIT_SWITCH = False):
-        The lift must already be at its hard-stop (lowered manually).
-        Just resets the encoder at the current position.
-
-    Returns True on success.
-    """
-    print("[HOME] Returning lift to origin …")
-    robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-
-    if USE_LIMIT_SWITCH:
-        print(f"[HOME] Homing against limit switch (LIM_{LIFT_HOME_LIMIT}) …")
-        ok = robot.home_motor(
-            LIFT_MOTOR,
-            direction=HOME_DIRECTION,
-            home_velocity=HOME_VELOCITY_TICKS,
-            blocking=True,
-            timeout=HOME_TIMEOUT_S,
-        )
-        if not ok:
-            print("[warn] HOME — limit switch not triggered within timeout.")
-            print("       Check the limit switch wiring and HOME_DIRECTION setting.")
-            return False
-
-        # Back off so the switch is released before zeroing
-        if HOME_BACKOFF_TICKS > 0:
-            backoff_dir = -HOME_DIRECTION   # opposite of homing direction
-            back_target = HOME_BACKOFF_TICKS if backoff_dir > 0 else -HOME_BACKOFF_TICKS
-            # Use raw velocity mode for the tiny backoff to avoid chicken-and-egg
-            # (we don't have a zeroed reference yet)
-            robot.enable_motor(LIFT_MOTOR, DCMotorMode.VELOCITY)
-            robot.set_motor_velocity(LIFT_MOTOR, backoff_dir * HOME_VELOCITY_TICKS)
-            time.sleep(abs(HOME_BACKOFF_TICKS) / HOME_VELOCITY_TICKS + 0.1)
-            robot.set_motor_velocity(LIFT_MOTOR, 0)
-            time.sleep(0.1)
-            robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-
-    else:
-        # No limit switch — trust that the operator lowered the lift manually
-        print("[HOME] No limit switch — zeroing at current (manually lowered) position.")
-
-    # Zero the encoder — this is the repeatable origin
-    robot.reset_motor_position(LIFT_MOTOR)
-    time.sleep(0.15)   # allow the firmware to process the reset
-    ticks_after = get_lift_ticks(robot)
-    print(f"[HOME] Encoder zeroed.  Current reading: {ticks_after} ticks (should be ~0)")
-    return True
-
-
-def return_to_origin(robot: Robot) -> None:
-    """
-    Move the lift back to encoder position 0 by stepping downward,
-    preventing 16-bit integer overflows when coming down from high tick counts.
-    """
-    print("\n[ORIGIN] ── Returning lift to origin before shutdown ──")
-    current = get_lift_ticks(robot)
-    print(f"[ORIGIN] Current position: {current} ticks")
-
-    if abs(current) <= POSITION_TOLERANCE:
-        print("[ORIGIN] Already at origin — no move needed.")
-        robot.disable_motor(LIFT_MOTOR)
-        return
-
-    print("[ORIGIN] Descending to 0 ticks via controlled stepping...")
-    
-    # Step downward using your known working JOG logic until we hit 0
-    while current > POSITION_TOLERANCE:
-        # Calculate a safe downward step (clamped to 1000 ticks or the remaining distance)
-        step = min(1000, current)
-        target = current - step
-        
-        # Use your proven working move function
-        move_lift_to(robot, target)
-        
-        # Check new position
-        new_current = get_lift_ticks(robot)
-        
-        # Safety check: If it didn't move or moved UP, break to prevent a loop
-        if new_current >= current and target != 0:
-            print("[warn] ORIGIN — Lift is not descending. Aborting step-down for safety.")
-            break
-            
-        current = new_current
-        time.sleep(0.05) # Tiny pause between steps to let the firmware breathe
-
-    # Final verification
-    final_pos = get_lift_ticks(robot)
-    if abs(final_pos) <= POSITION_TOLERANCE:
-        print(f"[ORIGIN] Lift successfully reached origin ({final_pos} ticks).")
-    else:
-        print(f"[warn] ORIGIN — Lift stopped at {final_pos} ticks. Check mechanism.")
-
-    robot.disable_motor(LIFT_MOTOR)
-    print("[ORIGIN] Motor disabled. Safe to power off.")
 # ===========================================================================
 # STARTUP
 # ===========================================================================
 
 def start_robot(robot: Robot) -> None:
-    current = robot.get_state()
-    if current in (FirmwareState.ESTOP, FirmwareState.ERROR):
+    state = robot.get_state()
+    if state in (FirmwareState.ESTOP, FirmwareState.ERROR):
         robot.reset_estop()
     robot.set_state(FirmwareState.RUNNING)
 
 
-# ===========================================================================
-# MAIN FSM
-# ===========================================================================
-
-
-def _print_save_status(
-    carry:   "int | None",
-    pickup:  "int | None",
-    dropoff: "int | None",
-) -> None:
-    """Print a compact one-line status showing which positions are saved."""
-    def _s(label: str, val: "int | None") -> str:
-        return f"{label}={val}" if val is not None else f"{label}=--"
-    print(
-        f"  Status → {_s('CARRY', carry)}  "
-        f"{_s('PICKUP', pickup)}  "
-        f"{_s('DROPOFF', dropoff)}"
+def configure_robot(robot: Robot) -> None:
+    robot.set_unit(POSITION_UNIT)
+    robot.set_odometry_parameters(
+        wheel_diameter=WHEEL_DIAMETER,
+        wheel_base=WHEEL_BASE,
+        initial_theta_deg=INITIAL_THETA_DEG,
+        left_motor_id=LEFT_WHEEL_MOTOR,
+        left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
+        right_motor_id=RIGHT_WHEEL_MOTOR,
+        right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
     )
-    missing = [n for n, v in [("CARRY", carry), ("PICKUP", pickup), ("DROPOFF", dropoff)] if v is None]
-    if missing:
-        print(f"  Still needed: {', '.join(missing)}")
-    else:
-        print("  All three positions saved — press BTN_5 to finish.")
+    robot.enable_vision()   # for traffic-light detection
 
+
+def reset_pose(robot: Robot) -> None:
+    robot.reset_odometry()
+    if not robot.wait_for_odometry_reset(timeout=2.0):
+        print("[warn] odometry reset not confirmed; continuing")
+        robot.wait_for_pose_update(timeout=0.5)
+
+
+# ===========================================================================
+# LIFT HELPERS
+# ===========================================================================
+
+def get_lift_ticks(robot: Robot) -> int:
+    """Current encoder position in positive ticks (0 = Sharpie-mark origin)."""
+    dc = robot.get_dc_state()
+    if dc is None:
+        return 0
+    return int(dc.motors[LIFT_MOTOR - 1].position)
+
+
+def _lift_move(robot: Robot, ticks: int, label: str, timeout: float = 6.0) -> None:
+    robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+    ok = robot.set_motor_position(
+        LIFT_MOTOR, ticks,
+        max_vel_ticks=LIFT_MAX_VEL,
+        tolerance_ticks=LIFT_TOLERANCE,
+        blocking=True, timeout=timeout,
+    )
+    if not ok:
+        print(f"[warn] lift did not reach {label} ({ticks} ticks) within {timeout:.0f}s")
+
+
+def lift_to_carry(robot: Robot) -> None:
+    print(f"[ARM] Lift → carry height ({LIFT_CARRY_TICKS} ticks)")
+    _lift_move(robot, LIFT_CARRY_TICKS, "CARRY")
+
+
+def lift_to_pickup(robot: Robot) -> None:
+    print(f"[ARM] Lift → pickup height ({LIFT_PICKUP_TICKS} ticks)")
+    _lift_move(robot, LIFT_PICKUP_TICKS, "PICKUP")
+
+
+def lift_to_dropoff(robot: Robot) -> None:
+    print(f"[ARM] Lift → drop-off height ({LIFT_DROPOFF_TICKS} ticks)")
+    _lift_move(robot, LIFT_DROPOFF_TICKS, "DROPOFF")
+
+
+def lift_return_to_zero(robot: Robot) -> None:
+    """Return lift to Sharpie-mark origin (0 ticks) and disable motor."""
+    current = get_lift_ticks(robot)
+    print(f"\n[LIFT] Returning to origin — current: {current} ticks")
+    if abs(current) <= LIFT_TOLERANCE:
+        print("[LIFT] Already at origin.")
+    else:
+        travel_s = abs(current) / LIFT_MAX_VEL
+        timeout  = max(10.0, travel_s * 1.5)
+        robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+        ok = robot.set_motor_position(
+            LIFT_MOTOR, 0,
+            max_vel_ticks=LIFT_MAX_VEL,
+            tolerance_ticks=LIFT_TOLERANCE,
+            blocking=True, timeout=timeout,
+        )
+        if ok:
+            print("[LIFT] Reached origin. Safe to power off.")
+        else:
+            print("[warn] LIFT — did not confirm origin. Align carriage to Sharpie mark manually.")
+    robot.disable_motor(LIFT_MOTOR)
+
+
+# ===========================================================================
+# CLAW HELPERS
+# ===========================================================================
+
+def claw_open(robot: Robot) -> None:
+    robot.enable_servo(CLAW_SERVO)
+    robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+    time.sleep(0.5)
+
+
+def claw_close(robot: Robot) -> None:
+    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+    time.sleep(0.5)
+
+
+def claw_has_object(robot: Robot) -> bool:
+    return robot.get_limit(CLAW_ULTRASONIC_LIM) == CLAW_GRAB_CONFIRMED
+
+
+# ===========================================================================
+# ARM SEQUENCE PRIMITIVES
+# ===========================================================================
+
+def pick_ingredient(robot: Robot) -> bool:
+    """
+    One pick attempt at the current robot position.
+    Robot must already face the shelf and be at approach distance.
+    Returns True if the ultrasonic sensor confirms a successful grab.
+    """
+    claw_open(robot)
+    lift_to_pickup(robot)
+    claw_close(robot)
+    lift_to_carry(robot)
+
+    grabbed = claw_has_object(robot)
+    print("[ARM] Grab confirmed ✓" if grabbed else "[ARM] No object detected in claw")
+    return grabbed
+
+
+def place_ingredient(robot: Robot) -> None:
+    """Release the held object at the current position."""
+    lift_to_pickup(robot)
+    claw_open(robot)
+    time.sleep(0.3)
+    lift_to_carry(robot)
+
+
+# ===========================================================================
+# SHELF NAVIGATION HELPERS
+# ===========================================================================
+
+def turn_to_face_shelf(robot: Robot) -> None:
+    print("[NAV] Turn +90° to face shelf")
+    robot.turn_by(delta_deg=90.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+
+
+def turn_away_from_shelf(robot: Robot) -> None:
+    print("[NAV] Turn −90° to resume heading")
+    robot.turn_by(delta_deg=-90.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+
+
+def approach_shelf(robot: Robot) -> None:
+    print(f"[NAV] Approach shelf {APPROACH_SHELF_DIST:.0f} mm")
+    robot.move_forward(
+        distance=APPROACH_SHELF_DIST,
+        velocity=APPROACH_VELOCITY,
+        tolerance=POS_TOLERANCE_MM,
+        blocking=True,
+    )
+
+
+def retreat_from_shelf(robot: Robot) -> None:
+    print(f"[NAV] Retreat from shelf {APPROACH_SHELF_DIST:.0f} mm")
+    robot.move_forward(
+        distance=-APPROACH_SHELF_DIST,
+        velocity=APPROACH_VELOCITY,
+        tolerance=POS_TOLERANCE_MM,
+        blocking=True,
+    )
+
+
+def drive_to_slot(robot: Robot, from_slot: str | None, to_slot: str) -> None:
+    """Drive along the row to align with to_slot, relative to from_slot."""
+    from_dist = INGREDIENT_SLOTS.get(from_slot, 0.0) if from_slot else 0.0
+    to_dist   = INGREDIENT_SLOTS[to_slot]
+    delta     = to_dist - from_dist
+    if abs(delta) < 1.0:
+        return
+    direction = "fwd" if delta > 0 else "bwd"
+    print(f"[NAV] Drive {direction} {abs(delta):.0f} mm ({from_slot} → {to_slot})")
+    robot.move_forward(
+        distance=delta,
+        velocity=DRIVE_VELOCITY,
+        tolerance=POS_TOLERANCE_MM,
+        blocking=True,
+    )
+
+
+# ===========================================================================
+# VISION HELPER
+# ===========================================================================
+
+def detect_green_light(robot: Robot) -> bool:
+    if not robot.is_vision_active(timeout_s=3.0):
+        return False
+    for det in robot.get_detections("traffic light"):
+        if float(det.get("confidence", 0)) < 0.50:
+            continue
+        color = det.get("attributes", {}).get("color", {}).get("value", "")
+        if color == "green":
+            return True
+    return False
+
+
+# ===========================================================================
+# RUN — PICKUP TEST FSM
+# ===========================================================================
 
 def run(robot: Robot) -> None:
-    global JOG_STEP_TICKS  
-    robot.set_unit(POSITION_UNIT)
+    configure_robot(robot)
+    start_robot(robot)
+    reset_pose(robot)
 
-    state = "INIT"
-
-    # ── Saved tick values — filled by BTN_4 / BTN_6 / BTN_7 in JOG state ──
-    # None means that button has not been pressed yet this session.
-    saved_carry_ticks:   int | None = None   # BTN_4 → LIFT_CARRY_TICKS
-    saved_pickup_ticks:  int | None = None   # BTN_6 → LIFT_PICKUP_TICKS
-    saved_dropoff_ticks: int | None = None   # BTN_7 → LIFT_DROPOFF_TICKS
-    session_log:         list[str]  = []
+    state         = "INIT"
+    current_slot  = None
+    pick_attempts = 0
 
     period    = 1.0 / float(DEFAULT_FSM_HZ)
     next_tick = time.monotonic()
 
-    print("=" * 62)
-    print("  LIFT CALIBRATION TOOL — MAE 162D/E")
-    print("=" * 62)
-    lim_str = "LIM_" + str(int(LIFT_HOME_LIMIT)) if USE_LIMIT_SWITCH else "DISABLED (Sharpie-mark)"
-    print(f"  Limit switch : {lim_str}")
-    print(f"  Jog step     : {JOG_STEP_TICKS} ticks per press")
-    print(f"  Soft max     : {SOFT_MAX_TICKS} ticks")
     print()
-    print("  JOG CONTROLS (active after homing):")
-    print(f"    BTN_2  jog UP   (+{JOG_STEP_TICKS} ticks)")
-    print(f"    BTN_3  jog DOWN (-{JOG_STEP_TICKS} ticks)")
-    print(f"    BTN_4  save LIFT_CARRY_TICKS   (burger-in-hand travel height)")
-    print(f"    BTN_6  save LIFT_PICKUP_TICKS  (lower to grab ingredient)")
-    print(f"    BTN_7  save LIFT_DROPOFF_TICKS (lower to place at drop-off)")
-    print(f"    BTN_5  return to origin and print results")
-    print("=" * 62)
+    print("=" * 56)
+    print("  BURGER PICKUP TEST  —  Section 1 only")
+    print("=" * 56)
+    print(f"  Ingredient order : {INGREDIENT_ORDER}")
+    print(f"  Assembly slot    : {ASSEMBLY_SLOT}")
+    print(f"  Slot distances   : {INGREDIENT_SLOTS}")
+    print(f"  Dist to shelf    : {DIST_TO_INGREDIENT_AREA:.0f} mm")
+    print()
+    print("  LIFT_CARRY_TICKS   =", LIFT_CARRY_TICKS)
+    print("  LIFT_PICKUP_TICKS  =", LIFT_PICKUP_TICKS)
+    print("  LIFT_DROPOFF_TICKS =", LIFT_DROPOFF_TICKS)
+    print("=" * 56)
 
     while True:
 
         # ==================================================================
-        # INIT — start firmware
+        # INIT — enable motor, open claw, show alignment instructions
         # ==================================================================
         if state == "INIT":
-            start_robot(robot)
+            robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+            claw_open(robot)
             led_idle(robot)
-            print("\n[FSM] INIT → WAIT_START")
-            print("  Press BTN_1 to begin homing and calibration.")
-            print("  The lift will move to the origin before anything else.")
-            state = "WAIT_START"
+            print()
+            print("─" * 50)
+            print("  LIFT ALIGNMENT — align carriage to Sharpie mark")
+            print("─" * 50)
+            print(f"  BTN_1  jog UP   (+{LIFT_JOG_STEP} ticks)")
+            print(f"  BTN_2  jog DOWN (-{LIFT_JOG_STEP} ticks)")
+            print(f"  BTN_10 confirm alignment → zero encoder → start")
+            print("─" * 50)
+            state = "INIT_JOG"
 
         # ==================================================================
-        # WAIT_START — idle until the operator is ready
+        # INIT_JOG — operator jogs lift to Sharpie mark
         # ==================================================================
-        elif state == "WAIT_START":
-            if robot.was_button_pressed(Button.BTN_1):
-                led_moving(robot)
-                print("\n[FSM] WAIT_START → HOMING")
-                state = "HOMING"
-
-        # ==================================================================
-        # HOMING — drive to origin and zero encoder
-        # ==================================================================
-        elif state == "HOMING":
-            ok = home_lift(robot)
-            if ok:
-                pos = get_lift_ticks(robot)
-                print(f"[FSM] HOMING complete.  Origin set at {pos} ticks.")
-                session_log.append(f"Homed: origin = {pos} ticks")
-                print("\n[FSM] HOMING complete → JOG mode")
-                print("  Jog the lift to each target height and press the matching save button.")
-                print(f"  BTN_2  jog UP   (+{JOG_STEP_TICKS} ticks)")
-                print(f"  BTN_3  jog DOWN (-{JOG_STEP_TICKS} ticks)")
-                print(f"  BTN_4  save LIFT_CARRY_TICKS   (travel height with burger gripped)")
-                print(f"  BTN_6  save LIFT_PICKUP_TICKS  (height to grab an ingredient)")
-                print(f"  BTN_7  save LIFT_DROPOFF_TICKS (height to place at drop-off)")
-                print(f"  BTN_5  return to origin and print results")
-                led_jog(robot)
-                state = "JOG"
-            else:
-                print("[FSM] HOMING failed.  Check wiring / HOME_DIRECTION and try again.")
-                led_error(robot)
-                print("  Press BTN_1 to retry homing.")
-                state = "HOME_RETRY"
-
-        # ==================================================================
-        # HOME_RETRY — wait for retry after a failed home
-        # ==================================================================
-        elif state == "HOME_RETRY":
-            if robot.was_button_pressed(Button.BTN_1):
-                led_moving(robot)
-                state = "HOMING"
-
-        # ==================================================================
-        # JOG — operator jogs the lift up/down to find the raised position
-        # ==================================================================
-        elif state == "JOG":
+        elif state == "INIT_JOG":
             current_ticks = get_lift_ticks(robot)
 
-            # ── BTN_1 = Toggle Step Size (500 vs 100) ─────────────────────
             if robot.was_button_pressed(Button.BTN_1):
-                if JOG_STEP_TICKS == 500:
-                    JOG_STEP_TICKS = 100
-                    print("\n[JOG Mode] Switched to FINE adjustments (100 ticks per press)")
-                else:
-                    JOG_STEP_TICKS = 500
-                    print("\n[JOG Mode] Switched to COARSE adjustments (500 ticks per press)")
+                target = current_ticks + LIFT_JOG_STEP
+                print(f"[JOG] UP  {current_ticks:+6d} → {target:+6d} ticks")
+                robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+                robot.set_motor_position(
+                    LIFT_MOTOR, target,
+                    max_vel_ticks=LIFT_MAX_VEL,
+                    tolerance_ticks=LIFT_TOLERANCE,
+                    blocking=True, timeout=3.0,
+                )
+                print(f"[JOG] Now at: {get_lift_ticks(robot)} ticks")
 
-            # ── BTN_2 = jog UP ────────────────────────────────────────────
             elif robot.was_button_pressed(Button.BTN_2):
-                target = current_ticks + JOG_STEP_TICKS
-                if target > SOFT_MAX_TICKS:
-                    print(f"[JOG] Soft limit reached ({SOFT_MAX_TICKS} ticks) — cannot go higher")
-                else:
-                    print(f"[JOG] UP  → {target} ticks (step: {JOG_STEP_TICKS})")
-                    move_lift_to(robot, target)
-                    new_pos = get_lift_ticks(robot)
-                    print(f"[JOG] Position now: {new_pos} ticks")
-                    session_log.append(f"Jog UP  → {new_pos} ticks (step {JOG_STEP_TICKS})")
+                target = current_ticks - LIFT_JOG_STEP
+                print(f"[JOG] DOWN {current_ticks:+6d} → {target:+6d} ticks")
+                robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+                robot.set_motor_position(
+                    LIFT_MOTOR, target,
+                    max_vel_ticks=LIFT_MAX_VEL,
+                    tolerance_ticks=LIFT_TOLERANCE,
+                    blocking=True, timeout=3.0,
+                )
+                print(f"[JOG] Now at: {get_lift_ticks(robot)} ticks")
 
-            # ── BTN_3 = jog DOWN ──────────────────────────────────────────
-            elif robot.was_button_pressed(Button.BTN_3):
-                target = current_ticks - JOG_STEP_TICKS
-                if target < 0:
-                    print("[JOG] Already at or below origin — cannot go lower")
-                else:
-                    print(f"[JOG] DOWN → {target} ticks (step: {JOG_STEP_TICKS})")
-                    move_lift_to(robot, target)
-                    new_pos = get_lift_ticks(robot)
-                    print(f"[JOG] Position now: {new_pos} ticks")
-                    session_log.append(f"Jog DOWN → {new_pos} ticks (step {JOG_STEP_TICKS})")
-
-            # ── BTN_4 = save LIFT_CARRY_TICKS ────────────────────────────
-            elif robot.was_button_pressed(Button.BTN_4):
-                saved_carry_ticks = get_lift_ticks(robot)
-                tag = "(updated)" if saved_carry_ticks is not None else ""
-                print(f"\n[SAVE] LIFT_CARRY_TICKS = {saved_carry_ticks}  {tag}")
-                print("         Carry height: lift holds this position while driving.")
-                session_log.append(f"SAVED  LIFT_CARRY_TICKS   = {saved_carry_ticks}")
-                _print_save_status(saved_carry_ticks, saved_pickup_ticks, saved_dropoff_ticks)
-
-            # ── BTN_6 = save LIFT_PICKUP_TICKS ───────────────────────────
-            elif robot.was_button_pressed(Button.BTN_6):
-                saved_pickup_ticks = get_lift_ticks(robot)
-                tag = "(updated)" if saved_pickup_ticks is not None else ""
-                print(f"\n[SAVE] LIFT_PICKUP_TICKS = {saved_pickup_ticks}  {tag}")
-                print("         Pickup height: claw lowers to this to grab an ingredient.")
-                session_log.append(f"SAVED  LIFT_PICKUP_TICKS  = {saved_pickup_ticks}")
-                _print_save_status(saved_carry_ticks, saved_pickup_ticks, saved_dropoff_ticks)
-
-            # ── BTN_7 = save LIFT_DROPOFF_TICKS ──────────────────────────
-            elif robot.was_button_pressed(Button.BTN_7):
-                saved_dropoff_ticks = get_lift_ticks(robot)
-                tag = "(updated)" if saved_dropoff_ticks is not None else ""
-                print(f"\n[SAVE] LIFT_DROPOFF_TICKS = {saved_dropoff_ticks}  {tag}")
-                print("         Drop-off height: claw lowers to this to place the burger.")
-                session_log.append(f"SAVED  LIFT_DROPOFF_TICKS = {saved_dropoff_ticks}")
-                _print_save_status(saved_carry_ticks, saved_pickup_ticks, saved_dropoff_ticks)
-
-            # ── BTN_5 = return to origin and print results ────────────────
-            elif robot.was_button_pressed(Button.BTN_5):
-                print("\n[FSM] JOG → RETURN_ORIGIN (BTN_5 pressed)")
-                state = "RETURN_ORIGIN"
-
-        # ==================================================================
-        # RETURN_ORIGIN — move lift back to 0 before shutdown
-        # ==================================================================
-        elif state == "RETURN_ORIGIN":
-            return_to_origin(robot)
-            state = "PRINT_RESULTS"
-
-        # ==================================================================
-        # PRINT_RESULTS — display the calibration block the user needs
-        # ==================================================================
-        elif state == "PRINT_RESULTS":
-            led_done(robot)
-
-            def _fmt(val: "int | None", btn: str) -> str:
-                return str(val) if val is not None else f"NOT SET ({btn} was never pressed)"
-
-            carry   = _fmt(saved_carry_ticks,   "BTN_4")
-            pickup  = _fmt(saved_pickup_ticks,  "BTN_6")
-            dropoff = _fmt(saved_dropoff_ticks, "BTN_7")
-
-            print()
-            print("=" * 62)
-            print("  CALIBRATION COMPLETE")
-            print("  Copy these values into main_full_mission.py")
-            print("=" * 62)
-            print()
-            print(f"  LIFT_CARRY_TICKS   = {carry}")
-            print(f"  LIFT_PICKUP_TICKS  = {pickup}")
-            print(f"  LIFT_DROPOFF_TICKS = {dropoff}")
-            print(f"  LIFT_DOWN_TICKS    = 0          # always 0 — the Sharpie-mark origin")
-            print()
-            all_set = all(v is not None for v in
-                          (saved_carry_ticks, saved_pickup_ticks, saved_dropoff_ticks))
-            if not all_set:
-                print("  !! One or more values were NOT saved this session.")
-                print("     Re-run calibration or set them manually before the mission.")
-                print()
-            print("  Full jog log for this session:")
-            for entry in session_log:
-                print(f"    {entry}")
-            print()
-            print("=" * 62)
-            print("  SHUTDOWN RULE — READ BEFORE POWERING OFF")
-            print("=" * 62)
-            print("  The lift is now at the Sharpie-mark origin (encoder 0).")
-            print("  The robot is SAFE to power off.")
-            print()
-            print("  The encoder resets to 0 at whatever physical position")
-            print("  the lift is in when power is removed.  If the lift is")
-            print("  raised at power-off, the saved tick values will be wrong")
-            print("  on the next run — re-calibration will be required.")
-            print()
-            print("  main_full_mission.py calls lift_return_to_zero() at")
-            print("  mission end and on E-stop to enforce this automatically.")
-            print("=" * 62)
-            print()
-            print("  Press BTN_1 to re-home and run another calibration pass.")
-            print("  Press BTN_5 to exit (lift stays at origin; safe to power off).")
-            state = "DONE"
-
-        # ==================================================================
-        # DONE — offer to re-run or exit
-        # ==================================================================
-        elif state == "DONE":
-            if robot.was_button_pressed(Button.BTN_1):
-                # Reset all saved slots for a fresh calibration pass
-                saved_carry_ticks   = None
-                saved_pickup_ticks  = None
-                saved_dropoff_ticks = None
-                session_log         = []
+            elif robot.was_button_pressed(Button.BTN_10):
+                pre = get_lift_ticks(robot)
+                print(f"[INIT] Zeroing encoder at {pre} ticks …")
+                robot.reset_motor_position(LIFT_MOTOR)
+                time.sleep(0.15)
+                print(f"[INIT] Encoder zeroed. Reading after reset: {get_lift_ticks(robot)} ticks")
+                print("[INIT] Sharpie-mark origin confirmed → WAIT_GREEN")
                 led_moving(robot)
-                print("\n[FSM] DONE → HOMING (new calibration pass)")
-                state = "HOMING"
+                state = "WAIT_GREEN"
 
+        # ==================================================================
+        # WAIT_GREEN — watch camera for green light before starting
+        # BTN_5 skips for bench testing
+        # ==================================================================
+        elif state == "WAIT_GREEN":
+            if detect_green_light(robot):
+                print("[FSM] Green light detected → BURGER_PICKUP")
+                state = "BURGER_PICKUP"
             elif robot.was_button_pressed(Button.BTN_5):
-                # Final safety check — make sure we are at origin before truly exiting
-                current_ticks = get_lift_ticks(robot)
-                if abs(current_ticks) > POSITION_TOLERANCE:
-                    print(f"[warn] Lift is at {current_ticks} ticks — returning to origin first")
-                    return_to_origin(robot)
-                print("[FSM] Calibration tool exiting.  Safe to power off.")
+                print("[FSM] BTN_5 override — skipping traffic light → BURGER_PICKUP")
+                state = "BURGER_PICKUP"
+
+        # ==================================================================
+        # BURGER_PICKUP — drive forward to the shelf row
+        # ==================================================================
+        elif state == "BURGER_PICKUP":
+            print(f"\n[FSM] BURGER_PICKUP — driving {DIST_TO_INGREDIENT_AREA:.0f} mm to shelf row")
+            robot.move_forward(
+                distance=DIST_TO_INGREDIENT_AREA,
+                velocity=DRIVE_VELOCITY,
+                tolerance=POS_TOLERANCE_MM,
+                blocking=True,
+            )
+            robot.stop()
+            current_slot  = None
+            pick_attempts = 0
+            print("[FSM] BURGER_PICKUP → MOVE_TO_MEAT")
+            state = "MOVE_TO_MEAT"
+
+        # ==================================================================
+        # MOVE_TO_MEAT — align with first ingredient slot
+        # ==================================================================
+        elif state == "MOVE_TO_MEAT":
+            target = INGREDIENT_ORDER[0]
+            print(f"\n[FSM] MOVE_TO_MEAT — aligning with '{target}' slot")
+            drive_to_slot(robot, current_slot, target)
+            current_slot  = target
+            pick_attempts = 0
+            turn_to_face_shelf(robot)
+            approach_shelf(robot)
+            robot.stop()
+            state = "PICK_UP_MEAT"
+
+        # ==================================================================
+        # PICK_UP_MEAT — pick first ingredient, retry on miss
+        # ==================================================================
+        elif state == "PICK_UP_MEAT":
+            print(f"\n[FSM] PICK_UP_MEAT — attempt {pick_attempts + 1}/{MAX_PICK_ATTEMPTS}")
+            grabbed = pick_ingredient(robot)
+            pick_attempts += 1
+
+            if grabbed or pick_attempts >= MAX_PICK_ATTEMPTS:
+                if not grabbed:
+                    print("[warn] PICK_UP_MEAT — max retries; continuing anyway")
+                    led_error(robot)
+                    time.sleep(0.5)
+                    led_moving(robot)
+                retreat_from_shelf(robot)
+                turn_away_from_shelf(robot)
+                pick_attempts = 0
+                print("[FSM] PICK_UP_MEAT → MOVE_TO_BURGER_BUN1")
+                state = "MOVE_TO_BURGER_BUN1"
+
+        # ==================================================================
+        # MOVE_TO_BURGER_BUN1 — carry first ingredient to assembly slot
+        # ==================================================================
+        elif state == "MOVE_TO_BURGER_BUN1":
+            print(f"\n[FSM] MOVE_TO_BURGER_BUN1 — carrying to assembly slot '{ASSEMBLY_SLOT}'")
+            drive_to_slot(robot, current_slot, ASSEMBLY_SLOT)
+            current_slot = ASSEMBLY_SLOT
+            turn_to_face_shelf(robot)
+            approach_shelf(robot)
+            robot.stop()
+            state = "PLACE_HELD_OBJECT"
+
+        # ==================================================================
+        # PLACE_HELD_OBJECT — set first ingredient down at assembly slot
+        # ==================================================================
+        elif state == "PLACE_HELD_OBJECT":
+            print(f"\n[FSM] PLACE_HELD_OBJECT — placing '{INGREDIENT_ORDER[0]}'")
+            place_ingredient(robot)
+            retreat_from_shelf(robot)
+            turn_away_from_shelf(robot)
+            pick_attempts = 0
+            print("[FSM] PLACE_HELD_OBJECT → MOVE_TO_BURGER_BUN2")
+            state = "MOVE_TO_BURGER_BUN2"
+
+        # ==================================================================
+        # MOVE_TO_BURGER_BUN2 — align with second ingredient slot
+        # ==================================================================
+        elif state == "MOVE_TO_BURGER_BUN2":
+            target = INGREDIENT_ORDER[1]
+            print(f"\n[FSM] MOVE_TO_BURGER_BUN2 — aligning with '{target}' slot")
+            drive_to_slot(robot, current_slot, target)
+            current_slot  = target
+            pick_attempts = 0
+            turn_to_face_shelf(robot)
+            approach_shelf(robot)
+            robot.stop()
+            state = "PICK_UP_BUN2"
+
+        # ==================================================================
+        # PICK_UP_BUN2 — pick second ingredient, retry on miss
+        # ==================================================================
+        elif state == "PICK_UP_BUN2":
+            print(f"\n[FSM] PICK_UP_BUN2 — attempt {pick_attempts + 1}/{MAX_PICK_ATTEMPTS}")
+            grabbed = pick_ingredient(robot)
+            pick_attempts += 1
+
+            if grabbed or pick_attempts >= MAX_PICK_ATTEMPTS:
+                if not grabbed:
+                    print("[warn] PICK_UP_BUN2 — max retries; continuing anyway")
+                    led_error(robot)
+                    time.sleep(0.5)
+                    led_moving(robot)
+                retreat_from_shelf(robot)
+                turn_away_from_shelf(robot)
+                pick_attempts = 0
+                print("[FSM] PICK_UP_BUN2 → MOVE_TO_BURGER_BUN3")
+                state = "MOVE_TO_BURGER_BUN3"
+
+        # ==================================================================
+        # MOVE_TO_BURGER_BUN3 — carry second ingredient back to assembly slot
+        # ==================================================================
+        elif state == "MOVE_TO_BURGER_BUN3":
+            print(f"\n[FSM] MOVE_TO_BURGER_BUN3 — returning to assembly slot '{ASSEMBLY_SLOT}'")
+            drive_to_slot(robot, current_slot, ASSEMBLY_SLOT)
+            current_slot = ASSEMBLY_SLOT
+            turn_to_face_shelf(robot)
+            approach_shelf(robot)
+            robot.stop()
+            state = "PLACE_HELD_OBJECT1"
+
+        # ==================================================================
+        # PLACE_HELD_OBJECT1 — stack second ingredient onto the first
+        # ==================================================================
+        elif state == "PLACE_HELD_OBJECT1":
+            print(f"\n[FSM] PLACE_HELD_OBJECT1 — stacking '{INGREDIENT_ORDER[1]}'")
+            place_ingredient(robot)
+            retreat_from_shelf(robot)
+            turn_away_from_shelf(robot)
+            pick_attempts = 0
+            print("[FSM] PLACE_HELD_OBJECT1 → PICK_UP_BURGER")
+            state = "PICK_UP_BURGER"
+
+        # ==================================================================
+        # PICK_UP_BURGER — grip the fully assembled burger stack
+        # ==================================================================
+        elif state == "PICK_UP_BURGER":
+            print(f"\n[FSM] PICK_UP_BURGER — attempt {pick_attempts + 1}/{MAX_PICK_ATTEMPTS}")
+            # The assembly slot is current_slot; approach it to grip the stack.
+            turn_to_face_shelf(robot)
+            approach_shelf(robot)
+
+            grabbed = pick_ingredient(robot)
+            pick_attempts += 1
+
+            retreat_from_shelf(robot)
+            turn_away_from_shelf(robot)
+
+            if grabbed or pick_attempts >= MAX_PICK_ATTEMPTS:
+                if not grabbed:
+                    print("[warn] PICK_UP_BURGER — max retries; burger may not be gripped")
+                    led_error(robot)
+                    time.sleep(0.5)
+                    led_moving(robot)
+                pick_attempts = 0
+                print()
+                print("=" * 56)
+                print("  ✓  PICKUP SEQUENCE COMPLETE")
+                print("  Burger is gripped at carry height.")
+                print("  Robot stopped — would proceed to ramp here.")
+                print()
+                print("  BTN_5  → return lift to origin and exit")
+                print("  BTN_2  → emergency stop (also returns to origin)")
+                print("=" * 56)
+                led_hold(robot)
+                state = "HOLD"
+
+        # ==================================================================
+        # HOLD — test complete; robot is stationary, burger held at carry height
+        # Operator inspects the result, then presses BTN_5 to finish cleanly.
+        # ==================================================================
+        elif state == "HOLD":
+            if robot.was_button_pressed(Button.BTN_5):
+                print("\n[FSM] HOLD — BTN_5 pressed → RETURN_HOME")
+                state = "RETURN_HOME"
+
+        # ==================================================================
+        # RETURN_HOME — lower lift to Sharpie-mark origin, disable motor, done
+        # ==================================================================
+        elif state == "RETURN_HOME":
+            robot.stop()
+            lift_return_to_zero(robot)
+            led_done(robot)
+            print()
+            print("=" * 56)
+            print("  Lift at origin. Robot safe to power off.")
+            print("=" * 56)
+            break   # exit the FSM loop — node stays running but run() returns
+
+        # ==================================================================
+        # GLOBAL EMERGENCY STOP — BTN_2 from any non-immune state
+        # ==================================================================
+        if state not in _ESTOP_IMMUNE:
+            if robot.was_button_pressed(Button.BTN_2):
+                print("\n[FSM] !! BTN_2 — EMERGENCY STOP !!")
                 robot.stop()
+                led_error(robot)
+                print("[ESTOP] Returning lift to origin …")
+                try:
+                    lift_return_to_zero(robot)
+                    print("[ESTOP] Lift at origin. Safe to power off.")
+                except Exception as exc:
+                    print(f"[ESTOP] lift_return_to_zero raised: {exc}")
+                    print("[ESTOP] Manually align carriage to Sharpie mark before powering off.")
+                robot.estop()
                 break
 
-        # ── Tick-rate control ──────────────────────────────────────────────
+        # ── tick-rate control ──────────────────────────────────────────────
         next_tick += period
         sleep_s = next_tick - time.monotonic()
         if sleep_s > 0.0:
