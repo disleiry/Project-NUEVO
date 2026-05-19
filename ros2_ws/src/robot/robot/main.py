@@ -85,6 +85,7 @@ LIFT_DOWN_TICKS    = 0       # always 0 — the Sharpie-mark origin
 LIFT_MAX_VEL       = 800     # ticks/s
 LIFT_TOLERANCE     = 30      # Increased to prevent stalling and timeouts
 LIFT_JOG_STEP      = 50      # ticks per BTN press in INIT_JOG
+LIFT_TIMEOUT_S     = 10.0
 
 
 # ===========================================================================
@@ -524,7 +525,6 @@ def run(robot: Robot) -> None:
             elif action_sub_state == "WAIT_OPEN":
                 if time.monotonic() - action_timer >= 0.5:
                     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-                    # Notice blocking=False
                     robot.set_motor_position(LIFT_MOTOR, LIFT_PICKUP_TICKS, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=False)
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_DOWN"
@@ -533,8 +533,8 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 time_elapsed = time.monotonic() - action_timer
                 
-                if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or time_elapsed > 3.0:
-                    if time_elapsed > 3.0:
+                if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
+                    if time_elapsed > LIFT_TIMEOUT_S:
                         print(f"[WARN] Lift timed out going down. Reached: {current} ticks (Target: {LIFT_PICKUP_TICKS})")
                     else:
                         print(f"[ARM] Reached pickup height at: {current} ticks")
@@ -553,8 +553,12 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 time_elapsed = time.monotonic() - action_timer
                 
-                if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > 3.0:
-                    print(f"[ARM] Lift stopped carrying at: {current} ticks")
+                if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
+                    if time_elapsed > LIFT_TIMEOUT_S:
+                        print(f"[WARN] Lift timed out going up. Reached: {current} ticks")
+                    else:
+                        print(f"[ARM] Lift stopped carrying at: {current} ticks")
+                        
                     grabbed = claw_has_object(robot)
                     pick_attempts += 1
                     
@@ -562,7 +566,7 @@ def run(robot: Robot) -> None:
                         if not grabbed:
                             print("[WARN] Max retries reached. Moving on.")
                             led_error(robot)
-                            time.sleep(0.5) # small blip is okay here at the end of the sequence
+                            time.sleep(0.5) 
                             led_moving(robot)
                         else:
                             print("[ARM] Grab confirmed ✓")
@@ -574,7 +578,7 @@ def run(robot: Robot) -> None:
                         state = next_fsm_state
                     else:
                         print(f"[ARM] Grab failed. Retrying ({pick_attempts}/{MAX_PICK_ATTEMPTS}).")
-                        action_sub_state = "OPEN_CLAW" # Loop back to retry
+                        action_sub_state = "OPEN_CLAW" 
 
         # ==================================================================
         # GENERIC NON-BLOCKING PLACE SEQUENCE
@@ -587,8 +591,14 @@ def run(robot: Robot) -> None:
                 
             elif action_sub_state == "WAIT_LIFT_DOWN":
                 current = get_lift_ticks(robot)
-                if abs(current - LIFT_DROPOFF_TICKS) <= LIFT_TOLERANCE or time.monotonic() - action_timer > 3.0:
-                    print(f"[ARM] Lift stopped at dropoff at: {current} ticks")
+                time_elapsed = time.monotonic() - action_timer
+                
+                if abs(current - LIFT_DROPOFF_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
+                    if time_elapsed > LIFT_TIMEOUT_S:
+                        print(f"[WARN] Lift timed out going down. Reached: {current} ticks (Target: {LIFT_DROPOFF_TICKS})")
+                    else:
+                        print(f"[ARM] Lift stopped at dropoff at: {current} ticks")
+                        
                     robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_OPEN"
@@ -601,8 +611,14 @@ def run(robot: Robot) -> None:
                     
             elif action_sub_state == "WAIT_LIFT_UP":
                 current = get_lift_ticks(robot)
-                if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time.monotonic() - action_timer > 3.0:
-                    print(f"[ARM] Lift stopped carrying at: {current} ticks")
+                time_elapsed = time.monotonic() - action_timer
+                
+                if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
+                    if time_elapsed > LIFT_TIMEOUT_S:
+                        print(f"[WARN] Lift timed out going up. Reached: {current} ticks")
+                    else:
+                        print(f"[ARM] Lift stopped carrying at: {current} ticks")
+                        
                     retreat_from_shelf(robot)
                     turn_away_from_shelf(robot)
                     pick_attempts = 0
