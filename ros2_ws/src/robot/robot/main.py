@@ -82,7 +82,7 @@ LIFT_CARRY_TICKS   = 11500   # TODO: paste from lift_calibration.py
 LIFT_PICKUP_TICKS  = 7500    # TODO: paste from lift_calibration.py
 LIFT_DROPOFF_TICKS = 7500    # TODO: paste from lift_calibration.py
 LIFT_DOWN_TICKS    = 0      # always 0 — the Sharpie-mark origin
-LIFT_MAX_VEL       = 500    # ticks/s
+LIFT_MAX_VEL       = 800    # ticks/s
 LIFT_TOLERANCE     = 10     # ticks
 LIFT_JOG_STEP      = 50     # ticks per BTN press in INIT_JOG
 
@@ -230,7 +230,7 @@ def get_lift_ticks(robot: Robot) -> int:
     return int(dc.motors[LIFT_MOTOR - 1].position)
 
 
-def _lift_move(robot: Robot, ticks: int, label: str, timeout: float = 6.0) -> None:
+def _lift_move(robot: Robot, ticks: int, label: str, timeout: float = 20.0) -> None:
     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
     ok = robot.set_motor_position(
         LIFT_MOTOR, ticks,
@@ -265,7 +265,7 @@ def lift_return_to_zero(robot: Robot) -> None:
         print("[LIFT] Already at origin.")
     else:
         travel_s = abs(current) / LIFT_MAX_VEL
-        timeout  = max(10.0, travel_s * 1.5)
+        timeout  = max(15.0, travel_s * 1.5)
         robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
         ok = robot.set_motor_position(
             LIFT_MOTOR, 0,
