@@ -103,9 +103,9 @@ ENABLE_STOP_SIGN_OVERRIDE = True
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
     (300.0, 3250.0),      # Waypoint 1: home straight
-    (900.0, 3250.0),    # Waypoint 2: transition / turn
-    (900.0, 100.0),     # Waypoint 3: ramp / return direction
-    (1500.0, 100.0),    # Waypoint 4: entrance toward obstacle course
+    (850.0, 3250.0),    # Waypoint 2: transition / turn
+    (850.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1500.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
