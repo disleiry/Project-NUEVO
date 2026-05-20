@@ -87,7 +87,7 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 # The robot turns this many degrees in place, then stops and waits.
 # Use 45.0 if the traffic light is farther out of view.
 # If the robot turns the wrong direction, flip the sign.
-TRAFFIC_LIGHT_TURN_DEG = 25.0
+TRAFFIC_LIGHT_TURN_DEG = 45.0
 TURN_TOLERANCE_DEG = 0.5
 
 # Stop sign safety override from the traffic-light example.
