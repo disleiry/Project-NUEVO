@@ -374,4 +374,372 @@ class TurnToHeadingHandle:
         _, _, current_theta = self.robot.get_odometry_pose()
         error_deg = normalize_angle_deg(self.target_theta_deg - float(current_theta))
 
-        if abs(error_deg) <= self.t
+        if abs(error_deg) <= self.tolerance_deg:
+            self.robot.stop()
+            self.done = True
+            return True
+
+        direction = 1.0 if error_deg > 0.0 else -1.0
+        angular_command = direction * self.angular_rad_s
+
+        # Slow down near the target to reduce overshoot.
+        if abs(error_deg) < 8.0:
+            angular_command *= 0.60
+
+        self.robot.set_velocity(0.0, angular_command)
+        return False
+
+
+def start_pure_pursuit_stage(robot: Robot, stage: dict[str, Any]):
+    waypoints = stage["waypoints"]
+    print(
+        f"[FSM] MOVING — pure pursuit stage with {len(waypoints)} waypoints "
+        f"ending at ({waypoints[-1][0]:.0f}, {waypoints[-1][1]:.0f}) mm"
+    )
+
+    return robot.purepursuit_follow_path(
+        waypoints=waypoints,
+        velocity=PURE_PURSUIT_VELOCITY_MM_S,
+        lookahead=LOOKAHEAD_MM,
+        tolerance=PURE_PURSUIT_TOLERANCE_MM,
+        advance_radius=ADVANCE_RADIUS_MM,
+        max_angular_rad_s=PURE_PURSUIT_MAX_ANGULAR_RAD_S,
+        blocking=False,
+    )
+
+
+def start_lapf_stage(robot: Robot, stage: dict[str, Any]):
+    cfg = resolve_lapf_config()
+    goal_x, goal_y = stage["waypoint"]
+
+    print(f"[FSM] MOVING — LAPF obstacle waypoint goal=({goal_x:.0f}, {goal_y:.0f}) mm")
+
+    return robot.lapf_to_goal(
+        goal_x,
+        goal_y,
+        velocity=LAPF_VELOCITY_MM_S,
+        tolerance=LAPF_TOLERANCE_MM,
+        leash_length_mm=cfg["leash_length_mm"],
+        repulsion_range_mm=cfg["repulsion_range_mm"],
+        target_speed_mm_s=cfg["target_speed_mm_s"],
+        max_angular_rad_s=LAPF_MAX_ANGULAR_RAD_S,
+        repulsion_gain=cfg["repulsion_gain"],
+        attraction_gain=cfg["attraction_gain"],
+        force_ema_alpha=cfg["force_ema_alpha"],
+        inflation_margin_mm=cfg["inflation_margin_mm"],
+        leash_half_angle_deg=cfg["leash_half_angle_deg"],
+        blocking=False,
+    )
+
+
+def start_course_stage(robot: Robot, stage_index: int):
+    stage = MISSION_STAGES[stage_index]
+
+    if stage["type"] == "pure_pursuit":
+        return start_pure_pursuit_stage(robot, stage)
+
+    if stage["type"] == "lapf":
+        return start_lapf_stage(robot, stage)
+
+    raise ValueError(f"Unknown stage type: {stage['type']}")
+
+
+# ---------------------------------------------------------------------------
+# Status / config printing
+# ---------------------------------------------------------------------------
+
+def print_course_status(robot: Robot, stage_index: int) -> None:
+    stage = MISSION_STAGES[stage_index]
+    label, x, y, theta = get_best_pose(robot)
+
+    if stage["type"] == "lapf":
+        goal_x, goal_y = stage["waypoint"]
+    else:
+        goal_x, goal_y = stage["waypoints"][-1]
+
+    virtual_target = robot.get_virtual_target()
+    obstacle_tracks = robot.get_obstacle_tracks()
+
+    if virtual_target is None:
+        vt_summary = " vt=(none)"
+    else:
+        vt_summary = f" vt=({virtual_target[0]:6.0f}, {virtual_target[1]:6.0f}) mm"
+
+    if obstacle_tracks:
+        nearest_boundary_mm = min(
+            max(
+                0.0,
+                ((float(track["x"]) - x) ** 2 + (float(track["y"]) - y) ** 2) ** 0.5
+                - float(track["radius"]),
+            )
+            for track in obstacle_tracks
+        )
+        track_summary = f" tracked={len(obstacle_tracks)} nearest_track={nearest_boundary_mm:.0f} mm"
+    else:
+        track_summary = " tracked=0"
+
+    gps_summary = ""
+    if ENABLE_GPS:
+        gps_summary = f" gps={'fresh' if robot.is_gps_active() else 'stale'}"
+
+    print(
+        f"  stage {stage_index + 1}/{len(MISSION_STAGES)} {stage['name']} "
+        f"goal=({goal_x:.0f}, {goal_y:.0f}) mm | "
+        f"{label}=({x:6.0f}, {y:6.0f}) mm θ={theta:5.1f}°"
+        f"{gps_summary}{vt_summary}{track_summary}"
+    )
+
+
+def print_config(robot: Robot) -> None:
+    lapf_cfg = resolve_lapf_config()
+
+    print("[CFG] Traffic-light fixed turn:")
+    print(
+        f"      turn_angle={TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
+        f"turn_speed={TRAFFIC_LIGHT_TURN_RAD_S:.2f} rad/s, "
+        f"return_speed={RETURN_TO_FORWARD_RAD_S:.2f} rad/s, "
+        f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
+    )
+
+    print("[CFG] Pure pursuit control points:")
+    for i, waypoint in enumerate(PURE_PURSUIT_CONTROL_POINTS, start=1):
+        print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
+
+    print("[CFG] LAPF obstacle-course control points:")
+    for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
+        print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
+
+    print(
+        f"[CFG] pure_pursuit velocity={PURE_PURSUIT_VELOCITY_MM_S:.0f} mm/s "
+        f"lookahead={LOOKAHEAD_MM:.0f} mm tolerance={PURE_PURSUIT_TOLERANCE_MM:.0f} mm"
+    )
+    print(
+        f"[CFG] LAPF velocity={LAPF_VELOCITY_MM_S:.0f} mm/s "
+        f"tolerance={LAPF_TOLERANCE_MM:.0f} mm max_angular={LAPF_MAX_ANGULAR_RAD_S:.2f} rad/s"
+    )
+    print(
+        f"[CFG] LAPF leash={lapf_cfg['leash_length_mm']:.0f} mm "
+        f"half_angle={lapf_cfg['leash_half_angle_deg']:.0f}° "
+        f"target_speed={lapf_cfg['target_speed_mm_s']:.0f} mm/s "
+        f"repulsion_range={lapf_cfg['repulsion_range_mm']:.0f} mm "
+        f"repulsion_gain={lapf_cfg['repulsion_gain']:.0f} "
+        f"attraction_gain={lapf_cfg['attraction_gain']:.2f} "
+        f"force_ema_alpha={lapf_cfg['force_ema_alpha']:.2f} "
+        f"inflation={lapf_cfg['inflation_margin_mm']:.0f} mm"
+    )
+
+    if ENABLE_LIDAR:
+        print(
+            f"[CFG] lidar mount=({LIDAR_MOUNT_X_MM:.0f}, {LIDAR_MOUNT_Y_MM:.0f}) mm "
+            f"theta={LIDAR_MOUNT_THETA_DEG:.1f}° filter={LIDAR_RANGE_MIN_MM:.0f}-"
+            f"{LIDAR_RANGE_MAX_MM:.0f} mm fov={LIDAR_FOV_DEG}"
+        )
+        print(
+            f"[CFG] tracker ttl={robot.OBSTACLE_TRACK_TTL_S:.1f}s "
+            f"max_tracks={robot.OBSTACLE_TRACK_MAX_TRACKS} "
+            f"planner_tracks={robot.LAPF_MAX_PLANNER_TRACKS}"
+        )
+
+    if ENABLE_GPS:
+        print(
+            f"[CFG] gps tag_id={TAG_ID} tag_body=({TAG_BODY_OFFSET_X_MM:.0f}, "
+            f"{TAG_BODY_OFFSET_Y_MM:.0f}) mm position_alpha={GPS_POSITION_ALPHA:.2f}"
+        )
+        if ENABLE_GPS_TANGENT_HEADING:
+            print(
+                f"[CFG] heading=gps_tangent alpha={GPS_TANGENT_ALPHA:.2f} "
+                f"min_displacement={GPS_TANGENT_MIN_DISPLACEMENT_MM:.0f} mm"
+            )
+
+
+# ---------------------------------------------------------------------------
+# run() — entry point called by robot_node.py
+# ---------------------------------------------------------------------------
+
+def run(robot: Robot) -> None:
+    configure_robot(robot)
+
+    state = "INIT"
+    course_stage_index = 0
+    motion_handle = None
+    forward_theta_deg = None
+    light_theta_deg = None
+    last_status_print_at = 0.0
+
+    period = 1.0 / float(DEFAULT_FSM_HZ)
+    next_tick = time.monotonic()
+
+    while True:
+        now = time.monotonic()
+
+        # ── INIT ─────────────────────────────────────────────────────────────
+        if state == "INIT":
+            start_robot(robot)
+            reset_mission_pose(robot)
+            dim_all_leds(robot)
+            show_idle_leds(robot)
+            robot.stop()
+            print_config(robot)
+            print("[FSM] IDLE — press BTN_1 to start traffic-light/course mission")
+            state = "IDLE"
+
+        # ── IDLE ─────────────────────────────────────────────────────────────
+        elif state == "IDLE":
+            robot.stop()
+            if robot.was_button_pressed(Button.BTN_1):
+                reset_mission_pose(robot)
+                _, _, forward_theta_deg = robot.get_odometry_pose()
+                light_theta_deg = normalize_angle_deg(forward_theta_deg + TRAFFIC_LIGHT_TURN_DEG)
+
+                dim_all_leds(robot)
+                show_running_leds(robot)
+                print(
+                    f"[FSM] TURN_TO_LIGHT — turning {TRAFFIC_LIGHT_TURN_DEG:+.1f}° in place "
+                    f"from θ={forward_theta_deg:.1f}° to θ={light_theta_deg:.1f}°"
+                )
+
+                motion_handle = TurnToHeadingHandle(
+                    robot=robot,
+                    target_theta_deg=light_theta_deg,
+                    tolerance_deg=TURN_TOLERANCE_DEG,
+                    angular_rad_s=TRAFFIC_LIGHT_TURN_RAD_S,
+                )
+                last_status_print_at = now
+                state = "TURN_TO_LIGHT"
+
+        # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
+        # Turn exactly TRAFFIC_LIGHT_TURN_DEG in place. Do NOT move forward.
+        elif state == "TURN_TO_LIGHT":
+            if robot.was_button_pressed(Button.BTN_2):
+                cancel_motion(robot, motion_handle)
+                motion_handle = None
+                show_idle_leds(robot)
+                print("[FSM] IDLE — mission cancelled while turning to traffic light")
+                state = "IDLE"
+
+            else:
+                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                    _, _, theta = robot.get_odometry_pose()
+                    target_theta = getattr(motion_handle, "target_theta_deg", light_theta_deg)
+                    print(f"  turning to traffic light: θ={theta:.1f}° target={target_theta:.1f}°")
+                    last_status_print_at = now
+
+                if motion_handle is not None and motion_handle.is_finished():
+                    robot.stop()
+                    motion_handle = None
+                    print("[FSM] WAIT_FOR_GREEN — fixed traffic-light angle reached")
+                    state = "WAIT_FOR_GREEN"
+
+        # ── WAIT_FOR_GREEN ───────────────────────────────────────────────────
+        # Stay stopped. Red = wait. Green = turn back to original forward heading.
+        elif state == "WAIT_FOR_GREEN":
+            robot.stop()
+
+            if robot.was_button_pressed(Button.BTN_2):
+                show_idle_leds(robot)
+                print("[FSM] IDLE — mission cancelled while waiting for green")
+                state = "IDLE"
+
+            elif stop_sign_detected(robot):
+                robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
+                robot.set_led(LED.GREEN, 0)
+                print("[VISION] stop sign detected — stopped")
+
+            else:
+                traffic_light_color = find_traffic_light_color(robot)
+
+                if traffic_light_color == "green":
+                    show_traffic_light_color(robot, "green")
+                    print("[VISION] green light — turning back to forward heading")
+                    if forward_theta_deg is None:
+                        _, _, forward_theta_deg = robot.get_odometry_pose()
+
+                    motion_handle = TurnToHeadingHandle(
+                        robot=robot,
+                        target_theta_deg=forward_theta_deg,
+                        tolerance_deg=TURN_TOLERANCE_DEG,
+                        angular_rad_s=RETURN_TO_FORWARD_RAD_S,
+                    )
+                    last_status_print_at = now
+                    state = "RETURN_TO_FORWARD"
+
+                elif traffic_light_color == "red":
+                    show_traffic_light_color(robot, "red")
+
+                else:
+                    # No detection yet: remain stopped at the fixed 15-degree viewing angle.
+                    pass
+
+        # ── RETURN_TO_FORWARD ────────────────────────────────────────────────
+        # Turn in place back to the heading the robot had before the 15-degree turn.
+        elif state == "RETURN_TO_FORWARD":
+            if robot.was_button_pressed(Button.BTN_2):
+                cancel_motion(robot, motion_handle)
+                motion_handle = None
+                show_idle_leds(robot)
+                print("[FSM] IDLE — mission cancelled while returning to forward")
+                state = "IDLE"
+
+            else:
+                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                    _, _, theta = robot.get_odometry_pose()
+                    target_theta = getattr(motion_handle, "target_theta_deg", forward_theta_deg)
+                    print(f"  returning to forward: θ={theta:.1f}° target={target_theta:.1f}°")
+                    last_status_print_at = now
+
+                if motion_handle is not None and motion_handle.is_finished():
+                    robot.stop()
+                    print("[FSM] Forward heading restored — resetting odometry and starting course")
+                    reset_mission_pose(robot)
+                    course_stage_index = 0
+                    motion_handle = start_course_stage(robot, course_stage_index)
+                    last_status_print_at = time.monotonic()
+                    state = "COURSE_MOVING"
+
+        # ── COURSE_MOVING ───────────────────────────────────────────────────
+        # Run pure pursuit first, then LAPF waypoints.
+        elif state == "COURSE_MOVING":
+            if robot.was_button_pressed(Button.BTN_2):
+                cancel_motion(robot, motion_handle)
+                motion_handle = None
+                show_idle_leds(robot)
+                print("[FSM] IDLE — course mission cancelled")
+                state = "IDLE"
+
+            elif ENABLE_STOP_SIGN_OVERRIDE and stop_sign_detected(robot):
+                cancel_motion(robot, motion_handle)
+                motion_handle = None
+                robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
+                robot.set_led(LED.GREEN, 0)
+                print("[VISION] stop sign detected during course — mission stopped")
+                state = "IDLE"
+
+            else:
+                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                    print_course_status(robot, course_stage_index)
+                    last_status_print_at = now
+
+                if motion_handle is not None and motion_handle.is_finished():
+                    print(f"[FSM] DONE — course stage {course_stage_index + 1}/{len(MISSION_STAGES)} complete")
+                    print_course_status(robot, course_stage_index)
+
+                    robot.stop()
+                    time.sleep(STAGE_PAUSE_S)
+
+                    course_stage_index += 1
+                    if course_stage_index >= len(MISSION_STAGES):
+                        motion_handle = None
+                        show_idle_leds(robot)
+                        print("[FSM] IDLE — full traffic-light/course mission complete. Press BTN_1 to run again")
+                        state = "IDLE"
+                    else:
+                        motion_handle = start_course_stage(robot, course_stage_index)
+                        last_status_print_at = time.monotonic()
+
+        # ── Tick-rate control ────────────────────────────────────────────────
+        next_tick += period
+        sleep_s = next_tick - time.monotonic()
+        if sleep_s > 0.0:
+            time.sleep(sleep_s)
+        else:
+            next_tick = time.monotonic()
