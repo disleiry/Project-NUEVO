@@ -91,8 +91,8 @@ TRAFFIC_LIGHT_TURN_DEG = 45.0
 # Speed for the fixed 15-degree turn and the turn back to forward.
 # 1.2 rad/s is about 69 deg/s, so 15 degrees should take about 0.22 s.
 TRAFFIC_LIGHT_TURN_RAD_S = 10
-RETURN_TO_FORWARD_RAD_S = 6
-TURN_TOLERANCE_DEG = 0.5
+RETURN_TO_FORWARD_RAD_S = 5
+TURN_TOLERANCE_DEG = 0.05
 
 # Stop sign safety override from the traffic-light example.
 ENABLE_STOP_SIGN_OVERRIDE = True
