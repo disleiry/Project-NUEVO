@@ -88,7 +88,7 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 # Use 45.0 if the traffic light is farther out of view.
 # If the robot turns the wrong direction, flip the sign.
 TRAFFIC_LIGHT_TURN_DEG = 65.0
-TURN_TOLERANCE_DEG = 0.5
+TURN_TOLERANCE_DEG = 2.0
 
 # Stop sign safety override from the traffic-light example.
 ENABLE_STOP_SIGN_OVERRIDE = True
@@ -109,7 +109,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
-PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=50.0)
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
@@ -125,9 +125,9 @@ LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 # ---------------------------------------------------------------------------
 
 PURE_PURSUIT_VELOCITY_MM_S = 150.0
-LOOKAHEAD_MM = 120.0
+LOOKAHEAD_MM = 200.0
 PURE_PURSUIT_TOLERANCE_MM = 25.0
-ADVANCE_RADIUS_MM = 80.0
+ADVANCE_RADIUS_MM = 150.0
 PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 
