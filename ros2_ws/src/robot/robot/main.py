@@ -86,11 +86,11 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 # The robot turns in place to find the traffic light.
 # Positive/negative direction depends on your robot coordinate convention.
 # If it turns right instead of left, flip the sign.
-SCAN_LEFT_ANGULAR_RAD_S = 0.5
+SCAN_LEFT_ANGULAR_RAD_S = 1.2
 
 # After green, the robot turns back to the heading it had before scanning.
 RETURN_TO_FORWARD_TOLERANCE_DEG = 2.0
-RETURN_TO_FORWARD_ANGULAR_RAD_S = 0.35
+RETURN_TO_FORWARD_ANGULAR_RAD_S = 4
 
 # Stop sign safety override from the traffic-light example.
 ENABLE_STOP_SIGN_OVERRIDE = True
