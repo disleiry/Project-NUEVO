@@ -58,7 +58,7 @@ ENABLE_GPS = True
 # IMPORTANT: update TAG_ID to match your robot when GPS is enabled.
 TAG_ID = 25
 
-GOAL_MM = (610.0, 610.0*5)
+GOAL_MM = (3*610.0, 610.0*5)
 VELOCITY_MM_S = 150.0
 TOLERANCE_MM = 50.0
 MAX_ANGULAR_RAD_S = 0.6
