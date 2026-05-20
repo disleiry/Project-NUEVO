@@ -37,12 +37,12 @@ from robot.robot import FirmwareState, Robot
 
 LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -11500   # TODO: PUT YOUR CALIBRATED VALUE HERE
-LIFT_PICKUP_TICKS  = -2500    # TODO: PUT YOUR CALIBRATED VALUE HERE
-LIFT_DROPOFF_TICKS = -2500    # TODO: PUT YOUR CALIBRATED VALUE HERE
+LIFT_PICKUP_TICKS  = -7500    # UPDATED: Your calibrated stable negative target
+LIFT_DROPOFF_TICKS = -7500    # UPDATED: Kept matching pickup height
 LIFT_DOWN_TICKS    = 0       
 LIFT_MAX_VEL       = 800     
 LIFT_TOLERANCE     = 30      
-LIFT_JOG_STEP      = 100      
+LIFT_JOG_STEP      = 2000     # OPTIMIZED: Bigger steps for responsive jogging
 LIFT_TIMEOUT_S     = 10.0    # 10-second timeout to allow full travel
 
 
@@ -173,9 +173,12 @@ def lift_return_to_zero(robot: Robot) -> None:
     if abs(current) <= LIFT_TOLERANCE:
         print("[LIFT] Already at origin.")
     else:
+        # Utilize the non-blocking system to cleanly step down to zero during exit
         travel_s = abs(current) / LIFT_MAX_VEL
         timeout  = max(15.0, travel_s * 1.5)
         robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+        
+        # We temporarily step directly via standard loop logic for cleanup procedures
         ok = robot.set_motor_position(
             LIFT_MOTOR, 0,
             max_vel_ticks=LIFT_MAX_VEL,
@@ -263,11 +266,17 @@ def run(robot: Robot) -> None:
     pick_attempts = 0
     
     action_sub_state = "INIT"
-    action_timer     = 0.0
+    action_timer      = 0.0
     next_fsm_state   = ""
 
     period    = 1.0 / float(DEFAULT_FSM_HZ)
     next_tick = time.monotonic()
+
+    # Hardware tracking system internals
+    internal_target_ticks = 0
+    requested_final_ticks = 0
+    last_step_time = 0.0
+    step_delay_s = 0.200  # Give motor 200ms to safely travel 2000 ticks
 
     print()
     print("=" * 56)
@@ -288,20 +297,20 @@ def run(robot: Robot) -> None:
             state = "INIT_JOG"
 
         elif state == "INIT_JOG":
-            current_ticks = get_lift_ticks(robot)
-
             if robot.was_button_pressed(Button.BTN_1):
-                target = current_ticks + LIFT_JOG_STEP
+                requested_final_ticks = requested_final_ticks - LIFT_JOG_STEP
                 robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-                robot.set_motor_position(LIFT_MOTOR, target, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=True, timeout=3.0)
+                print(f"[JOG] Stepping target UP to: {requested_final_ticks}")
 
             elif robot.was_button_pressed(Button.BTN_2):
-                target = current_ticks - LIFT_JOG_STEP
+                requested_final_ticks = requested_final_ticks + LIFT_JOG_STEP
                 robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-                robot.set_motor_position(LIFT_MOTOR, target, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=True, timeout=3.0)
+                print(f"[JOG] Stepping target DOWN to: {requested_final_ticks}")
 
             elif robot.was_button_pressed(Button.BTN_10):
                 robot.reset_motor_position(LIFT_MOTOR)
+                internal_target_ticks = 0
+                requested_final_ticks = 0
                 time.sleep(0.15)
                 print("[INIT] Encoder zeroed -> WAIT_GREEN")
                 led_moving(robot)
@@ -390,7 +399,8 @@ def run(robot: Robot) -> None:
             elif action_sub_state == "WAIT_OPEN":
                 if time.monotonic() - action_timer >= 0.5:
                     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-                    robot.set_motor_position(LIFT_MOTOR, LIFT_PICKUP_TICKS, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=False)
+                    # INTERCEPTED: Change absolute hardware call to tracking variable
+                    requested_final_ticks = LIFT_PICKUP_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_DOWN"
                     
@@ -410,7 +420,8 @@ def run(robot: Robot) -> None:
                     
             elif action_sub_state == "WAIT_CLOSE":
                 if time.monotonic() - action_timer >= 0.5:
-                    robot.set_motor_position(LIFT_MOTOR, LIFT_CARRY_TICKS, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=False)
+                    # INTERCEPTED: Change absolute hardware call to tracking variable
+                    requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
                     
@@ -441,7 +452,8 @@ def run(robot: Robot) -> None:
         # ==================================================================
         elif state == "DO_PLACE":
             if action_sub_state == "LIFT_DOWN":
-                robot.set_motor_position(LIFT_MOTOR, LIFT_DROPOFF_TICKS, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=False)
+                # INTERCEPTED: Change absolute hardware call to tracking variable
+                requested_final_ticks = LIFT_DROPOFF_TICKS
                 action_timer = time.monotonic()
                 action_sub_state = "WAIT_LIFT_DOWN"
                 
@@ -457,7 +469,8 @@ def run(robot: Robot) -> None:
                     
             elif action_sub_state == "WAIT_OPEN":
                 if time.monotonic() - action_timer >= 0.5:
-                    robot.set_motor_position(LIFT_MOTOR, LIFT_CARRY_TICKS, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=False)
+                    # INTERCEPTED: Change absolute hardware call to tracking variable
+                    requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
                     
@@ -496,6 +509,41 @@ def run(robot: Robot) -> None:
                 lift_return_to_zero(robot)
                 robot.estop()
                 break
+
+
+        # ==================================================================
+        # ASYNCHRONOUS MOTOR SPOON-FEEDER (The Integer Rollover Fix)
+        # ==================================================================
+        if internal_target_ticks != requested_final_ticks:
+            now = time.monotonic()
+            if now - last_step_time >= step_delay_s:
+                
+                # Determine direction: UP (- value) or DOWN (+ value)
+                if requested_final_ticks < internal_target_ticks:
+                    # Moving up
+                    remaining = internal_target_ticks - requested_final_ticks
+                    if remaining < 2000:
+                        internal_target_ticks = requested_final_ticks
+                    else:
+                        internal_target_ticks -= 2000
+                else:
+                    # Moving down
+                    remaining = requested_final_ticks - internal_target_ticks
+                    if remaining < 2000:
+                        internal_target_ticks = requested_final_ticks
+                    else:
+                        internal_target_ticks += 2000
+                
+                # Command the intermediate safe step directly to the physical motor API
+                robot.set_motor_position(
+                    LIFT_MOTOR, 
+                    internal_target_ticks, 
+                    max_vel_ticks=LIFT_MAX_VEL, 
+                    tolerance_ticks=LIFT_TOLERANCE, 
+                    blocking=False
+                )
+                last_step_time = now
+
 
         # ── tick-rate control ──────────────────────────────────────────────
         next_tick += period
