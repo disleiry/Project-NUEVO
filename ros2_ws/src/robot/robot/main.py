@@ -62,8 +62,8 @@ from robot.util import densify_polyline
 # ---------------------------------------------------------------------------
 
 ENABLE_VISION = True
-ENABLE_LIDAR = False
-ENABLE_GPS = False
+ENABLE_LIDAR = True
+ENABLE_GPS = True
 
 # IMPORTANT: update this to match the ArUco marker ID on your robot.
 TAG_ID = 25
