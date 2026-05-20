@@ -113,7 +113,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
-PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=50.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
@@ -121,7 +121,7 @@ LAPF_CONTROL_POINTS = [
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
-LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=100.0)
+LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 
 
 # ---------------------------------------------------------------------------
