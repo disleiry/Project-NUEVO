@@ -85,14 +85,10 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 
 # Fixed traffic-light viewing turn.
 # The robot turns this many degrees in place, then stops and waits.
-# If the robot turns the wrong direction, flip the sign to -15.0.
-TRAFFIC_LIGHT_TURN_DEG = 45.0
-
-# Speed for the fixed 15-degree turn and the turn back to forward.
-# 1.2 rad/s is about 69 deg/s, so 15 degrees should take about 0.22 s.
-TRAFFIC_LIGHT_TURN_RAD_S = 10
-RETURN_TO_FORWARD_RAD_S = 5
-TURN_TOLERANCE_DEG = 0.05
+# Use 45.0 if the traffic light is farther out of view.
+# If the robot turns the wrong direction, flip the sign.
+TRAFFIC_LIGHT_TURN_DEG = 25.0
+TURN_TOLERANCE_DEG = 0.5
 
 # Stop sign safety override from the traffic-light example.
 ENABLE_STOP_SIGN_OVERRIDE = True
@@ -113,7 +109,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
-PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=50.0)
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
@@ -121,7 +117,7 @@ LAPF_CONTROL_POINTS = [
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
-LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
+LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=100.0)
 
 
 # ---------------------------------------------------------------------------
@@ -341,55 +337,6 @@ def cancel_motion(robot: Robot, handle) -> None:
     robot.stop()
 
 
-class TurnToHeadingHandle:
-    """Non-blocking in-place turn handle using robot.set_velocity(0, omega)."""
-
-    def __init__(
-        self,
-        robot: Robot,
-        target_theta_deg: float,
-        tolerance_deg: float,
-        angular_rad_s: float,
-    ) -> None:
-        self.robot = robot
-        self.target_theta_deg = normalize_angle_deg(float(target_theta_deg))
-        self.tolerance_deg = float(tolerance_deg)
-        self.angular_rad_s = abs(float(angular_rad_s))
-        self.cancelled = False
-        self.done = False
-
-    def cancel(self) -> None:
-        self.cancelled = True
-        self.robot.stop()
-
-    def wait(self, timeout: float | None = None) -> bool:
-        self.robot.stop()
-        return True
-
-    def is_finished(self) -> bool:
-        if self.cancelled or self.done:
-            self.robot.stop()
-            return True
-
-        _, _, current_theta = self.robot.get_odometry_pose()
-        error_deg = normalize_angle_deg(self.target_theta_deg - float(current_theta))
-
-        if abs(error_deg) <= self.tolerance_deg:
-            self.robot.stop()
-            self.done = True
-            return True
-
-        direction = 1.0 if error_deg > 0.0 else -1.0
-        angular_command = direction * self.angular_rad_s
-
-        # Slow down near the target to reduce overshoot.
-        if abs(error_deg) < 8.0:
-            angular_command *= 0.60
-
-        self.robot.set_velocity(0.0, angular_command)
-        return False
-
-
 def start_pure_pursuit_stage(robot: Robot, stage: dict[str, Any]):
     waypoints = stage["waypoints"]
     print(
@@ -496,8 +443,7 @@ def print_config(robot: Robot) -> None:
     print("[CFG] Traffic-light fixed turn:")
     print(
         f"      turn_angle={TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
-        f"turn_speed={TRAFFIC_LIGHT_TURN_RAD_S:.2f} rad/s, "
-        f"return_speed={RETURN_TO_FORWARD_RAD_S:.2f} rad/s, "
+        f"return_angle={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
         f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
     )
 
@@ -598,11 +544,10 @@ def run(robot: Robot) -> None:
                     f"from θ={forward_theta_deg:.1f}° to θ={light_theta_deg:.1f}°"
                 )
 
-                motion_handle = TurnToHeadingHandle(
-                    robot=robot,
-                    target_theta_deg=light_theta_deg,
+                motion_handle = robot.turn_by(
+                    delta_deg=TRAFFIC_LIGHT_TURN_DEG,
+                    blocking=False,
                     tolerance_deg=TURN_TOLERANCE_DEG,
-                    angular_rad_s=TRAFFIC_LIGHT_TURN_RAD_S,
                 )
                 last_status_print_at = now
                 state = "TURN_TO_LIGHT"
@@ -620,8 +565,10 @@ def run(robot: Robot) -> None:
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
                     _, _, theta = robot.get_odometry_pose()
-                    target_theta = getattr(motion_handle, "target_theta_deg", light_theta_deg)
-                    print(f"  turning to traffic light: θ={theta:.1f}° target={target_theta:.1f}°")
+                    print(
+                        f"  turning to traffic light: θ={theta:.1f}° "
+                        f"delta={TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
+                    )
                     last_status_print_at = now
 
                 if motion_handle is not None and motion_handle.is_finished():
@@ -654,11 +601,10 @@ def run(robot: Robot) -> None:
                     if forward_theta_deg is None:
                         _, _, forward_theta_deg = robot.get_odometry_pose()
 
-                    motion_handle = TurnToHeadingHandle(
-                        robot=robot,
-                        target_theta_deg=forward_theta_deg,
+                    motion_handle = robot.turn_by(
+                        delta_deg=-TRAFFIC_LIGHT_TURN_DEG,
+                        blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
-                        angular_rad_s=RETURN_TO_FORWARD_RAD_S,
                     )
                     last_status_print_at = now
                     state = "RETURN_TO_FORWARD"
@@ -683,8 +629,10 @@ def run(robot: Robot) -> None:
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
                     _, _, theta = robot.get_odometry_pose()
-                    target_theta = getattr(motion_handle, "target_theta_deg", forward_theta_deg)
-                    print(f"  returning to forward: θ={theta:.1f}° target={target_theta:.1f}°")
+                    print(
+                        f"  returning to forward: θ={theta:.1f}° "
+                        f"delta={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
+                    )
                     last_status_print_at = now
 
                 if motion_handle is not None and motion_handle.is_finished():
