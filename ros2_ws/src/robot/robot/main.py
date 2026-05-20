@@ -91,7 +91,7 @@ TRAFFIC_LIGHT_TURN_DEG = 65.0
 TURN_TOLERANCE_DEG = 2.0
 
 # Stop sign safety override from the traffic-light example.
-ENABLE_STOP_SIGN_OVERRIDE = True
+ENABLE_STOP_SIGN_OVERRIDE = False
 
 
 # ---------------------------------------------------------------------------
