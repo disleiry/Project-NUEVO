@@ -601,8 +601,8 @@ def run(robot: Robot) -> None:
                     if forward_theta_deg is None:
                         _, _, forward_theta_deg = robot.get_odometry_pose()
 
-                    motion_handle = robot.turn_by(
-                        delta_deg=-TRAFFIC_LIGHT_TURN_DEG,
+                    motion_handle = robot.turn_to(
+                        forward_theta_deg,
                         blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
