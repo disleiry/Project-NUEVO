@@ -245,7 +245,7 @@ MISSION_STAGES: list[dict[str, Any]] = [
     {
         "name": "Pure pursuit to first 90-degree turn",
         "type": "pure_pursuit",
-        "waypoints": PURE_PURSUIT_TO_FIRST_TURN,
+        "waypoints": PURE_PURSUIT_TO_FIRST_CORNER,
     },
     {
         "name": "Forced 90-degree turn into ramp",
