@@ -127,14 +127,16 @@ PURE_PURSUIT_TO_FIRST_CORNER = [
 ]
 PURE_PURSUIT_TO_FIRST_CORNER = densify_polyline(PURE_PURSUIT_TO_FIRST_CORNER, spacing=100.0)
 
-# Use these signs for the current path:
-#   At (300, 3500): rover should turn from +Y direction into +X direction, so turn right (-90).
-#   At (920, 3500): rover should turn from +X direction into -Y direction, so turn right (-90).
-#   At (920, 700): rover should turn from -Y direction into +X direction, so turn left (+90).
-# If the rover turns the wrong direction at a corner, flip the sign for that specific turn.
-FIRST_CORNER_TURN_DEG = -90.0
-RAMP_ENTRY_TURN_DEG = -90.0
-RAMP_EXIT_TURN_DEG = 90.0
+# Absolute headings for the forced turns.
+# This is more reliable than two relative turn_by(-90) commands, because it
+# forces the rover to face the correct direction before each straight segment.
+# With INITIAL_THETA_DEG = 90:
+#   +Y direction ≈ 90°
+#   +X direction ≈ 0°
+#   -Y direction ≈ -90°
+FIRST_CORNER_HEADING_DEG = 0.0       # Face +X toward (920, 3500)
+RAMP_ENTRY_HEADING_DEG = -90.0       # Face -Y down the ramp toward (920, 700)
+RAMP_EXIT_HEADING_DEG = 0.0          # Face +X toward (1800, 700)
 
 MOVE_TO_RAMP_ENTRY_DISTANCE_MM = abs(RAMP_ENTRY_WAYPOINT[0] - FIRST_CORNER_WAYPOINT[0])
 RAMP_DISTANCE_MM = abs(RAMP_ENTRY_WAYPOINT[1] - RAMP_EXIT_WAYPOINT[1])
@@ -179,9 +181,9 @@ MISSION_STAGES: list[dict[str, Any]] = [
         "waypoints": PURE_PURSUIT_TO_FIRST_CORNER,
     },
     {
-        "name": "Forced 90-degree turn at (300, 3500)",
-        "type": "turn_by",
-        "delta_deg": FIRST_CORNER_TURN_DEG,
+        "name": "Force heading +X at (300, 3500)",
+        "type": "turn_to",
+        "heading_deg": FIRST_CORNER_HEADING_DEG,
     },
     {
         "name": "Forced straight move to (920, 3500)",
@@ -189,9 +191,9 @@ MISSION_STAGES: list[dict[str, Any]] = [
         "distance_mm": MOVE_TO_RAMP_ENTRY_DISTANCE_MM,
     },
     {
-        "name": "Forced 90-degree turn at (920, 3500) into ramp",
-        "type": "turn_by",
-        "delta_deg": RAMP_ENTRY_TURN_DEG,
+        "name": "Force heading -Y at (920, 3500) into ramp",
+        "type": "turn_to",
+        "heading_deg": RAMP_ENTRY_HEADING_DEG,
     },
     {
         "name": "Forced straight move down ramp to (920, 700)",
@@ -199,9 +201,9 @@ MISSION_STAGES: list[dict[str, Any]] = [
         "distance_mm": RAMP_DISTANCE_MM,
     },
     {
-        "name": "Forced 90-degree turn at (920, 700)",
-        "type": "turn_by",
-        "delta_deg": RAMP_EXIT_TURN_DEG,
+        "name": "Force heading +X at (920, 700)",
+        "type": "turn_to",
+        "heading_deg": RAMP_EXIT_HEADING_DEG,
     },
     {
         "name": "Forced straight move to obstacle entrance",
@@ -459,6 +461,19 @@ def start_turn_by_stage(robot: Robot, stage: dict[str, Any]):
     )
 
 
+def start_turn_to_stage(robot: Robot, stage: dict[str, Any]):
+    heading_deg = float(stage["heading_deg"])
+    print(
+        f"[FSM] MOVING — forced turn_to heading={heading_deg:+.1f}° "
+        f"tolerance={FORCED_TURN_TOLERANCE_DEG:.1f}°"
+    )
+    return robot.turn_to(
+        heading_deg,
+        blocking=False,
+        tolerance_deg=FORCED_TURN_TOLERANCE_DEG,
+    )
+
+
 def start_move_forward_stage(robot: Robot, stage: dict[str, Any]):
     distance_mm = float(stage["distance_mm"])
     print(
@@ -524,6 +539,9 @@ def start_course_stage(robot: Robot, stage_index: int):
     if stage["type"] == "turn_by":
         return start_turn_by_stage(robot, stage)
 
+    if stage["type"] == "turn_to":
+        return start_turn_to_stage(robot, stage)
+
     if stage["type"] == "move_forward":
         return start_move_forward_stage(robot, stage)
 
@@ -548,6 +566,8 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
         goal_summary = f"goal=({goal_x:.0f}, {goal_y:.0f}) mm"
     elif stage["type"] == "turn_by":
         goal_summary = f"turn_delta={float(stage['delta_deg']):+.1f}°"
+    elif stage["type"] == "turn_to":
+        goal_summary = f"turn_heading={float(stage['heading_deg']):+.1f}°"
     elif stage["type"] == "move_forward":
         goal_summary = f"move_distance={float(stage['distance_mm']):.0f} mm"
     else:
@@ -600,10 +620,10 @@ def print_config(robot: Robot) -> None:
     for i, waypoint in enumerate(PURE_PURSUIT_CONTROL_POINTS, start=1):
         print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
     print(
-        f"[CFG] forced turns: at {FIRST_CORNER_WAYPOINT} turn {FIRST_CORNER_TURN_DEG:+.0f}°, "
+        f"[CFG] forced headings: at {FIRST_CORNER_WAYPOINT} turn_to {FIRST_CORNER_HEADING_DEG:+.0f}°, "
         f"move {MOVE_TO_RAMP_ENTRY_DISTANCE_MM:.0f} mm to {RAMP_ENTRY_WAYPOINT}, "
-        f"turn {RAMP_ENTRY_TURN_DEG:+.0f}°, move {RAMP_DISTANCE_MM:.0f} mm to {RAMP_EXIT_WAYPOINT}, "
-        f"turn {RAMP_EXIT_TURN_DEG:+.0f}°, move {OBSTACLE_ENTRANCE_DISTANCE_MM:.0f} mm"
+        f"turn_to {RAMP_ENTRY_HEADING_DEG:+.0f}°, move {RAMP_DISTANCE_MM:.0f} mm to {RAMP_EXIT_WAYPOINT}, "
+        f"turn_to {RAMP_EXIT_HEADING_DEG:+.0f}°, move {OBSTACLE_ENTRANCE_DISTANCE_MM:.0f} mm"
     )
 
     print("[CFG] LAPF obstacle-course control points:")
