@@ -32,18 +32,18 @@ from robot.robot import FirmwareState, Robot
 
 
 # ===========================================================================
-# LIFT MOTOR — paste values from lift_calibration.py
+# LIFT MOTOR
 # ===========================================================================
 
 LIFT_MOTOR         = Motor.DC_M3
-LIFT_CARRY_TICKS   = -11500   # TODO: PUT YOUR CALIBRATED VALUE HERE
-LIFT_PICKUP_TICKS  = -7500    # UPDATED: Your calibrated stable negative target
-LIFT_DROPOFF_TICKS = -7500    # UPDATED: Kept matching pickup height
+LIFT_CARRY_TICKS   = -11500   
+LIFT_PICKUP_TICKS  = -7500    
+LIFT_DROPOFF_TICKS = -7500    
 LIFT_DOWN_TICKS    = 0       
 LIFT_MAX_VEL       = 800     
 LIFT_TOLERANCE     = 30      
-LIFT_JOG_STEP      = 2000     # OPTIMIZED: Bigger steps for responsive jogging
-LIFT_TIMEOUT_S     = 10.0    # 10-second timeout to allow full travel
+LIFT_JOG_STEP      = 1500     
+LIFT_TIMEOUT_S     = 10.0    
 
 
 # ===========================================================================
@@ -51,8 +51,8 @@ LIFT_TIMEOUT_S     = 10.0    # 10-second timeout to allow full travel
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_1
-CLAW_OPEN_DEG   = 30.0    # TODO: calibrate
-CLAW_CLOSE_DEG  = 80.0    # TODO: calibrate
+CLAW_OPEN_DEG   = 30.0    
+CLAW_CLOSE_DEG  = 80.0    
 
 
 # ===========================================================================
@@ -60,7 +60,7 @@ CLAW_CLOSE_DEG  = 80.0    # TODO: calibrate
 # ===========================================================================
 
 CLAW_ULTRASONIC_LIM = Limit.LIM_2
-CLAW_GRAB_CONFIRMED = True   # polarity: True = object detected
+CLAW_GRAB_CONFIRMED = True   
 
 
 # ===========================================================================
@@ -74,16 +74,16 @@ POS_TOLERANCE_MM   = 20.0
 
 
 # ===========================================================================
-# BURGER PICKUP PARAMETERS — match these to main_full_mission.py
+# BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 610.0    # TODO: measure (mm)
-APPROACH_SHELF_DIST = 75.0        # TODO: measure (mm)
+DIST_TO_INGREDIENT_AREA = 610.0    
+APPROACH_SHELF_DIST = 200.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 152.0,    
-    "meat":       308.0,  
-    "bun_top":    460.0,  
+    "bun_bottom": 0.0,    
+    "meat":       150.0,  
+    "bun_top":    300.0,  
 }
 
 INGREDIENT_ORDER = ["bun_bottom", "meat", "bun_top"]
@@ -173,12 +173,10 @@ def lift_return_to_zero(robot: Robot) -> None:
     if abs(current) <= LIFT_TOLERANCE:
         print("[LIFT] Already at origin.")
     else:
-        # Utilize the non-blocking system to cleanly step down to zero during exit
         travel_s = abs(current) / LIFT_MAX_VEL
         timeout  = max(15.0, travel_s * 1.5)
         robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
         
-        # We temporarily step directly via standard loop logic for cleanup procedures
         ok = robot.set_motor_position(
             LIFT_MOTOR, 0,
             max_vel_ticks=LIFT_MAX_VEL,
@@ -276,7 +274,7 @@ def run(robot: Robot) -> None:
     internal_target_ticks = 0
     requested_final_ticks = 0
     last_step_time = 0.0
-    step_delay_s = 0.200  # Give motor 200ms to safely travel 2000 ticks
+    step_delay_s = 0.150  # 150ms delay to balance speed and safety
 
     print()
     print("=" * 56)
@@ -399,7 +397,6 @@ def run(robot: Robot) -> None:
             elif action_sub_state == "WAIT_OPEN":
                 if time.monotonic() - action_timer >= 0.5:
                     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-                    # INTERCEPTED: Change absolute hardware call to tracking variable
                     requested_final_ticks = LIFT_PICKUP_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_DOWN"
@@ -420,7 +417,6 @@ def run(robot: Robot) -> None:
                     
             elif action_sub_state == "WAIT_CLOSE":
                 if time.monotonic() - action_timer >= 0.5:
-                    # INTERCEPTED: Change absolute hardware call to tracking variable
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
@@ -452,7 +448,6 @@ def run(robot: Robot) -> None:
         # ==================================================================
         elif state == "DO_PLACE":
             if action_sub_state == "LIFT_DOWN":
-                # INTERCEPTED: Change absolute hardware call to tracking variable
                 requested_final_ticks = LIFT_DROPOFF_TICKS
                 action_timer = time.monotonic()
                 action_sub_state = "WAIT_LIFT_DOWN"
@@ -469,7 +464,6 @@ def run(robot: Robot) -> None:
                     
             elif action_sub_state == "WAIT_OPEN":
                 if time.monotonic() - action_timer >= 0.5:
-                    # INTERCEPTED: Change absolute hardware call to tracking variable
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
@@ -510,31 +504,29 @@ def run(robot: Robot) -> None:
                 robot.estop()
                 break
 
-
         # ==================================================================
-        # ASYNCHRONOUS MOTOR SPOON-FEEDER (The Integer Rollover Fix)
+        # ASYNCHRONOUS MOTOR SPOON-FEEDER (The Physical Leash Fix)
         # ==================================================================
-        if internal_target_ticks != requested_final_ticks:
+        # Grab the exact physical position of the motor at this exact millisecond
+        current_phys = get_lift_ticks(robot)
+        
+        # Only run if we actually have somewhere to go
+        if abs(current_phys - requested_final_ticks) > LIFT_TOLERANCE:
             now = time.monotonic()
+            
+            # Wait 150ms between commands so we don't spam the serial bus
             if now - last_step_time >= step_delay_s:
                 
-                # Determine direction: UP (- value) or DOWN (+ value)
-                if requested_final_ticks < internal_target_ticks:
-                    # Moving up
-                    remaining = internal_target_ticks - requested_final_ticks
-                    if remaining < 2000:
-                        internal_target_ticks = requested_final_ticks
-                    else:
-                        internal_target_ticks -= 2000
+                # Calculate safe step from WHERE THE MOTOR PHYSICALLY IS, not from where the math was
+                if requested_final_ticks < current_phys:
+                    # Moving UP (negative target)
+                    # We make sure the leash never stretches more than 1500 ticks past current hardware
+                    internal_target_ticks = max(requested_final_ticks, current_phys - 1500)
                 else:
-                    # Moving down
-                    remaining = requested_final_ticks - internal_target_ticks
-                    if remaining < 2000:
-                        internal_target_ticks = requested_final_ticks
-                    else:
-                        internal_target_ticks += 2000
+                    # Moving DOWN (positive target)
+                    internal_target_ticks = min(requested_final_ticks, current_phys + 1500)
                 
-                # Command the intermediate safe step directly to the physical motor API
+                # Send the closely-leashed target to the hardware
                 robot.set_motor_position(
                     LIFT_MOTOR, 
                     internal_target_ticks, 
@@ -544,7 +536,6 @@ def run(robot: Robot) -> None:
                 )
                 last_step_time = now
 
-
         # ── tick-rate control ──────────────────────────────────────────────
         next_tick += period
         sleep_s = next_tick - time.monotonic()
@@ -552,4 +543,3 @@ def run(robot: Robot) -> None:
             time.sleep(sleep_s)
         else:
             next_tick = time.monotonic()
-
