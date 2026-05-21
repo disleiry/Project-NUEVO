@@ -243,44 +243,6 @@ STATUS_PRINT_INTERVAL_S = 0.5
 STAGE_PAUSE_S = 0.00
 
 
-MISSION_STAGES: list[dict[str, Any]] = [
-    {
-        "name": "Pure pursuit to first 90-degree turn",
-        "type": "pure_pursuit",
-        "waypoints": PURE_PURSUIT_TO_FIRST_CORNER,
-    },
-    {
-        "name": "Forced 90-degree turn into ramp",
-        "type": "turn_by",
-        "delta_deg": RAMP_ENTRY_TURN_DEG,
-    },
-    {
-        "name": "Forced straight move down ramp",
-        "type": "move_forward",
-        "distance_mm": RAMP_DISTANCE_MM,
-    },
-    {
-        "name": "Forced 90-degree turn after ramp",
-        "type": "turn_by",
-        "delta_deg": RAMP_EXIT_TURN_DEG,
-    },
-    {
-        "name": "Forced straight move to obstacle entrance",
-        "type": "move_forward",
-        "distance_mm": OBSTACLE_ENTRANCE_DISTANCE_MM,
-    },
-]
-
-for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
-    MISSION_STAGES.append(
-        {
-            "name": f"Obstacle course LAPF waypoint {i}",
-            "type": "lapf",
-            "waypoint": waypoint,
-        }
-    )
-
-
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
