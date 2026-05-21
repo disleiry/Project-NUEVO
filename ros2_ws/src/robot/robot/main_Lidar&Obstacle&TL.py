@@ -1,12 +1,13 @@
 """
-main.py — traffic-light start + pure pursuit + LAPF obstacle navigation
-========================================================================
+main.py — fixed traffic-light turn + pure pursuit + LAPF obstacle navigation
+============================================================================
 
 Mission order:
 1. Robot starts facing forward and DOES NOT move forward.
-2. Robot turns left in place until the camera sees a traffic light.
-3. Robot stops and waits until the traffic light is green.
-4. Once green is detected, robot turns back to its original forward heading.
+2. Robot turns in place by a fixed angle, usually 15 degrees left, so the
+   camera can face the traffic light.
+3. Robot stops and waits for the traffic light to be green.
+4. Once green is detected, robot turns back to the original forward heading.
 5. Robot resets odometry and begins the course:
    - Pure pursuit for the straight/ramp section.
    - LAPF + LiDAR for the obstacle-course section.
@@ -80,20 +81,17 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 LED_BRIGHTNESS = 255
 VISION_STALE_SEC = 3.0
-LIGHT_LOST_SEARCH_DELAY_SEC = 1.0
 MIN_TRAFFIC_CONFIDENCE = 0.50
 
-# The robot turns in place to find the traffic light.
-# Positive/negative direction depends on your robot coordinate convention.
-# If it turns right instead of left, flip the sign.
-SCAN_LEFT_ANGULAR_RAD_S = 0.25
-
-# After green, the robot turns back to the heading it had before scanning.
-RETURN_TO_FORWARD_TOLERANCE_DEG = 2.0
-RETURN_TO_FORWARD_ANGULAR_RAD_S = 0.35
+# Fixed traffic-light viewing turn.
+# The robot turns this many degrees in place, then stops and waits.
+# Use 45.0 if the traffic light is farther out of view.
+# If the robot turns the wrong direction, flip the sign.
+TRAFFIC_LIGHT_TURN_DEG = 30.0
+TURN_TOLERANCE_DEG = 2.0
 
 # Stop sign safety override from the traffic-light example.
-ENABLE_STOP_SIGN_OVERRIDE = True
+ENABLE_STOP_SIGN_OVERRIDE = False
 
 
 # ---------------------------------------------------------------------------
@@ -104,10 +102,10 @@ ENABLE_STOP_SIGN_OVERRIDE = True
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (0.0, 3250.0),      # Waypoint 1: home straight
-    (600.0, 3250.0),    # Waypoint 2: transition / turn
-    (600.0, 100.0),     # Waypoint 3: ramp / return direction
-    (1200.0, 100.0),    # Waypoint 4: entrance toward obstacle course
+    (300.0, 3400.0),      # Waypoint 1: home straight
+    (920.0, 3400.0),    # Waypoint 2: transition / turn
+    (920.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1800.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -115,11 +113,11 @@ PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spac
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (1200.0, 3250.0),   # Obstacle waypoint / finish
+    (1800.0, 3250.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
-LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=100.0)
+LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 
 
 # ---------------------------------------------------------------------------
@@ -127,9 +125,9 @@ LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=100.0)
 # ---------------------------------------------------------------------------
 
 PURE_PURSUIT_VELOCITY_MM_S = 150.0
-LOOKAHEAD_MM = 120.0
+LOOKAHEAD_MM = 200.0
 PURE_PURSUIT_TOLERANCE_MM = 25.0
-ADVANCE_RADIUS_MM = 80.0
+ADVANCE_RADIUS_MM = 150.0
 PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 
@@ -339,55 +337,6 @@ def cancel_motion(robot: Robot, handle) -> None:
     robot.stop()
 
 
-class TurnToHeadingHandle:
-    """Non-blocking in-place turn handle using robot.set_velocity(0, omega)."""
-
-    def __init__(
-        self,
-        robot: Robot,
-        target_theta_deg: float,
-        tolerance_deg: float,
-        angular_rad_s: float,
-    ) -> None:
-        self.robot = robot
-        self.target_theta_deg = normalize_angle_deg(float(target_theta_deg))
-        self.tolerance_deg = float(tolerance_deg)
-        self.angular_rad_s = abs(float(angular_rad_s))
-        self.cancelled = False
-        self.done = False
-
-    def cancel(self) -> None:
-        self.cancelled = True
-        self.robot.stop()
-
-    def wait(self, timeout: float | None = None) -> bool:
-        self.robot.stop()
-        return True
-
-    def is_finished(self) -> bool:
-        if self.cancelled or self.done:
-            self.robot.stop()
-            return True
-
-        _, _, current_theta = self.robot.get_odometry_pose()
-        error_deg = normalize_angle_deg(self.target_theta_deg - float(current_theta))
-
-        if abs(error_deg) <= self.tolerance_deg:
-            self.robot.stop()
-            self.done = True
-            return True
-
-        direction = 1.0 if error_deg > 0.0 else -1.0
-        angular_command = direction * self.angular_rad_s
-
-        # Slow down near the target to reduce overshoot.
-        if abs(error_deg) < 8.0:
-            angular_command *= 0.45
-
-        self.robot.set_velocity(0.0, angular_command)
-        return False
-
-
 def start_pure_pursuit_stage(robot: Robot, stage: dict[str, Any]):
     waypoints = stage["waypoints"]
     print(
@@ -491,11 +440,11 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
 def print_config(robot: Robot) -> None:
     lapf_cfg = resolve_lapf_config()
 
-    print("[CFG] Traffic-light start:")
+    print("[CFG] Traffic-light fixed turn:")
     print(
-        f"      scan_left_angular={SCAN_LEFT_ANGULAR_RAD_S:.2f} rad/s, "
-        f"return_angular={RETURN_TO_FORWARD_ANGULAR_RAD_S:.2f} rad/s, "
-        f"return_tolerance={RETURN_TO_FORWARD_TOLERANCE_DEG:.1f}°"
+        f"      turn_angle={TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
+        f"return_angle={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
+        f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
     )
 
     print("[CFG] Pure pursuit control points:")
@@ -560,8 +509,8 @@ def run(robot: Robot) -> None:
     course_stage_index = 0
     motion_handle = None
     forward_theta_deg = None
+    light_theta_deg = None
     last_status_print_at = 0.0
-    light_lost_at = 0.0
 
     period = 1.0 / float(DEFAULT_FSM_HZ)
     next_tick = time.monotonic()
@@ -586,58 +535,64 @@ def run(robot: Robot) -> None:
             if robot.was_button_pressed(Button.BTN_1):
                 reset_mission_pose(robot)
                 _, _, forward_theta_deg = robot.get_odometry_pose()
+                light_theta_deg = normalize_angle_deg(forward_theta_deg + TRAFFIC_LIGHT_TURN_DEG)
+
                 dim_all_leds(robot)
                 show_running_leds(robot)
                 print(
-                    f"[FSM] SEARCH_LIGHT — turning left in place from forward θ={forward_theta_deg:.1f}°"
+                    f"[FSM] TURN_TO_LIGHT — turning {TRAFFIC_LIGHT_TURN_DEG:+.1f}° in place "
+                    f"from θ={forward_theta_deg:.1f}° to θ={light_theta_deg:.1f}°"
                 )
-                state = "SEARCH_LIGHT"
 
-        # ── SEARCH_LIGHT ─────────────────────────────────────────────────────
-        # Turn left in place. Do NOT move forward.
-        elif state == "SEARCH_LIGHT":
+                motion_handle = robot.turn_by(
+                    delta_deg=TRAFFIC_LIGHT_TURN_DEG,
+                    blocking=False,
+                    tolerance_deg=TURN_TOLERANCE_DEG,
+                )
+                last_status_print_at = now
+                state = "TURN_TO_LIGHT"
+
+        # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
+        # Turn exactly TRAFFIC_LIGHT_TURN_DEG in place. Do NOT move forward.
+        elif state == "TURN_TO_LIGHT":
             if robot.was_button_pressed(Button.BTN_2):
-                robot.stop()
+                cancel_motion(robot, motion_handle)
+                motion_handle = None
                 show_idle_leds(robot)
-                print("[FSM] IDLE — mission cancelled while searching for traffic light")
+                print("[FSM] IDLE — mission cancelled while turning to traffic light")
                 state = "IDLE"
 
-            elif stop_sign_detected(robot):
-                robot.stop()
-                robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
-                robot.set_led(LED.GREEN, 0)
-                print("[VISION] stop sign detected — stopped")
-
             else:
-                traffic_light_color = find_traffic_light_color(robot)
+                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                    _, _, theta = robot.get_odometry_pose()
+                    print(
+                        f"  turning to traffic light: θ={theta:.1f}° "
+                        f"delta={TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
+                    )
+                    last_status_print_at = now
 
-                if traffic_light_color in ("red", "green"):
+                if motion_handle is not None and motion_handle.is_finished():
                     robot.stop()
-                    show_traffic_light_color(robot, traffic_light_color)
-                    light_lost_at = 0.0
-                    print(f"[VISION] traffic light detected: {traffic_light_color} — waiting for green")
+                    motion_handle = None
+                    print("[FSM] WAIT_FOR_GREEN — fixed traffic-light angle reached")
                     state = "WAIT_FOR_GREEN"
-                else:
-                    # Keep rotating left in place until the traffic light enters the camera view.
-                    robot.set_velocity(0.0, SCAN_LEFT_ANGULAR_RAD_S)
 
         # ── WAIT_FOR_GREEN ───────────────────────────────────────────────────
         # Stay stopped. Red = wait. Green = turn back to original forward heading.
         elif state == "WAIT_FOR_GREEN":
+            robot.stop()
+
             if robot.was_button_pressed(Button.BTN_2):
-                robot.stop()
                 show_idle_leds(robot)
                 print("[FSM] IDLE — mission cancelled while waiting for green")
                 state = "IDLE"
 
             elif stop_sign_detected(robot):
-                robot.stop()
                 robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
                 robot.set_led(LED.GREEN, 0)
                 print("[VISION] stop sign detected — stopped")
 
             else:
-                robot.stop()
                 traffic_light_color = find_traffic_light_color(robot)
 
                 if traffic_light_color == "green":
@@ -645,30 +600,24 @@ def run(robot: Robot) -> None:
                     print("[VISION] green light — turning back to forward heading")
                     if forward_theta_deg is None:
                         _, _, forward_theta_deg = robot.get_odometry_pose()
-                    motion_handle = TurnToHeadingHandle(
-                        robot=robot,
-                        target_theta_deg=forward_theta_deg,
-                        tolerance_deg=RETURN_TO_FORWARD_TOLERANCE_DEG,
-                        angular_rad_s=RETURN_TO_FORWARD_ANGULAR_RAD_S,
+
+                    motion_handle = robot.turn_to(
+                        forward_theta_deg,
+                        blocking=False,
+                        tolerance_deg=TURN_TOLERANCE_DEG,
                     )
                     last_status_print_at = now
                     state = "RETURN_TO_FORWARD"
 
                 elif traffic_light_color == "red":
                     show_traffic_light_color(robot, "red")
-                    light_lost_at = 0.0
-                    print("[VISION] red light — waiting")
 
                 else:
-                    # If detection is lost, stay stopped briefly, then scan again.
-                    if light_lost_at == 0.0:
-                        light_lost_at = now
-                    elif now - light_lost_at >= LIGHT_LOST_SEARCH_DELAY_SEC:
-                        print("[VISION] traffic light lost — scanning left again")
-                        state = "SEARCH_LIGHT"
+                    # No detection yet: remain stopped at the fixed 15-degree viewing angle.
+                    pass
 
         # ── RETURN_TO_FORWARD ────────────────────────────────────────────────
-        # Turn in place back to the heading the robot had before scanning.
+        # Turn in place back to the heading the robot had before the 15-degree turn.
         elif state == "RETURN_TO_FORWARD":
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
@@ -680,9 +629,9 @@ def run(robot: Robot) -> None:
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
                     _, _, theta = robot.get_odometry_pose()
-                    target_theta = getattr(motion_handle, "target_theta_deg", forward_theta_deg)
                     print(
-                        f"  returning to forward: θ={theta:.1f}° target={target_theta:.1f}°"
+                        f"  returning to forward: θ={theta:.1f}° "
+                        f"delta={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
                     )
                     last_status_print_at = now
 
