@@ -108,14 +108,15 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # Segment 1 uses GPS/fused pose.
 PURE_PURSUIT_GPS_BEFORE = [
     #(0.0, 0.0),        # start
-    (300.0, 3400.0),    # Waypoint 1: home straight
-    (920.0, 3400.0),    # Waypoint 2: transition / turn
+    (300.0, 3450.0),    # Waypoint 1: home straight
+    (920.0, 3450.0),    # Waypoint 2: transition / turn
+    (920.0, 3250.0)
 ]
 PURE_PURSUIT_GPS_BEFORE = densify_polyline(PURE_PURSUIT_GPS_BEFORE, spacing=100.0)
 
 # Segment 2 uses odometry only. GPS position fusion is turned off for this stage.
 PURE_PURSUIT_ODOM_ONLY = [
-    (920.0, 3400.0),    # Start of odom-only segment
+    (920.0, 3250.0),    # Start of odom-only segment
     (920.0, 700.0),     # Ramp / return direction
 ]
 PURE_PURSUIT_ODOM_ONLY = densify_polyline(PURE_PURSUIT_ODOM_ONLY, spacing=100.0)
