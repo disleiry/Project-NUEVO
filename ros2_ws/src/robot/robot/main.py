@@ -51,8 +51,8 @@ LIFT_TIMEOUT_S     = 10.0
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_16
-CLAW_OPEN_DEG   = 30.0    
-CLAW_CLOSE_DEG  = 80.0    
+CLAW_OPEN_DEG   = 0.0     
+CLAW_CLOSE_DEG  = 120.0   
 
 
 # ===========================================================================
@@ -78,12 +78,12 @@ POS_TOLERANCE_MM   = 20.0
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 610.0    
-APPROACH_SHELF_DIST = 200.0        
+APPROACH_SHELF_DIST = 75.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 0.0,    
-    "meat":       150.0,  
-    "bun_top":    300.0,  
+    "bun_bottom": 152.0,    
+    "meat":       307.0,  
+    "bun_top":    670.0,  
 }
 
 INGREDIENT_ORDER = ["bun_bottom", "meat", "bun_top"]
@@ -194,6 +194,11 @@ def lift_return_to_zero(robot: Robot) -> None:
 # CLAW HELPERS
 # ===========================================================================
 
+def claw_close(robot: Robot) -> None:
+    robot.enable_servo(CLAW_SERVO)
+    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+    time.sleep(0.5)
+
 def claw_open(robot: Robot) -> None:
     robot.enable_servo(CLAW_SERVO)
     robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
@@ -266,6 +271,9 @@ def run(robot: Robot) -> None:
     action_sub_state = "INIT"
     action_timer      = 0.0
     next_fsm_state   = ""
+    
+    # Flag to latch manual button skips during lift transitions
+    manual_skip_triggered = False
 
     period    = 1.0 / float(DEFAULT_FSM_HZ)
     next_tick = time.monotonic()
@@ -274,7 +282,7 @@ def run(robot: Robot) -> None:
     internal_target_ticks = 0
     requested_final_ticks = 0
     last_step_time = 0.0
-    step_delay_s = 0.150  # 150ms delay to balance speed and safety
+    step_delay_s = 0.150  
 
     print()
     print("=" * 56)
@@ -288,7 +296,7 @@ def run(robot: Robot) -> None:
         # ==================================================================
         if state == "INIT":
             robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-            claw_open(robot)
+            claw_close(robot)  # CHANGED: Claw now initializes CLOSED
             led_idle(robot)
             print("  LIFT ALIGNMENT — align carriage to Sharpie mark")
             print("  BTN_1: UP | BTN_2: DOWN | BTN_10: Confirm")
@@ -388,7 +396,13 @@ def run(robot: Robot) -> None:
         # GENERIC NON-BLOCKING PICK SEQUENCE
         # ==================================================================
         elif state == "DO_PICK":
+            # Watch for a manual skip button press during long actions
+            if robot.was_button_pressed(Button.BTN_3):
+                manual_skip_triggered = True
+                print("[MANUAL] BTN_3 pressed! Will force grab success at top of lift.")
+
             if action_sub_state == "OPEN_CLAW":
+                print(f"[ARM] Opening claw to {CLAW_OPEN_DEG} degrees...")
                 robot.enable_servo(CLAW_SERVO)
                 robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
                 action_timer = time.monotonic()
@@ -411,12 +425,14 @@ def run(robot: Robot) -> None:
                     else:
                         print(f"[ARM] Reached pickup height at: {current} ticks")
                         
+                    print(f"[ARM] Closing claw to {CLAW_CLOSE_DEG} degrees...")
                     robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_CLOSE"
                     
             elif action_sub_state == "WAIT_CLOSE":
-                if time.monotonic() - action_timer >= 0.5:
+                if time.monotonic() - action_timer >= 1.5:
+                    print("[ARM] Claw closed. Lifting to carry height...")
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
@@ -431,16 +447,29 @@ def run(robot: Robot) -> None:
                     else:
                         print(f"[ARM] Lift stopped carrying at: {current} ticks")
                         
-                    grabbed = claw_has_object(robot)
+                    # Evaluate hardware sensor OR our manual override flag
+                    grabbed = claw_has_object(robot) or manual_skip_triggered
                     pick_attempts += 1
                     
-                    if grabbed or pick_attempts >= MAX_PICK_ATTEMPTS:
+                    if grabbed:
+                        if manual_skip_triggered:
+                            print("[ARM] Grab success forced via manual button override.")
+                        else:
+                            print("[ARM] Grab confirmed by sensor.")
                         retreat_from_shelf(robot)
                         turn_away_from_shelf(robot)
                         pick_attempts = 0
+                        manual_skip_triggered = False  # Reset flag
+                        state = next_fsm_state
+                    elif pick_attempts >= MAX_PICK_ATTEMPTS:
+                        print("[WARN] Max pickup attempts reached without confirmation. Proceeding anyway.")
+                        retreat_from_shelf(robot)
+                        turn_away_from_shelf(robot)
+                        pick_attempts = 0
+                        manual_skip_triggered = False
                         state = next_fsm_state
                     else:
-                        print(f"[ARM] Grab failed. Retrying.")
+                        print(f"[ARM] Grab failed (No sensor data). Retrying... (Press BTN_3 to skip)")
                         action_sub_state = "OPEN_CLAW" 
 
         # ==================================================================
@@ -458,12 +487,15 @@ def run(robot: Robot) -> None:
                 
                 if abs(current - LIFT_DROPOFF_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Lift stopped at dropoff at: {current} ticks")
+                    print(f"[ARM] Opening claw to {CLAW_OPEN_DEG} degrees...")
                     robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_OPEN"
                     
             elif action_sub_state == "WAIT_OPEN":
                 if time.monotonic() - action_timer >= 0.5:
+                    print("[ARM] Closing claw back up and returning to carry height...")
+                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG) # Keep it tidy
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
@@ -507,26 +539,17 @@ def run(robot: Robot) -> None:
         # ==================================================================
         # ASYNCHRONOUS MOTOR SPOON-FEEDER (The Physical Leash Fix)
         # ==================================================================
-        # Grab the exact physical position of the motor at this exact millisecond
         current_phys = get_lift_ticks(robot)
         
-        # Only run if we actually have somewhere to go
         if abs(current_phys - requested_final_ticks) > LIFT_TOLERANCE:
             now = time.monotonic()
             
-            # Wait 150ms between commands so we don't spam the serial bus
             if now - last_step_time >= step_delay_s:
-                
-                # Calculate safe step from WHERE THE MOTOR PHYSICALLY IS, not from where the math was
                 if requested_final_ticks < current_phys:
-                    # Moving UP (negative target)
-                    # We make sure the leash never stretches more than 1500 ticks past current hardware
                     internal_target_ticks = max(requested_final_ticks, current_phys - 1500)
                 else:
-                    # Moving DOWN (positive target)
                     internal_target_ticks = min(requested_final_ticks, current_phys + 1500)
                 
-                # Send the closely-leashed target to the hardware
                 robot.set_motor_position(
                     LIFT_MOTOR, 
                     internal_target_ticks, 
