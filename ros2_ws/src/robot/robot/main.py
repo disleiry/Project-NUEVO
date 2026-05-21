@@ -51,8 +51,8 @@ LIFT_TIMEOUT_S     = 10.0
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_16
-CLAW_OPEN_DEG   = 30.0     
-CLAW_CLOSE_DEG  = 60.0   
+CLAW_OPEN_DEG   = 0.0     
+CLAW_CLOSE_DEG  = 15.0   
 
 
 # ===========================================================================
@@ -226,17 +226,22 @@ def approach_shelf(robot: Robot) -> None:
 
 def retreat_from_shelf(robot: Robot) -> None:
     print(f"[NAV] Retreat from shelf {APPROACH_SHELF_DIST:.0f} mm")
-    robot.move_forward(distance=-APPROACH_SHELF_DIST, velocity=APPROACH_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+    robot.move_backward(distance=APPROACH_SHELF_DIST, velocity=APPROACH_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
 
 def drive_to_slot(robot: Robot, from_slot: str | None, to_slot: str) -> None:
     from_dist = INGREDIENT_SLOTS.get(from_slot, 0.0) if from_slot else 0.0
     to_dist   = INGREDIENT_SLOTS[to_slot]
     delta     = to_dist - from_dist
+    
     if abs(delta) < 1.0:
         return
-    direction = "fwd" if delta > 0 else "bwd"
-    print(f"[NAV] Drive {direction} {abs(delta):.0f} mm ({from_slot} → {to_slot})")
-    robot.move_forward(distance=delta, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+        
+    if delta > 0:
+        print(f"[NAV] Drive fwd {abs(delta):.0f} mm ({from_slot} → {to_slot})")
+        robot.move_forward(distance=abs(delta), velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+    else:
+        print(f"[NAV] Drive bwd {abs(delta):.0f} mm ({from_slot} → {to_slot})")
+        robot.move_backward(distance=abs(delta), velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
 
 
 # ===========================================================================
