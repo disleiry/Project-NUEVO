@@ -1,6 +1,6 @@
 """
-main.py — fixed traffic-light turn + forced 90-degree ramp turns + LAPF obstacle navigation
-===========================================================================================
+main.py — fixed traffic-light turn + pure pursuit + LAPF obstacle navigation
+============================================================================
 
 Mission order:
 1. Robot starts facing forward and DOES NOT move forward.
@@ -9,13 +9,7 @@ Mission order:
 3. Robot stops and waits for the traffic light to be green.
 4. Once green is detected, robot turns back to the original forward heading.
 5. Robot resets odometry and begins the course:
-   - Pure pursuit to (300, 3500).
-   - Forced turn_by() at (300, 3500).
-   - Forced move_forward() to (920, 3500).
-   - Forced turn_by() at (920, 3500) so the rover faces straight into the ramp.
-   - Forced move_forward() down the ramp to (920, 700).
-   - Forced turn_by() at (920, 700).
-   - Forced move_forward() to the obstacle entrance.
+   - Pure pursuit for the straight/ramp section.
    - LAPF + LiDAR for the obstacle-course section.
 
 How to run:
@@ -101,54 +95,21 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 
 # ---------------------------------------------------------------------------
-# Waypoint / forced-motion course layout
+# Waypoint paths through the arena
 # ---------------------------------------------------------------------------
 # Units are millimeters.
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
-#
-# Course sequence after the traffic light:
-#   1. Pure pursuit to (300, 3500).
-#   2. Force a 90-degree turn at (300, 3500) to face toward (920, 3500).
-#   3. Move forward to (920, 3500).
-#   4. Force a 90-degree turn at (920, 3500) to face straight into the ramp.
-#   5. Move forward down the ramp to (920, 700).
-#   6. Force another 90-degree turn at (920, 700).
-#   7. Move forward to the obstacle-course entrance at (1800, 700).
-#   8. Use LAPF + LiDAR through the obstacle-course section.
 
-FIRST_CORNER_WAYPOINT = (300.0, 3500.0)
-RAMP_ENTRY_WAYPOINT = (1000.0, 3500.0)
-RAMP_EXIT_WAYPOINT = (1000.0, 700.0)
-OBSTACLE_ENTRANCE_WAYPOINT = (1800.0, 700.0)
-
-PURE_PURSUIT_TO_FIRST_CORNER = [
-    #(0.0, 0.0),           # start
-    FIRST_CORNER_WAYPOINT, # Waypoint 1: home straight / first forced turn point
-]
-PURE_PURSUIT_TO_FIRST_CORNER = densify_polyline(PURE_PURSUIT_TO_FIRST_CORNER, spacing=100.0)
-
-# Absolute headings for the forced turns.
-# This is more reliable than two relative turn_by(-90) commands, because it
-# forces the rover to face the correct direction before each straight segment.
-# With INITIAL_THETA_DEG = 90:
-#   +Y direction ≈ 90°
-#   +X direction ≈ 0°
-#   -Y direction ≈ -90°
-FIRST_CORNER_HEADING_DEG = 0.0       # Face +X toward (920, 3500)
-RAMP_ENTRY_HEADING_DEG = -90.0       # Face -Y down the ramp toward (920, 700)
-RAMP_EXIT_HEADING_DEG = 0.0          # Face +X toward (1800, 700)
-
-MOVE_TO_RAMP_ENTRY_DISTANCE_MM = abs(RAMP_ENTRY_WAYPOINT[0] - FIRST_CORNER_WAYPOINT[0])
-RAMP_DISTANCE_MM = abs(RAMP_ENTRY_WAYPOINT[1] - RAMP_EXIT_WAYPOINT[1])
-OBSTACLE_ENTRANCE_DISTANCE_MM = abs(OBSTACLE_ENTRANCE_WAYPOINT[0] - RAMP_EXIT_WAYPOINT[0])
-
-# Combined list used only for printing the intended course geometry.
 PURE_PURSUIT_CONTROL_POINTS = [
-    FIRST_CORNER_WAYPOINT,
-    RAMP_ENTRY_WAYPOINT,
-    RAMP_EXIT_WAYPOINT,
-    OBSTACLE_ENTRANCE_WAYPOINT,
+    #(0.0, 0.0),        # start
+    (300.0, 3500.0),      # Waypoint 1: home straight
+    (920.0, 3500.0),    # Waypoint 2: transition / turn
+    (920.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1800.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
+
+# Optional: densify long pure-pursuit segments for smoother tracking.
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
@@ -160,7 +121,7 @@ LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 
 
 # ---------------------------------------------------------------------------
-# Pure pursuit / forced-motion tuning
+# Pure pursuit tuning for straight/ramp sections
 # ---------------------------------------------------------------------------
 
 PURE_PURSUIT_VELOCITY_MM_S = 150.0
@@ -168,58 +129,6 @@ LOOKAHEAD_MM = 200.0
 PURE_PURSUIT_TOLERANCE_MM = 25.0
 ADVANCE_RADIUS_MM = 150.0
 PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
-
-FORCED_MOVE_VELOCITY_MM_S = 150.0
-FORCED_MOVE_TOLERANCE_MM = 30.0
-FORCED_TURN_TOLERANCE_DEG = 3.0
-
-
-MISSION_STAGES: list[dict[str, Any]] = [
-    {
-        "name": "Pure pursuit to first corner at (300, 3500)",
-        "type": "pure_pursuit",
-        "waypoints": PURE_PURSUIT_TO_FIRST_CORNER,
-    },
-    {
-        "name": "Force heading +X at (300, 3500)",
-        "type": "turn_to",
-        "heading_deg": FIRST_CORNER_HEADING_DEG,
-    },
-    {
-        "name": "Forced straight move to (920, 3500)",
-        "type": "move_forward",
-        "distance_mm": MOVE_TO_RAMP_ENTRY_DISTANCE_MM,
-    },
-    {
-        "name": "Force heading -Y at (920, 3500) into ramp",
-        "type": "turn_to",
-        "heading_deg": RAMP_ENTRY_HEADING_DEG,
-    },
-    {
-        "name": "Forced straight move down ramp to (920, 700)",
-        "type": "move_forward",
-        "distance_mm": RAMP_DISTANCE_MM,
-    },
-    {
-        "name": "Force heading +X at (920, 700)",
-        "type": "turn_to",
-        "heading_deg": RAMP_EXIT_HEADING_DEG,
-    },
-    {
-        "name": "Forced straight move to obstacle entrance",
-        "type": "move_forward",
-        "distance_mm": OBSTACLE_ENTRANCE_DISTANCE_MM,
-    },
-]
-
-for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
-    MISSION_STAGES.append(
-        {
-            "name": f"Obstacle course LAPF waypoint {i}",
-            "type": "lapf",
-            "waypoint": waypoint,
-        }
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +150,24 @@ LEASH_HALF_ANGLE_DEG = 25.0
 
 STATUS_PRINT_INTERVAL_S = 0.5
 STAGE_PAUSE_S = 0.00
+
+
+MISSION_STAGES: list[dict[str, Any]] = [
+    {
+        "name": "Straight/ramp pure pursuit",
+        "type": "pure_pursuit",
+        "waypoints": PURE_PURSUIT_CONTROL_POINTS,
+    },
+]
+
+for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
+    MISSION_STAGES.append(
+        {
+            "name": f"Obstacle course LAPF waypoint {i}",
+            "type": "lapf",
+            "waypoint": waypoint,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -410,46 +337,6 @@ def cancel_motion(robot: Robot, handle) -> None:
     robot.stop()
 
 
-def start_turn_by_stage(robot: Robot, stage: dict[str, Any]):
-    delta_deg = float(stage["delta_deg"])
-    print(
-        f"[FSM] MOVING — forced turn_by delta={delta_deg:+.1f}° "
-        f"tolerance={FORCED_TURN_TOLERANCE_DEG:.1f}°"
-    )
-    return robot.turn_by(
-        delta_deg=delta_deg,
-        blocking=False,
-        tolerance_deg=FORCED_TURN_TOLERANCE_DEG,
-    )
-
-
-def start_turn_to_stage(robot: Robot, stage: dict[str, Any]):
-    heading_deg = float(stage["heading_deg"])
-    print(
-        f"[FSM] MOVING — forced turn_to heading={heading_deg:+.1f}° "
-        f"tolerance={FORCED_TURN_TOLERANCE_DEG:.1f}°"
-    )
-    return robot.turn_to(
-        heading_deg,
-        blocking=False,
-        tolerance_deg=FORCED_TURN_TOLERANCE_DEG,
-    )
-
-
-def start_move_forward_stage(robot: Robot, stage: dict[str, Any]):
-    distance_mm = float(stage["distance_mm"])
-    print(
-        f"[FSM] MOVING — forced move_forward distance={distance_mm:.0f} mm "
-        f"velocity={FORCED_MOVE_VELOCITY_MM_S:.0f} mm/s"
-    )
-    return robot.move_forward(
-        distance=distance_mm,
-        velocity=FORCED_MOVE_VELOCITY_MM_S,
-        tolerance=FORCED_MOVE_TOLERANCE_MM,
-        blocking=False,
-    )
-
-
 def start_pure_pursuit_stage(robot: Robot, stage: dict[str, Any]):
     waypoints = stage["waypoints"]
     print(
@@ -498,15 +385,6 @@ def start_course_stage(robot: Robot, stage_index: int):
     if stage["type"] == "pure_pursuit":
         return start_pure_pursuit_stage(robot, stage)
 
-    if stage["type"] == "turn_by":
-        return start_turn_by_stage(robot, stage)
-
-    if stage["type"] == "turn_to":
-        return start_turn_to_stage(robot, stage)
-
-    if stage["type"] == "move_forward":
-        return start_move_forward_stage(robot, stage)
-
     if stage["type"] == "lapf":
         return start_lapf_stage(robot, stage)
 
@@ -522,18 +400,9 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
     label, x, y, theta = get_best_pose(robot)
 
     if stage["type"] == "lapf":
-        goal_summary = f"goal=({stage['waypoint'][0]:.0f}, {stage['waypoint'][1]:.0f}) mm"
-    elif stage["type"] == "pure_pursuit":
-        goal_x, goal_y = stage["waypoints"][-1]
-        goal_summary = f"goal=({goal_x:.0f}, {goal_y:.0f}) mm"
-    elif stage["type"] == "turn_by":
-        goal_summary = f"turn_delta={float(stage['delta_deg']):+.1f}°"
-    elif stage["type"] == "turn_to":
-        goal_summary = f"turn_heading={float(stage['heading_deg']):+.1f}°"
-    elif stage["type"] == "move_forward":
-        goal_summary = f"move_distance={float(stage['distance_mm']):.0f} mm"
+        goal_x, goal_y = stage["waypoint"]
     else:
-        goal_summary = "goal=(unknown)"
+        goal_x, goal_y = stage["waypoints"][-1]
 
     virtual_target = robot.get_virtual_target()
     obstacle_tracks = robot.get_obstacle_tracks()
@@ -562,7 +431,7 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
 
     print(
         f"  stage {stage_index + 1}/{len(MISSION_STAGES)} {stage['name']} "
-        f"{goal_summary} | "
+        f"goal=({goal_x:.0f}, {goal_y:.0f}) mm | "
         f"{label}=({x:6.0f}, {y:6.0f}) mm θ={theta:5.1f}°"
         f"{gps_summary}{vt_summary}{track_summary}"
     )
@@ -578,15 +447,9 @@ def print_config(robot: Robot) -> None:
         f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
     )
 
-    print("[CFG] Intended forced-turn course points:")
+    print("[CFG] Pure pursuit control points:")
     for i, waypoint in enumerate(PURE_PURSUIT_CONTROL_POINTS, start=1):
         print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
-    print(
-        f"[CFG] forced headings: at {FIRST_CORNER_WAYPOINT} turn_to {FIRST_CORNER_HEADING_DEG:+.0f}°, "
-        f"move {MOVE_TO_RAMP_ENTRY_DISTANCE_MM:.0f} mm to {RAMP_ENTRY_WAYPOINT}, "
-        f"turn_to {RAMP_ENTRY_HEADING_DEG:+.0f}°, move {RAMP_DISTANCE_MM:.0f} mm to {RAMP_EXIT_WAYPOINT}, "
-        f"turn_to {RAMP_EXIT_HEADING_DEG:+.0f}°, move {OBSTACLE_ENTRANCE_DISTANCE_MM:.0f} mm"
-    )
 
     print("[CFG] LAPF obstacle-course control points:")
     for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
@@ -595,10 +458,6 @@ def print_config(robot: Robot) -> None:
     print(
         f"[CFG] pure_pursuit velocity={PURE_PURSUIT_VELOCITY_MM_S:.0f} mm/s "
         f"lookahead={LOOKAHEAD_MM:.0f} mm tolerance={PURE_PURSUIT_TOLERANCE_MM:.0f} mm"
-    )
-    print(
-        f"[CFG] forced_move velocity={FORCED_MOVE_VELOCITY_MM_S:.0f} mm/s "
-        f"tolerance={FORCED_MOVE_TOLERANCE_MM:.0f} mm turn_tolerance={FORCED_TURN_TOLERANCE_DEG:.1f}°"
     )
     print(
         f"[CFG] LAPF velocity={LAPF_VELOCITY_MM_S:.0f} mm/s "
@@ -754,11 +613,11 @@ def run(robot: Robot) -> None:
                     show_traffic_light_color(robot, "red")
 
                 else:
-                    # No detection yet: remain stopped at the fixed traffic-light viewing angle.
+                    # No detection yet: remain stopped at the fixed 15-degree viewing angle.
                     pass
 
         # ── RETURN_TO_FORWARD ────────────────────────────────────────────────
-        # Turn in place back to the heading the robot had before the traffic-light turn.
+        # Turn in place back to the heading the robot had before the 15-degree turn.
         elif state == "RETURN_TO_FORWARD":
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
@@ -786,7 +645,7 @@ def run(robot: Robot) -> None:
                     state = "COURSE_MOVING"
 
         # ── COURSE_MOVING ───────────────────────────────────────────────────
-        # Run pure pursuit, forced turn/move stages, then LAPF waypoints.
+        # Run pure pursuit first, then LAPF waypoints.
         elif state == "COURSE_MOVING":
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
