@@ -70,13 +70,9 @@ TAG_ID = 25
 
 # GPS tuning.
 GPS_POSITION_ALPHA = 0.01
-ENABLE_GPS_TANGENT_HEADING = False  # Keep false so odom-only stages are not corrected by GPS heading
+ENABLE_GPS_TANGENT_HEADING = True
 GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
-
-# Runtime flag used by get_best_pose()/status printing.
-# start_course_stage() updates this per mission stage.
-USE_GPS_FOR_CURRENT_STAGE = True
 
 
 # ---------------------------------------------------------------------------
@@ -104,36 +100,16 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # Units are millimeters.
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 
-# Split the pure-pursuit path so GPS can be disabled only on the ramp/return segment.
-# Segment 1 uses GPS/fused pose.
-PURE_PURSUIT_GPS_BEFORE = [
+PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (300.0, 3450.0),    # Waypoint 1: home straight
-    (920.0, 3450.0),    # Waypoint 2: transition / turn
-    (920.0, 3250.0)
+    (300.0, 3500.0),      # Waypoint 1: home straight
+    (920.0, 3500.0),    # Waypoint 2: transition / turn
+    (920.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1800.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
-PURE_PURSUIT_GPS_BEFORE = densify_polyline(PURE_PURSUIT_GPS_BEFORE, spacing=100.0)
 
-# Segment 2 uses odometry only. GPS position fusion is turned off for this stage.
-PURE_PURSUIT_ODOM_ONLY = [
-    (920.0, 3250.0),    # Start of odom-only segment
-    (920.0, 700.0),     # Ramp / return direction
-]
-PURE_PURSUIT_ODOM_ONLY = densify_polyline(PURE_PURSUIT_ODOM_ONLY, spacing=100.0)
-
-# Segment 3 turns GPS/fused pose back on.
-PURE_PURSUIT_GPS_AFTER = [
-    (920.0, 700.0),     # End of odom-only segment
-    (1800.0, 700.0),    # Entrance toward obstacle course
-]
-PURE_PURSUIT_GPS_AFTER = densify_polyline(PURE_PURSUIT_GPS_AFTER, spacing=100.0)
-
-# Combined list used only for config/status printing.
-PURE_PURSUIT_CONTROL_POINTS = (
-    PURE_PURSUIT_GPS_BEFORE
-    + PURE_PURSUIT_ODOM_ONLY[1:]
-    + PURE_PURSUIT_GPS_AFTER[1:]
-)
+# Optional: densify long pure-pursuit segments for smoother tracking.
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
@@ -178,22 +154,9 @@ STAGE_PAUSE_S = 0.00
 
 MISSION_STAGES: list[dict[str, Any]] = [
     {
-        "name": "Pure pursuit before ramp/return",
+        "name": "Straight/ramp pure pursuit",
         "type": "pure_pursuit",
-        "waypoints": PURE_PURSUIT_GPS_BEFORE,
-        "use_gps": True,
-    },
-    {
-        "name": "Pure pursuit ramp/return odometry only",
-        "type": "pure_pursuit",
-        "waypoints": PURE_PURSUIT_ODOM_ONLY,
-        "use_gps": False,
-    },
-    {
-        "name": "Pure pursuit after ramp/return",
-        "type": "pure_pursuit",
-        "waypoints": PURE_PURSUIT_GPS_AFTER,
-        "use_gps": True,
+        "waypoints": PURE_PURSUIT_CONTROL_POINTS,
     },
 ]
 
@@ -203,7 +166,6 @@ for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
             "name": f"Obstacle course LAPF waypoint {i}",
             "type": "lapf",
             "waypoint": waypoint,
-            "use_gps": True,
         }
     )
 
@@ -314,7 +276,7 @@ def show_traffic_light_color(robot: Robot, color: str) -> None:
 
 
 def get_best_pose(robot: Robot) -> tuple[str, float, float, float]:
-    if ENABLE_GPS and USE_GPS_FOR_CURRENT_STAGE and robot.has_fused_pose():
+    if ENABLE_GPS and robot.has_fused_pose():
         x, y, theta = robot.get_fused_pose()
         return "fused", x, y, theta
 
@@ -417,32 +379,8 @@ def start_lapf_stage(robot: Robot, stage: dict[str, Any]):
     )
 
 
-def set_gps_for_stage(robot: Robot, use_gps: bool) -> None:
-    """Enable/disable GPS position fusion for the current course stage.
-
-    This does not shut down the GPS node. It only changes the fusion alpha:
-    - use_gps=True  -> fused pose can be used.
-    - use_gps=False -> GPS position correction is ignored, so the stage is odometry-only.
-    """
-    global USE_GPS_FOR_CURRENT_STAGE
-
-    USE_GPS_FOR_CURRENT_STAGE = bool(use_gps)
-
-    if not ENABLE_GPS:
-        return
-
-    if USE_GPS_FOR_CURRENT_STAGE:
-        robot.set_position_fusion_alpha(GPS_POSITION_ALPHA)
-        print("[GPS] GPS fusion enabled for this stage")
-    else:
-        robot.set_position_fusion_alpha(0.0)
-        print("[GPS] GPS fusion disabled for this stage — odometry only")
-
-
 def start_course_stage(robot: Robot, stage_index: int):
     stage = MISSION_STAGES[stage_index]
-
-    set_gps_for_stage(robot, bool(stage.get("use_gps", True)))
 
     if stage["type"] == "pure_pursuit":
         return start_pure_pursuit_stage(robot, stage)
@@ -489,10 +427,7 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
 
     gps_summary = ""
     if ENABLE_GPS:
-        if USE_GPS_FOR_CURRENT_STAGE:
-            gps_summary = f" gps={'fresh' if robot.is_gps_active() else 'stale'}"
-        else:
-            gps_summary = " gps=disabled_for_stage"
+        gps_summary = f" gps={'fresh' if robot.is_gps_active() else 'stale'}"
 
     print(
         f"  stage {stage_index + 1}/{len(MISSION_STAGES)} {stage['name']} "
@@ -512,16 +447,8 @@ def print_config(robot: Robot) -> None:
         f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
     )
 
-    print("[CFG] Pure pursuit GPS-before control points:")
-    for i, waypoint in enumerate(PURE_PURSUIT_GPS_BEFORE, start=1):
-        print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
-
-    print("[CFG] Pure pursuit ODOM-ONLY control points:")
-    for i, waypoint in enumerate(PURE_PURSUIT_ODOM_ONLY, start=1):
-        print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
-
-    print("[CFG] Pure pursuit GPS-after control points:")
-    for i, waypoint in enumerate(PURE_PURSUIT_GPS_AFTER, start=1):
+    print("[CFG] Pure pursuit control points:")
+    for i, waypoint in enumerate(PURE_PURSUIT_CONTROL_POINTS, start=1):
         print(f"      {i:02d}: ({waypoint[0]:.0f}, {waypoint[1]:.0f}) mm")
 
     print("[CFG] LAPF obstacle-course control points:")
