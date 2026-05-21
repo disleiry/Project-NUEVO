@@ -50,7 +50,7 @@ LIFT_TIMEOUT_S     = 10.0
 # CLAW SERVO
 # ===========================================================================
 
-CLAW_SERVO      = ServoChannel.CH_1
+CLAW_SERVO      = ServoChannel.CH_16
 CLAW_OPEN_DEG   = 30.0    
 CLAW_CLOSE_DEG  = 80.0    
 
