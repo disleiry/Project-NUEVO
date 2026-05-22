@@ -54,7 +54,7 @@ LIFT_ITEM_THICKNESS_TICKS = -1100
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_13
-CLAW_OPEN_DEG   = 30.0   # UPDATED
+CLAW_OPEN_DEG   = 10.0   # UPDATED
 CLAW_CLOSE_DEG  = 100.0  # UPDATED
 
 
@@ -84,8 +84,8 @@ TURN_TOLERANCE_DEG  = 3.0
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 610.0    
-APPROACH_SHELF_DIST = 40.0        
+DIST_TO_INGREDIENT_AREA = 640.0    
+APPROACH_SHELF_DIST = 0.0        
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 152.0,    
