@@ -38,12 +38,15 @@ from robot.robot import FirmwareState, Robot
 LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -11500   
 LIFT_PICKUP_TICKS  = -7500    
-LIFT_DROPOFF_TICKS = -7500    
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 800     
 LIFT_TOLERANCE     = 30      
 LIFT_JOG_STEP      = 1500     
 LIFT_TIMEOUT_S     = 10.0    
+
+# NEW: Offset for each stacked burger piece (~1 inch thick)
+# Note: Negative values move the lift UP on your hardware.
+LIFT_ITEM_THICKNESS_TICKS = -1100  
 
 
 # ===========================================================================
@@ -51,8 +54,8 @@ LIFT_TIMEOUT_S     = 10.0
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_13
-CLAW_OPEN_DEG   = 30.0   
-CLAW_CLOSE_DEG  = 100.0   
+CLAW_OPEN_DEG   = 0.0   
+CLAW_CLOSE_DEG  = 15.0   
 
 
 # ===========================================================================
@@ -89,7 +92,6 @@ INGREDIENT_SLOTS = {
 INGREDIENT_ORDER = ["bun_bottom", "meat", "bun_top"]
 ASSEMBLY_SLOT = "bun_bottom"
 
-# Set to 1 to effectively disable retries while keeping the logic intact
 MAX_PICK_ATTEMPTS = 1  
 _ESTOP_IMMUNE = frozenset({"INIT", "INIT_JOG", "WAIT_GREEN"})
 
@@ -274,18 +276,16 @@ def run(robot: Robot) -> None:
     state         = "INIT"
     current_slot  = None
     pick_attempts = 0
+    active_drop_ticks = 0  # Dynamic drop height tracker
     
     action_sub_state = "INIT"
     action_timer      = 0.0
     next_fsm_state   = ""
     
-    # Flag to latch manual button skips during lift transitions
     manual_skip_triggered = False
-
     period    = 1.0 / float(DEFAULT_FSM_HZ)
     next_tick = time.monotonic()
 
-    # Hardware tracking system internals
     internal_target_ticks = 0
     requested_final_ticks = 0
     last_step_time = 0.0
@@ -303,7 +303,7 @@ def run(robot: Robot) -> None:
         # ==================================================================
         if state == "INIT":
             robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-            claw_close(robot)  # CHANGED: Claw now initializes CLOSED
+            claw_close(robot)  
             led_idle(robot)
             print("  LIFT ALIGNMENT — align carriage to Sharpie mark")
             print("  BTN_1: UP | BTN_2: DOWN | BTN_10: Confirm")
@@ -331,7 +331,24 @@ def run(robot: Robot) -> None:
 
         elif state == "WAIT_GREEN":
             if detect_green_light(robot) or robot.was_button_pressed(Button.BTN_5):
-                print("[FSM] Proceeding to BURGER_PICKUP")
+                print("[FSM] Proceeding to PREP_INITIAL_MOVE")
+                state = "PREP_INITIAL_MOVE"
+
+        # ==================================================================
+        # PREP MOVE (Lifts arm to carry and opens claw BEFORE driving)
+        # ==================================================================
+        elif state == "PREP_INITIAL_MOVE":
+            print("[ARM] Prepping arm for travel...")
+            robot.enable_servo(CLAW_SERVO)
+            robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+            requested_final_ticks = LIFT_CARRY_TICKS
+            action_timer = time.monotonic()
+            state = "WAIT_PREP_INITIAL"
+
+        elif state == "WAIT_PREP_INITIAL":
+            current = get_lift_ticks(robot)
+            if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
+                print("[ARM] Arm prepped at carry height. Moving out.")
                 state = "BURGER_PICKUP"
 
         # ==================================================================
@@ -363,6 +380,8 @@ def run(robot: Robot) -> None:
             approach_shelf(robot)
             robot.stop()
             
+            # Placing meat onto 1 object (bun bottom)
+            active_drop_ticks = LIFT_PICKUP_TICKS + (1 * LIFT_ITEM_THICKNESS_TICKS)
             action_sub_state = "LIFT_DOWN"
             next_fsm_state = "MOVE_TO_BURGER_BUN2"
             state = "DO_PLACE"
@@ -386,18 +405,11 @@ def run(robot: Robot) -> None:
             approach_shelf(robot)
             robot.stop()
             
-            action_sub_state = "LIFT_DOWN"
-            next_fsm_state = "PICK_UP_BURGER"
-            state = "DO_PLACE"
-
-        elif state == "PICK_UP_BURGER":
-            turn_to_face_shelf(robot)
-            approach_shelf(robot)
-            robot.stop()
-            
-            action_sub_state = "OPEN_CLAW"
+            # Placing top bun onto 2 objects (bun + meat), then scooping all
+            active_drop_ticks = LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS)
+            action_sub_state = "LIFT_DOWN_TO_STACK"
             next_fsm_state = "HOLD"
-            state = "DO_PICK"
+            state = "DO_PLACE_AND_GRAB"
 
         # ==================================================================
         # GENERIC NON-BLOCKING PICK SEQUENCE
@@ -405,10 +417,9 @@ def run(robot: Robot) -> None:
         elif state == "DO_PICK":
             if robot.was_button_pressed(Button.BTN_3):
                 manual_skip_triggered = True
-                print("[MANUAL] BTN_3 pressed! Will force grab success at top of lift.")
 
             if action_sub_state == "OPEN_CLAW":
-                print(f"[ARM] Opening claw to {CLAW_OPEN_DEG} degrees...")
+                # Redundant safety open, arm should already be open & at carry height from prep/DO_PLACE
                 robot.enable_servo(CLAW_SERVO)
                 robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
                 action_timer = time.monotonic()
@@ -426,11 +437,7 @@ def run(robot: Robot) -> None:
                 time_elapsed = time.monotonic() - action_timer
                 
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
-                    if time_elapsed > LIFT_TIMEOUT_S:
-                        print(f"[WARN] Lift timed out going down. Reached: {current} ticks (Target: {LIFT_PICKUP_TICKS})")
-                    else:
-                        print(f"[ARM] Reached pickup height at: {current} ticks")
-                        
+                    print(f"[ARM] Reached pickup height at: {current} ticks")
                     print(f"[ARM] Closing claw to {CLAW_CLOSE_DEG} degrees...")
                     robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
                     action_timer = time.monotonic()
@@ -448,43 +455,30 @@ def run(robot: Robot) -> None:
                 time_elapsed = time.monotonic() - action_timer
                 
                 if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
-                    if time_elapsed > LIFT_TIMEOUT_S:
-                        print(f"[WARN] Lift timed out going up. Reached: {current} ticks")
-                    else:
-                        print(f"[ARM] Lift stopped carrying at: {current} ticks")
-                        
                     grabbed = claw_has_object(robot) or manual_skip_triggered
                     pick_attempts += 1
                     
                     if grabbed:
-                        if manual_skip_triggered:
-                            print("[ARM] Grab success forced via manual button override.")
-                        else:
-                            print("[ARM] Grab confirmed by sensor.")
                         retreat_from_shelf(robot)
                         turn_away_from_shelf(robot)
                         pick_attempts = 0
                         manual_skip_triggered = False  
                         state = next_fsm_state
-                        
                     elif pick_attempts >= MAX_PICK_ATTEMPTS:
-                        print(f"[WARN] Max pickup attempts ({MAX_PICK_ATTEMPTS}) reached. Proceeding anyway.")
                         retreat_from_shelf(robot)
                         turn_away_from_shelf(robot)
                         pick_attempts = 0
                         manual_skip_triggered = False
                         state = next_fsm_state
-                        
                     else:
-                        print(f"[ARM] Grab failed (No sensor data). Retrying... (Press BTN_3 to skip)")
                         action_sub_state = "OPEN_CLAW" 
 
         # ==================================================================
-        # GENERIC NON-BLOCKING PLACE SEQUENCE
+        # GENERIC NON-BLOCKING PLACE SEQUENCE (Leaves Claw Open!)
         # ==================================================================
         elif state == "DO_PLACE":
             if action_sub_state == "LIFT_DOWN":
-                requested_final_ticks = LIFT_DROPOFF_TICKS
+                requested_final_ticks = active_drop_ticks
                 action_timer = time.monotonic()
                 action_sub_state = "WAIT_LIFT_DOWN"
                 
@@ -492,15 +486,14 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 time_elapsed = time.monotonic() - action_timer
                 
-                if abs(current - LIFT_DROPOFF_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
-                    print(f"[ARM] Lift stopped at dropoff at: {current} ticks")
+                if abs(current - active_drop_ticks) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
+                    print(f"[ARM] Lift stopped at dynamic dropoff: {current} ticks")
                     print(f"[ARM] Opening claw to {CLAW_OPEN_DEG} degrees...")
                     robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_OPEN"
                     
             elif action_sub_state == "WAIT_OPEN":
-                # Changed: Lift safely clear of the object BEFORE closing the claw.
                 if time.monotonic() - action_timer >= 0.5:
                     print("[ARM] Claw is open. Lifting safely to carry height FIRST...")
                     requested_final_ticks = LIFT_CARRY_TICKS
@@ -511,18 +504,59 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 time_elapsed = time.monotonic() - action_timer
                 
+                # NOTE: We do NOT close the claw here. It stays open for the next move.
                 if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
-                    print(f"[ARM] Lift clear of burger at: {current} ticks")
-                    print(f"[ARM] Now safely closing claw back up...")
-                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
-                    action_timer = time.monotonic()
-                    action_sub_state = "WAIT_FINAL_CLOSE"
-
-            elif action_sub_state == "WAIT_FINAL_CLOSE":
-                if time.monotonic() - action_timer >= 0.5:
+                    print(f"[ARM] Lift clear of burger at: {current} ticks. Leaving Claw OPEN.")
                     retreat_from_shelf(robot)
                     turn_away_from_shelf(robot)
                     pick_attempts = 0
+                    state = next_fsm_state
+
+        # ==================================================================
+        # DROP 3RD PIECE AND SCOOP ENTIRE BURGER
+        # ==================================================================
+        elif state == "DO_PLACE_AND_GRAB":
+            if action_sub_state == "LIFT_DOWN_TO_STACK":
+                requested_final_ticks = active_drop_ticks
+                action_timer = time.monotonic()
+                action_sub_state = "WAIT_LIFT_DOWN_STACK"
+
+            elif action_sub_state == "WAIT_LIFT_DOWN_STACK":
+                current = get_lift_ticks(robot)
+                if abs(current - active_drop_ticks) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
+                    print("[ARM] Reached stack height. Dropping top bun...")
+                    robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+                    action_timer = time.monotonic()
+                    action_sub_state = "WAIT_OPEN"
+
+            elif action_sub_state == "WAIT_OPEN":
+                if time.monotonic() - action_timer >= 0.5:
+                    print("[ARM] Dropped bun. Lowering to base to grab entire burger...")
+                    requested_final_ticks = LIFT_PICKUP_TICKS
+                    action_timer = time.monotonic()
+                    action_sub_state = "WAIT_LIFT_DOWN_BASE"
+
+            elif action_sub_state == "WAIT_LIFT_DOWN_BASE":
+                current = get_lift_ticks(robot)
+                if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
+                    print("[ARM] At base height. Grabbing entire burger...")
+                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+                    action_timer = time.monotonic()
+                    action_sub_state = "WAIT_CLOSE"
+
+            elif action_sub_state == "WAIT_CLOSE":
+                if time.monotonic() - action_timer >= 1.5:
+                    print("[ARM] Grabbed entire burger. Lifting to carry height...")
+                    requested_final_ticks = LIFT_CARRY_TICKS
+                    action_timer = time.monotonic()
+                    action_sub_state = "WAIT_LIFT_UP"
+
+            elif action_sub_state == "WAIT_LIFT_UP":
+                current = get_lift_ticks(robot)
+                if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
+                    print("[ARM] Secured all pieces at carry height.")
+                    retreat_from_shelf(robot)
+                    turn_away_from_shelf(robot)
                     state = next_fsm_state
 
         # ==================================================================
