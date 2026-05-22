@@ -100,7 +100,6 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 
 PURE_PURSUIT_CONTROL_POINTS = [
-    (PURE_PURSUIT_CONTROL_POINTS = [
     (300.0, 3500.0),    # Home straight
     (700.0, 3500.0),    # Start turning much earlier to maintain high speed
     (770.0, 3350.0),    # Mid-corner apex
