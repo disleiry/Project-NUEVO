@@ -55,7 +55,7 @@ LIFT_ITEM_THICKNESS_TICKS = -1100
 
 CLAW_SERVO      = ServoChannel.CH_13
 CLAW_OPEN_DEG   = 10.0   # UPDATED
-CLAW_CLOSE_DEG  = 100.0  # UPDATED
+CLAW_CLOSE_DEG  = 115.0  # UPDATED
 
 
 # ===========================================================================
