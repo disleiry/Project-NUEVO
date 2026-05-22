@@ -604,7 +604,7 @@ def run(robot: Robot) -> None:
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
                     last_status_print_at = now
-                    state = "RETURN_TO_FORWARD""
+                    state = "RETURN_TO_FORWARD"
 
                 elif traffic_light_color == "red":
                     show_traffic_light_color(robot, "red")
