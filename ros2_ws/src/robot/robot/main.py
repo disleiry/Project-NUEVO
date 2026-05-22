@@ -100,11 +100,11 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 
 PURE_PURSUIT_CONTROL_POINTS = [
-    (300.0, 3500.0),    # 1st right turn (perfect, 0 slip)
-    (550.0, 3500.0),    # Start the 2nd turn MASSIVELY early (Robot thinks 550, reality is ~600)
-    (650.0, 3350.0),    # Mid-corner apex
-    (740.0, 3100.0),    # Straightening out! (Robot thinks 740, reality is ~840)
-    (740.0, 700.0),     # Safe line down the ramp
+    (350.0, 3550.0),    # 1st right turn (perfect, 0 slip)
+    (590.0, 3550.0),    # Start the 2nd turn MASSIVELY early (Robot thinks 550, reality is ~600)
+    (680.0, 3350.0),    # Mid-corner apex
+    (800.0, 3100.0),    # Straightening out! (Robot thinks 740, reality is ~840)
+    (800.0, 700.0),     # Safe line down the ramp
     (1800.0, 700.0),    
 ] 
 
