@@ -101,10 +101,10 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     (300.0, 3640.0),    # Home straight
-    (700.0, 3640.0),    # Start the turn early at 700 (True coordinate)
-    (770.0, 3440.0),    # Mid-corner apex
-    (800.0, 3240.0),    # Easing out of the turn
-    (800.0, 3000.0),    # Fully straightened out safely a
+    (6200.0, 3640.0),    # Start the turn early at 700 (True coordinate)
+    (690.0, 3440.0),    # Mid-corner apex
+    (750.0, 3240.0),    # Easing out of the turn
+    (750.0, 3000.0),    # Fully straightened out safely a
     (900.0, 700.0),     # Safe line down the center of the ramp
     (1800.0, 700.0),    
 ]
