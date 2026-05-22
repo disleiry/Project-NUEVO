@@ -80,7 +80,7 @@ TURN_FROM_SHELF_DEG = -72.5
 TURN_TOLERANCE_DEG  = 3.0     
 
 TURN_VELOCITY = 30.0
-SERVO_DEG_PER_STEP = 2.0
+SERVO_DEG_PER_STEP = 0.8
 
 
 # ===========================================================================
