@@ -44,7 +44,7 @@ LIFT_TOLERANCE     = 30
 LIFT_JOG_STEP      = 1500     
 LIFT_TIMEOUT_S     = 10.0    
 
-# NEW: Offset for each stacked burger piece (~1 inch thick)
+# Offset for each stacked burger piece (~1 inch thick)
 # Note: Negative values move the lift UP on your hardware.
 LIFT_ITEM_THICKNESS_TICKS = -1100  
 
@@ -67,13 +67,17 @@ CLAW_GRAB_CONFIRMED = True
 
 
 # ===========================================================================
-# DRIVE BASE
+# DRIVE BASE & NAVIGATION
 # ===========================================================================
 
-DRIVE_VELOCITY     = 100.0   
-APPROACH_VELOCITY  = 60.0    
-TURN_TOLERANCE_DEG = 3.0     
-POS_TOLERANCE_MM   = 20.0    
+DRIVE_VELOCITY      = 100.0   
+APPROACH_VELOCITY   = 60.0    
+POS_TOLERANCE_MM    = 20.0    
+
+# Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
+TURN_TO_SHELF_DEG   = 90.0
+TURN_FROM_SHELF_DEG = -90.0
+TURN_TOLERANCE_DEG  = 2.0     
 
 
 # ===========================================================================
@@ -89,7 +93,8 @@ INGREDIENT_SLOTS = {
     "bun_top":    670.0,  
 }
 
-INGREDIENT_ORDER = ["bun_bottom", "meat", "bun_top"]
+# The bottom bun is our assembly base. We only fetch meat and top bun.
+FETCH_ORDER   = ["meat", "bun_top"]
 ASSEMBLY_SLOT = "bun_bottom"
 
 MAX_PICK_ATTEMPTS = 1  
@@ -217,12 +222,12 @@ def claw_has_object(robot: Robot) -> bool:
 # ===========================================================================
 
 def turn_to_face_shelf(robot: Robot) -> None:
-    print("[NAV] Turn +90° to face shelf")
-    robot.turn_by(delta_deg=90.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+    print(f"[NAV] Turn {TURN_TO_SHELF_DEG}° to face shelf")
+    robot.turn_by(delta_deg=TURN_TO_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
 def turn_away_from_shelf(robot: Robot) -> None:
-    print("[NAV] Turn −90° to resume heading")
-    robot.turn_by(delta_deg=-90.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+    print(f"[NAV] Turn {TURN_FROM_SHELF_DEG}° to resume heading")
+    robot.turn_by(delta_deg=TURN_FROM_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
 def approach_shelf(robot: Robot) -> None:
     print(f"[NAV] Approach shelf {APPROACH_SHELF_DIST:.0f} mm")
@@ -276,7 +281,7 @@ def run(robot: Robot) -> None:
     state         = "INIT"
     current_slot  = None
     pick_attempts = 0
-    active_drop_ticks = 0  # Dynamic drop height tracker
+    active_drop_ticks = 0  
     
     action_sub_state = "INIT"
     action_timer      = 0.0
@@ -335,7 +340,7 @@ def run(robot: Robot) -> None:
                 state = "PREP_INITIAL_MOVE"
 
         # ==================================================================
-        # PREP MOVE (Lifts arm to carry and opens claw BEFORE driving)
+        # PREP MOVE
         # ==================================================================
         elif state == "PREP_INITIAL_MOVE":
             print("[ARM] Prepping arm for travel...")
@@ -359,10 +364,10 @@ def run(robot: Robot) -> None:
             robot.stop()
             current_slot  = None
             pick_attempts = 0
-            state = "MOVE_TO_MEAT"
+            state = "FETCH_MEAT"
 
-        elif state == "MOVE_TO_MEAT":
-            target = INGREDIENT_ORDER[0]
+        elif state == "FETCH_MEAT":
+            target = FETCH_ORDER[0]  # "meat"
             drive_to_slot(robot, current_slot, target)
             current_slot = target
             turn_to_face_shelf(robot)
@@ -370,24 +375,24 @@ def run(robot: Robot) -> None:
             robot.stop()
             
             action_sub_state = "OPEN_CLAW"
-            next_fsm_state = "MOVE_TO_BURGER_BUN1"
+            next_fsm_state = "PLACE_MEAT"
             state = "DO_PICK"
 
-        elif state == "MOVE_TO_BURGER_BUN1":
+        elif state == "PLACE_MEAT":
             drive_to_slot(robot, current_slot, ASSEMBLY_SLOT)
             current_slot = ASSEMBLY_SLOT
             turn_to_face_shelf(robot)
             approach_shelf(robot)
             robot.stop()
             
-            # Placing meat onto 1 object (bun bottom)
+            # Placing meat onto base bun (1 thickness up)
             active_drop_ticks = LIFT_PICKUP_TICKS + (1 * LIFT_ITEM_THICKNESS_TICKS)
             action_sub_state = "LIFT_DOWN"
-            next_fsm_state = "MOVE_TO_BURGER_BUN2"
+            next_fsm_state = "FETCH_TOP_BUN"
             state = "DO_PLACE"
 
-        elif state == "MOVE_TO_BURGER_BUN2":
-            target = INGREDIENT_ORDER[1]
+        elif state == "FETCH_TOP_BUN":
+            target = FETCH_ORDER[1]  # "bun_top"
             drive_to_slot(robot, current_slot, target)
             current_slot = target
             turn_to_face_shelf(robot)
@@ -395,17 +400,17 @@ def run(robot: Robot) -> None:
             robot.stop()
             
             action_sub_state = "OPEN_CLAW"
-            next_fsm_state = "MOVE_TO_BURGER_BUN3"
+            next_fsm_state = "PLACE_AND_GRAB_STACK"
             state = "DO_PICK"
 
-        elif state == "MOVE_TO_BURGER_BUN3":
+        elif state == "PLACE_AND_GRAB_STACK":
             drive_to_slot(robot, current_slot, ASSEMBLY_SLOT)
             current_slot = ASSEMBLY_SLOT
             turn_to_face_shelf(robot)
             approach_shelf(robot)
             robot.stop()
             
-            # Placing top bun onto 2 objects (bun + meat), then scooping all
+            # Placing top bun onto meat + base bun (2 thicknesses up)
             active_drop_ticks = LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS)
             action_sub_state = "LIFT_DOWN_TO_STACK"
             next_fsm_state = "HOLD"
@@ -419,7 +424,6 @@ def run(robot: Robot) -> None:
                 manual_skip_triggered = True
 
             if action_sub_state == "OPEN_CLAW":
-                # Redundant safety open, arm should already be open & at carry height from prep/DO_PLACE
                 robot.enable_servo(CLAW_SERVO)
                 robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
                 action_timer = time.monotonic()
@@ -504,7 +508,6 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 time_elapsed = time.monotonic() - action_timer
                 
-                # NOTE: We do NOT close the claw here. It stays open for the next move.
                 if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Lift clear of burger at: {current} ticks. Leaving Claw OPEN.")
                     retreat_from_shelf(robot)
