@@ -75,9 +75,9 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 72.5
-TURN_FROM_SHELF_DEG = -72.5
-TURN_TOLERANCE_DEG  = 3.0     
+TURN_TO_SHELF_DEG   = 90
+TURN_FROM_SHELF_DEG = -90
+TURN_TOLERANCE_DEG  = 2.0     
 
 TURN_VELOCITY = 30.0
 SERVO_DEG_PER_STEP = 0.8
@@ -88,7 +88,7 @@ SERVO_DEG_PER_STEP = 0.8
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 10.0        
+APPROACH_SHELF_DIST = 40.0        
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 162.0,    
