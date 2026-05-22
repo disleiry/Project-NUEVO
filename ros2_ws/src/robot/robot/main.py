@@ -85,7 +85,7 @@ TURN_TOLERANCE_DEG  = 3.0
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 0.0        
+APPROACH_SHELF_DIST = 5.0        
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 152.0,    
