@@ -109,7 +109,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
     (840.0, 700.0),     # Down the ramp
     (1800.0, 700.0),    
 ]  
-]
+
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
 PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
