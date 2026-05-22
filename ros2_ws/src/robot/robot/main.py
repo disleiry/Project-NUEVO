@@ -91,9 +91,9 @@ DIST_TO_INGREDIENT_AREA = 640.0
 APPROACH_SHELF_DIST = 55.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 182.0,    
+    "bun_bottom": 190.0,    
     "meat":       340.0,  
-    "bun_top":    480.0,  
+    "bun_top":    472.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
