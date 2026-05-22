@@ -565,7 +565,7 @@ def run(robot: Robot) -> None:
                     _, _, theta = robot.get_odometry_pose()
                     print(
                         f"  turning to traffic light: θ={theta:.1f}° "
-                        f"delta={TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
+                        f"delta={TRAFFIC_LIGHT_LOOK_ANGLE_DEG:+.1f}°"
                     )
                     last_status_print_at = now
 
