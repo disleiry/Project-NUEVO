@@ -39,10 +39,10 @@ LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -15000    # UPDATED: Drop off / travel height
 LIFT_PICKUP_TICKS  = -9500     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
-LIFT_MAX_VEL       = 800     
+LIFT_MAX_VEL       = 1200     
 LIFT_TOLERANCE     = 30      
 LIFT_JOG_STEP      = 1500     
-LIFT_TIMEOUT_S     = 10.0    
+LIFT_TIMEOUT_S     = 20.0    
 
 # Offset for each stacked burger piece (~1 inch thick)
 # UPDATED: Since positive is now UP, this is a positive value.
