@@ -79,6 +79,9 @@ TURN_TO_SHELF_DEG   = 72.5
 TURN_FROM_SHELF_DEG = -72.5
 TURN_TOLERANCE_DEG  = 3.0     
 
+TURN_VELOCITY = 30.0
+SERVO_DEG_PER_STEP = 2.0
+
 
 # ===========================================================================
 # BURGER PICKUP PARAMETERS
@@ -223,11 +226,21 @@ def claw_has_object(robot: Robot) -> bool:
 
 def turn_to_face_shelf(robot: Robot) -> None:
     print(f"[NAV] Turn {TURN_TO_SHELF_DEG}° to face shelf")
-    robot.turn_by(delta_deg=TURN_TO_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+    robot.turn_by(
+        delta_deg=TURN_TO_SHELF_DEG, 
+        velocity=TURN_VELOCITY,  # Added velocity here
+        blocking=True, 
+        tolerance_deg=TURN_TOLERANCE_DEG
+    )
 
 def turn_away_from_shelf(robot: Robot) -> None:
     print(f"[NAV] Turn {TURN_FROM_SHELF_DEG}° to resume heading")
-    robot.turn_by(delta_deg=TURN_FROM_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+    robot.turn_by(
+        delta_deg=TURN_FROM_SHELF_DEG, 
+        velocity=TURN_VELOCITY,  # Added velocity here
+        blocking=True, 
+        tolerance_deg=TURN_TOLERANCE_DEG
+    )
 
 def approach_shelf(robot: Robot) -> None:
     print(f"[NAV] Approach shelf {APPROACH_SHELF_DIST:.0f} mm")
@@ -295,6 +308,9 @@ def run(robot: Robot) -> None:
     requested_final_ticks = 0
     last_step_time = 0.0
     step_delay_s = 0.150  
+    
+    requested_claw_deg = CLAW_CLOSE_DEG  
+    current_claw_deg = CLAW_CLOSE_DEG
 
     print()
     print("=" * 56)
@@ -346,7 +362,7 @@ def run(robot: Robot) -> None:
         elif state == "PREP_INITIAL_MOVE":
             print("[ARM] Prepping arm for travel...")
             robot.enable_servo(CLAW_SERVO)
-            robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+            requested_claw_deg = CLAW_OPEN_DEG  # UPDATED: Smooth transition
             requested_final_ticks = LIFT_CARRY_TICKS
             action_timer = time.monotonic()
             state = "WAIT_PREP_INITIAL"
@@ -426,7 +442,7 @@ def run(robot: Robot) -> None:
 
             if action_sub_state == "OPEN_CLAW":
                 robot.enable_servo(CLAW_SERVO)
-                robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+                requested_claw_deg = CLAW_OPEN_DEG  # UPDATED: Smooth transition
                 action_timer = time.monotonic()
                 action_sub_state = "WAIT_OPEN"
                 
@@ -444,7 +460,7 @@ def run(robot: Robot) -> None:
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Reached pickup height at: {current} ticks")
                     print(f"[ARM] Closing claw to {CLAW_CLOSE_DEG} degrees...")
-                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+                    requested_claw_deg = CLAW_CLOSE_DEG  # UPDATED: Smooth transition
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_CLOSE"
                     
@@ -494,7 +510,7 @@ def run(robot: Robot) -> None:
                 if abs(current - active_drop_ticks) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Lift stopped at dynamic dropoff: {current} ticks")
                     print(f"[ARM] Opening claw to {CLAW_OPEN_DEG} degrees...")
-                    robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+                    requested_claw_deg = CLAW_OPEN_DEG  # UPDATED: Smooth transition
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_OPEN"
                     
@@ -529,7 +545,7 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 if abs(current - active_drop_ticks) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
                     print("[ARM] Reached stack height. Dropping top bun...")
-                    robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+                    requested_claw_deg = CLAW_OPEN_DEG  # UPDATED: Smooth transition
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_OPEN"
 
@@ -544,7 +560,7 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
                     print("[ARM] At base height. Grabbing entire burger...")
-                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+                    requested_claw_deg = CLAW_CLOSE_DEG  # UPDATED: Smooth transition
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_CLOSE"
 
@@ -610,6 +626,17 @@ def run(robot: Robot) -> None:
                     blocking=False
                 )
                 last_step_time = now
+
+        # ==================================================================
+        # ASYNCHRONOUS SERVO SPEED GOVERNOR
+        # ==================================================================
+        if abs(current_claw_deg - requested_claw_deg) > 0.5:
+            if requested_claw_deg > current_claw_deg:
+                current_claw_deg = min(requested_claw_deg, current_claw_deg + SERVO_DEG_PER_STEP)
+            else:
+                current_claw_deg = max(requested_claw_deg, current_claw_deg - SERVO_DEG_PER_STEP)
+            
+            robot.set_servo(CLAW_SERVO, current_claw_deg)
 
         # ── tick-rate control ──────────────────────────────────────────────
         next_tick += period
