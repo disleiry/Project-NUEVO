@@ -101,10 +101,8 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     (300.0, 3500.0),    
-    (720.0, 3500.0),    # Start turning early
-    (800.0, 3400.0),    # Mid-corner
-    (890.0, 3300.0),    # Finish turn smoothly
-    (890.0, 700.0),     
+    (860.0, 3500.0),    
+    (860.0, 700.0),     
     (1800.0, 700.0),    
 ]
 
