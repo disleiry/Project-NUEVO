@@ -101,7 +101,9 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     (300.0, 3500.0),    
-    (860.0, 3500.0),    
+    (650.0, 3500.0),    # Start the turn early
+    (750.0, 3400.0),    # Mid-corner
+    (860.0, 3250.0),    # Finish turn smoothly, safely away from 924
     (860.0, 700.0),     
     (1800.0, 700.0),    
 ]
@@ -123,9 +125,9 @@ LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 # ---------------------------------------------------------------------------
 
 PURE_PURSUIT_VELOCITY_MM_S = 150.0
-LOOKAHEAD_MM = 350.0
+LOOKAHEAD_MM = 225.0
 PURE_PURSUIT_TOLERANCE_MM = 25.0
-ADVANCE_RADIUS_MM = 90.0
+ADVANCE_RADIUS_MM = 75.0
 PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 
