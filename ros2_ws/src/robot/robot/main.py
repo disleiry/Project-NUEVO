@@ -443,8 +443,8 @@ def print_config(robot: Robot) -> None:
 
     print("[CFG] Traffic-light fixed turn:")
     print(
-        f"      turn_angle={TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
-        f"return_angle={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
+        f"      turn_angle={TRAFFIC_LIGHT_LOOK_ANGLE_DEG:+.1f}°, "
+        f"return_angle={-TRAFFIC_LIGHT_RETURN_ANGLE_DEG:+.1f}°, "
         f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
     )
 
