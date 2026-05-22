@@ -100,11 +100,12 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 
 PURE_PURSUIT_CONTROL_POINTS = [
-    #(0.0, 0.0),        # start
-    (300.0, 3500.0),      # Waypoint 1: home straight
-    (750.0, 3500.0),    # Waypoint 2: transition / turn
-    (750.0, 700.0),     # Waypoint 3: ramp / return direction
-    (1800.0, 700.0),    # Waypoint 4: entrance toward obstacle course
+    (300.0, 3500.0),    
+    (720.0, 3500.0),    # Start turning early
+    (800.0, 3400.0),    # Mid-corner
+    (890.0, 3300.0),    # Finish turn smoothly
+    (890.0, 700.0),     
+    (1800.0, 700.0),    
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -124,9 +125,9 @@ LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 # ---------------------------------------------------------------------------
 
 PURE_PURSUIT_VELOCITY_MM_S = 150.0
-LOOKAHEAD_MM = 200.0
+LOOKAHEAD_MM = 350.0
 PURE_PURSUIT_TOLERANCE_MM = 25.0
-ADVANCE_RADIUS_MM = 150.0
+ADVANCE_RADIUS_MM = 300.0
 PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 
