@@ -463,12 +463,21 @@ def run(robot: Robot) -> None:
                     state = "WAIT_FOR_GREEN"
 
         # ── WAIT_FOR_GREEN ──────────────────────────────────────────────────
+        # ── WAIT_FOR_GREEN ──────────────────────────────────────────────────
         elif state == "WAIT_FOR_GREEN":
             if robot.was_button_pressed(Button.BTN_2):
                 show_idle_leds(robot)
                 print("[FSM] IDLE — mission cancelled while waiting for green light")
                 state = "IDLE"
             else:
+                # --- NEW DEBUG PRINTS ---
+                if now - last_status_print_at >= 1.0:
+                    vision_active = robot.is_vision_active(timeout_s=VISION_STALE_SEC)
+                    detections = robot.get_detections("traffic light")
+                    print(f"[DEBUG] Vision Active: {vision_active} | Raw Detections: {detections}")
+                    last_status_print_at = now
+                # ------------------------
+
                 traffic_light_color = find_traffic_light_color(robot)
                 if traffic_light_color == "green":
                     show_traffic_light_color(robot, "green")
