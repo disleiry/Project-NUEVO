@@ -75,8 +75,8 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 80.0
-TURN_FROM_SHELF_DEG = -80.0
+TURN_TO_SHELF_DEG   = 72.5
+TURN_FROM_SHELF_DEG = -72.5
 TURN_TOLERANCE_DEG  = 3.0     
 
 
