@@ -84,13 +84,13 @@ TURN_TOLERANCE_DEG  = 3.0
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 610.0    
-APPROACH_SHELF_DIST = 75.0        
+DIST_TO_INGREDIENT_AREA = 584.0    
+APPROACH_SHELF_DIST = 50.0        
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 152.0,    
     "meat":       307.0,  
-    "bun_top":    670.0,  
+    "bun_top":    460.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
