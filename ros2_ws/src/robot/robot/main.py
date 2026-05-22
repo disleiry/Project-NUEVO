@@ -46,7 +46,7 @@ LIFT_TIMEOUT_S     = 20.0
 
 # Offset for each stacked burger piece (~1 inch thick)
 # UPDATED: Since positive is now UP, this is a positive value.
-LIFT_ITEM_THICKNESS_TICKS = -1100  
+LIFT_ITEM_THICKNESS_TICKS = -1800  
 
 
 # ===========================================================================
@@ -88,12 +88,12 @@ SERVO_DEG_PER_STEP = 0.8
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 40.0        
+APPROACH_SHELF_DIST = 55.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 162.0,    
+    "bun_bottom": 182.0,    
     "meat":       340.0,  
-    "bun_top":    460.0,  
+    "bun_top":    480.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
