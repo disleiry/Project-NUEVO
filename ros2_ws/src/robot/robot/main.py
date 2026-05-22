@@ -100,12 +100,15 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 
 PURE_PURSUIT_CONTROL_POINTS = [
-    (300.0, 3500.0),    
-    (650.0, 3500.0),    # Start the turn early
-    (750.0, 3400.0),    # Mid-corner
-    (860.0, 3250.0),    # Finish turn smoothly, safely away from 924
-    (860.0, 700.0),     
+    (PURE_PURSUIT_CONTROL_POINTS = [
+    (300.0, 3500.0),    # Home straight
+    (700.0, 3500.0),    # Start turning much earlier to maintain high speed
+    (770.0, 3350.0),    # Mid-corner apex
+    (820.0, 3150.0),    # Easing out of the turn
+    (840.0, 2900.0),    # Fully straightened out safely at 840
+    (840.0, 700.0),     # Down the ramp
     (1800.0, 700.0),    
+]  
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
