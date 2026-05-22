@@ -39,7 +39,7 @@ LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -11500   
 LIFT_PICKUP_TICKS  = -7500    
 LIFT_DROPOFF_TICKS = -7500    
-LIFT_DOWN_TICKS    = 0       
+LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 800     
 LIFT_TOLERANCE     = 30      
 LIFT_JOG_STEP      = 1500     
@@ -51,8 +51,8 @@ LIFT_TIMEOUT_S     = 10.0
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_13
-CLAW_OPEN_DEG   = 0.0   
-CLAW_CLOSE_DEG  = 15.0   
+CLAW_OPEN_DEG   = 30.0   
+CLAW_CLOSE_DEG  = 100.0   
 
 
 # ===========================================================================
@@ -88,7 +88,9 @@ INGREDIENT_SLOTS = {
 
 INGREDIENT_ORDER = ["bun_bottom", "meat", "bun_top"]
 ASSEMBLY_SLOT = "bun_bottom"
-MAX_PICK_ATTEMPTS = 3
+
+# Set to 1 to effectively disable retries while keeping the logic intact
+MAX_PICK_ATTEMPTS = 1  
 _ESTOP_IMMUNE = frozenset({"INIT", "INIT_JOG", "WAIT_GREEN"})
 
 
@@ -401,7 +403,6 @@ def run(robot: Robot) -> None:
         # GENERIC NON-BLOCKING PICK SEQUENCE
         # ==================================================================
         elif state == "DO_PICK":
-            # Watch for a manual skip button press during long actions
             if robot.was_button_pressed(Button.BTN_3):
                 manual_skip_triggered = True
                 print("[MANUAL] BTN_3 pressed! Will force grab success at top of lift.")
@@ -452,7 +453,6 @@ def run(robot: Robot) -> None:
                     else:
                         print(f"[ARM] Lift stopped carrying at: {current} ticks")
                         
-                    # Evaluate hardware sensor OR our manual override flag
                     grabbed = claw_has_object(robot) or manual_skip_triggered
                     pick_attempts += 1
                     
@@ -464,15 +464,17 @@ def run(robot: Robot) -> None:
                         retreat_from_shelf(robot)
                         turn_away_from_shelf(robot)
                         pick_attempts = 0
-                        manual_skip_triggered = False  # Reset flag
+                        manual_skip_triggered = False  
                         state = next_fsm_state
+                        
                     elif pick_attempts >= MAX_PICK_ATTEMPTS:
-                        print("[WARN] Max pickup attempts reached without confirmation. Proceeding anyway.")
+                        print(f"[WARN] Max pickup attempts ({MAX_PICK_ATTEMPTS}) reached. Proceeding anyway.")
                         retreat_from_shelf(robot)
                         turn_away_from_shelf(robot)
                         pick_attempts = 0
                         manual_skip_triggered = False
                         state = next_fsm_state
+                        
                     else:
                         print(f"[ARM] Grab failed (No sensor data). Retrying... (Press BTN_3 to skip)")
                         action_sub_state = "OPEN_CLAW" 
@@ -498,9 +500,9 @@ def run(robot: Robot) -> None:
                     action_sub_state = "WAIT_OPEN"
                     
             elif action_sub_state == "WAIT_OPEN":
+                # Changed: Lift safely clear of the object BEFORE closing the claw.
                 if time.monotonic() - action_timer >= 0.5:
-                    print("[ARM] Closing claw back up and returning to carry height...")
-                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG) # Keep it tidy
+                    print("[ARM] Claw is open. Lifting safely to carry height FIRST...")
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_LIFT_UP"
@@ -510,7 +512,14 @@ def run(robot: Robot) -> None:
                 time_elapsed = time.monotonic() - action_timer
                 
                 if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
-                    print(f"[ARM] Lift stopped carrying at: {current} ticks")
+                    print(f"[ARM] Lift clear of burger at: {current} ticks")
+                    print(f"[ARM] Now safely closing claw back up...")
+                    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+                    action_timer = time.monotonic()
+                    action_sub_state = "WAIT_FINAL_CLOSE"
+
+            elif action_sub_state == "WAIT_FINAL_CLOSE":
+                if time.monotonic() - action_timer >= 0.5:
                     retreat_from_shelf(robot)
                     turn_away_from_shelf(robot)
                     pick_attempts = 0
