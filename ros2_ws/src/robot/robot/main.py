@@ -85,7 +85,7 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 
 # Absolute headings for traffic light viewing and returning.
 # Assuming INITIAL_THETA_DEG is 90, 120.0 looks 30 degrees left.
-TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 120.0
+TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 125.0
 TRAFFIC_LIGHT_RETURN_ANGLE_DEG = 90.0
 TURN_TOLERANCE_DEG = 2.0
 
