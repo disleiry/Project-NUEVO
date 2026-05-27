@@ -59,7 +59,7 @@ LIFT_MAX_VEL = 1800
 LIFT_TOLERANCE = 30
 CLAW_SERVO = ServoChannel.CH_13
 CLAW_OPEN_DEG = 60.0
-CLAW_CLOSE_DEG = 111.0
+CLAW_CLOSE_DEG = 146.0
 
 # --- NAVIGATION SETTINGS ---
 DRIVE_VELOCITY = 150.0
@@ -82,22 +82,20 @@ PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 # 1. Travel forward in positive X axis to the camera station.
 STATION_CONTROL_POINTS = [
-    (2000.0, 3700.0),
+    (1800.0, 3700.0),
     (2500.0, 3700.0),
 ]
 
 # 2A. Dropoff path for Customer A (Female)
-# (ADJUST THE Y=2000 TO MATCH YOUR FIELD)
 CUSTOMER_A_DROPOFF_POINTS = [
     (2500.0, 3700.0),
-    (2500.0, 1700.0), 
+    (2500.0, 2000.0), 
 ]
 
 # 2B. Dropoff path for Customer B (Male)
-# (ADJUST THE Y=1000 TO MATCH YOUR FIELD)
 CUSTOMER_B_DROPOFF_POINTS = [
     (2500.0, 3700.0),
-    (2500.0, 1300.0), 
+    (2500.0, 1000.0), 
 ]
 
 # Densify segments for smoother tracking 
@@ -107,8 +105,15 @@ CUSTOMER_B_DROPOFF_POINTS = densify_polyline(CUSTOMER_B_DROPOFF_POINTS, spacing=
 
 
 # ==========================================
-# HARDWARE / ROBOT CONFIGURATION
+# STARTUP & CONFIGURATION HELPERS
 # ==========================================
+
+def start_robot(robot: Robot) -> None:
+    """Crucial step: Ensures robot is not in ESTOP state from a previous run."""
+    state = robot.get_state()
+    if state in (FirmwareState.ESTOP, FirmwareState.ERROR):
+        robot.reset_estop()
+    robot.set_state(FirmwareState.RUNNING)
 
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
@@ -139,7 +144,7 @@ def configure_robot(robot: Robot) -> None:
 
 
 # ==========================================
-# HELPERS
+# ACTION HELPERS
 # ==========================================
 
 def claw_close(robot: Robot) -> None:
@@ -204,6 +209,8 @@ def start_pure_pursuit_stage(robot: Robot, waypoints: list[tuple[float, float]])
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
+    start_robot(robot)  # <-- MISSING IN PREVIOUS VERSIONS, FIXES THE ESTOP LOCK
+    
     state = "INIT"
     motion_handle = None
     timer = 0.0
@@ -214,6 +221,8 @@ def run(robot: Robot) -> None:
     print("=====================================================")
 
     while True:
+        robot.update()  # <-- ABSOLUTELY REQUIRED EVERY LOOP
+
         if state == "INIT":
             if robot.was_button_pressed(Button.BTN_1):
                 robot.reset_odometry()
@@ -318,14 +327,12 @@ def run(robot: Robot) -> None:
 
         time.sleep(1.0 / DEFAULT_FSM_HZ)
 
+
+# <-- This block handles the actual execution correctly
 if __name__ == "__main__":
     from robot.robot import Robot
-    
-    # Initialize the robot
     robot = Robot()
-    
     try:
-        # Actually start the mission!
         run(robot)
     except KeyboardInterrupt:
         print("\n[FSM] Mission interrupted by user. Stopping robot.")
