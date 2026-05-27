@@ -320,4 +320,13 @@ def run(robot: Robot) -> None:
 
 if __name__ == "__main__":
     from robot.robot import Robot
-    print("Place inside ros2_ws and run using standard parameters.")
+    
+    # Initialize the robot
+    robot = Robot()
+    
+    try:
+        # Actually start the mission!
+        run(robot)
+    except KeyboardInterrupt:
+        print("\n[FSM] Mission interrupted by user. Stopping robot.")
+        robot.stop()
