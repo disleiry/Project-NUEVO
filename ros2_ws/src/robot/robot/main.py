@@ -88,10 +88,10 @@ SERVO_DEG_PER_STEP = 0.8
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 30.0        
+APPROACH_SHELF_DIST = 18.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 200.0,    
+    "bun_bottom": 220.0,    
     "meat":       350.0,  
     "bun_top":    475.0,  
 }
