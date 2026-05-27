@@ -82,7 +82,7 @@ PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 # 1. Travel forward in positive X axis to the camera station.
 STATION_CONTROL_POINTS = [
-    (1800.0, 3700.0),
+    (2000.0, 3700.0),
     (2500.0, 3700.0),
 ]
 
