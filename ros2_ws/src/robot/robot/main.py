@@ -209,7 +209,7 @@ def start_pure_pursuit_stage(robot: Robot, waypoints: list[tuple[float, float]])
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
-    start_robot(robot)  # <-- MISSING IN PREVIOUS VERSIONS, FIXES THE ESTOP LOCK
+    start_robot(robot)  # Unlocks the robot from ESTOP
     
     state = "INIT"
     motion_handle = None
@@ -221,7 +221,6 @@ def run(robot: Robot) -> None:
     print("=====================================================")
 
     while True:
-        robot.update()  # <-- ABSOLUTELY REQUIRED EVERY LOOP
 
         if state == "INIT":
             if robot.was_button_pressed(Button.BTN_1):
@@ -328,7 +327,6 @@ def run(robot: Robot) -> None:
         time.sleep(1.0 / DEFAULT_FSM_HZ)
 
 
-# <-- This block handles the actual execution correctly
 if __name__ == "__main__":
     from robot.robot import Robot
     robot = Robot()
