@@ -90,14 +90,14 @@ STATION_CONTROL_POINTS = [
 # (ADJUST THE Y=2000 TO MATCH YOUR FIELD)
 CUSTOMER_A_DROPOFF_POINTS = [
     (2500.0, 3700.0),
-    (2500.0, 2000.0), 
+    (2500.0, 1700.0), 
 ]
 
 # 2B. Dropoff path for Customer B (Male)
 # (ADJUST THE Y=1000 TO MATCH YOUR FIELD)
 CUSTOMER_B_DROPOFF_POINTS = [
     (2500.0, 3700.0),
-    (2500.0, 1000.0), 
+    (2500.0, 1300.0), 
 ]
 
 # Densify segments for smoother tracking 
