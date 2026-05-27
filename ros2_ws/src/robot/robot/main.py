@@ -1,6 +1,6 @@
 """
 main_delivery_stage.py
-Combines pure pursuit, gender detection, and burger drop-off.
+Combines pure pursuit, gender detection, and dynamic burger drop-off.
 Starts where the obstacle course ends.
 """
 
@@ -24,8 +24,8 @@ from robot.hardware_map import (
     ServoChannel,
     WHEEL_BASE,
     WHEEL_DIAMETER,
-    TAG_BODY_OFFSET_X_MM,  # ADDED: Essential for GPS
-    TAG_BODY_OFFSET_Y_MM,  # ADDED: Essential for GPS
+    TAG_BODY_OFFSET_X_MM,
+    TAG_BODY_OFFSET_Y_MM,
 )
 from robot.robot import FirmwareState, Robot
 from robot.util import densify_polyline
@@ -64,9 +64,9 @@ CLAW_CLOSE_DEG = 146.0
 # --- NAVIGATION SETTINGS ---
 DRIVE_VELOCITY = 150.0
 APPROACH_VELOCITY = 60.0
-APPROACH_SHELF_DIST = 18.0   # ADDED: From test_burger_pickup_new.py
-TURN_TO_SHELF_DEG = 79.0     # ADDED: Shelf may not be exactly 90 deg 
-TURN_FROM_SHELF_DEG = -79.0  # ADDED
+APPROACH_SHELF_DIST = 18.0   
+TURN_TO_SHELF_DEG = 79.0     
+TURN_FROM_SHELF_DEG = -79.0  
 TURN_TOLERANCE_DEG = 2.0
 
 # --- PURE PURSUIT SETTINGS ---
@@ -86,15 +86,24 @@ STATION_CONTROL_POINTS = [
     (2500.0, 3700.0),
 ]
 
-# 2. After a Right Turn, travel along the Y-axis (-Y direction) to dropoff.
-DROPOFF_CONTROL_POINTS = [
+# 2A. Dropoff path for Customer A (Female)
+# (ADJUST THE Y=2000 TO MATCH YOUR FIELD)
+CUSTOMER_A_DROPOFF_POINTS = [
     (2500.0, 3700.0),
-    (2500.0, 1500.0),
+    (2500.0, 2000.0), 
+]
+
+# 2B. Dropoff path for Customer B (Male)
+# (ADJUST THE Y=1000 TO MATCH YOUR FIELD)
+CUSTOMER_B_DROPOFF_POINTS = [
+    (2500.0, 3700.0),
+    (2500.0, 1000.0), 
 ]
 
 # Densify segments for smoother tracking 
 STATION_CONTROL_POINTS = densify_polyline(STATION_CONTROL_POINTS, spacing=100.0)
-DROPOFF_CONTROL_POINTS = densify_polyline(DROPOFF_CONTROL_POINTS, spacing=100.0)
+CUSTOMER_A_DROPOFF_POINTS = densify_polyline(CUSTOMER_A_DROPOFF_POINTS, spacing=100.0)
+CUSTOMER_B_DROPOFF_POINTS = densify_polyline(CUSTOMER_B_DROPOFF_POINTS, spacing=100.0)
 
 
 # ==========================================
@@ -114,7 +123,6 @@ def configure_robot(robot: Robot) -> None:
     )
     robot.enable_vision()
     
-    # ADDED: Correctly initialize GPS parameters so TAG 25 tracks correctly 
     if ENABLE_GPS:
         robot.enable_gps()
         robot.set_tracked_tag_id(TAG_ID)
@@ -145,6 +153,7 @@ def claw_open(robot: Robot) -> None:
     time.sleep(0.5)
 
 def detect_customer_gender() -> str:
+    """Takes 15 frames to process a biased vote for Male vs. Female."""
     if not GenderDetector:
         return "Unknown"
         
@@ -170,7 +179,11 @@ def detect_customer_gender() -> str:
     if votes["Male"] == 0 and votes["Female"] == 0:
         return "Unknown"
 
-    return "Male" if votes["Male"] > votes["Female"] else "Female"
+    # Biased check: 3 or more Female votes means it's the Female customer
+    if votes["Female"] >= 3:
+        return "Female"
+    else:
+        return "Male"
 
 def start_pure_pursuit_stage(robot: Robot, waypoints: list[tuple[float, float]]):
     print(f"[FSM] MOVING pure pursuit stage with {len(waypoints)} waypoints.")
@@ -215,31 +228,40 @@ def run(robot: Robot) -> None:
 
         elif state == "NAV_TO_STATION":
             if motion_handle.is_done():
-                print("[FSM] Arrived at customer station.")
+                print("[FSM] Arrived at camera station.")
                 robot.stop()
                 state = "DETECT_CUSTOMER"
 
         elif state == "DETECT_CUSTOMER":
             print("[VISION] Beginning 15-frame gender detection...")
             result = detect_customer_gender()
-            customer = "Customer A" if result == "Female" else "Customer B"
+            
+            # Decide which waypoint path to use based on the camera
+            if result == "Female":
+                customer = "Customer A (Female)"
+                active_dropoff_points = CUSTOMER_A_DROPOFF_POINTS
+            else:
+                customer = "Customer B (Male)"
+                active_dropoff_points = CUSTOMER_B_DROPOFF_POINTS
+
             print(f"[DETECTED] {result} -> Deliver to {customer}")
             
             print("[FSM] Turning Right 90 degrees to face down Y-axis...")
             robot.turn_by(delta_deg=-90.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
             
             print("[FSM] Disabling GPS. Relying strictly on Odometry/Pure Pursuit.")
-            robot.disable_gps()
+            if ENABLE_GPS:
+                robot.disable_gps()
             
-            motion_handle = start_pure_pursuit_stage(robot, DROPOFF_CONTROL_POINTS)
+            # Start pure pursuit using the dynamically selected path
+            motion_handle = start_pure_pursuit_stage(robot, active_dropoff_points)
             state = "NAV_TO_DROPOFF"
 
         elif state == "NAV_TO_DROPOFF":
             if motion_handle.is_done():
-                print("[FSM] Reached drop-off spot on Y-axis.")
+                print(f"[FSM] Reached {customer} drop-off spot on Y-axis.")
                 robot.stop()
                 
-                # ADDED: Using TURN_TO_SHELF_DEG instead of hardcoded 90.0
                 print(f"[FSM] Turning Left {TURN_TO_SHELF_DEG} degrees to face shelf.")
                 robot.turn_by(delta_deg=TURN_TO_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
                 
@@ -250,7 +272,6 @@ def run(robot: Robot) -> None:
                     blocking=True, timeout=5.0
                 )
                 
-                # ADDED: Using APPROACH_SHELF_DIST instead of hardcoded 150.0
                 print(f"[FSM] Moving towards shelf for deposit: {APPROACH_SHELF_DIST}mm")
                 robot.move_forward(distance=APPROACH_SHELF_DIST, velocity=APPROACH_VELOCITY, blocking=True)
                 state = "DROP_BURGER"
@@ -270,7 +291,6 @@ def run(robot: Robot) -> None:
             )
             claw_close(robot)
 
-            # ADDED: Using TURN_FROM_SHELF_DEG to resume the course heading smoothly 
             print(f"[FSM] Turning Right ({TURN_FROM_SHELF_DEG} degrees) to continue down Y-axis...")
             robot.turn_by(delta_deg=TURN_FROM_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
             
