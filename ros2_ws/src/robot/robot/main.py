@@ -54,7 +54,7 @@ LIFT_ITEM_THICKNESS_TICKS = -1800
 # ===========================================================================
 
 CLAW_SERVO      = ServoChannel.CH_13
-CLAW_OPEN_DEG   = 80.0   # UPDATED
+CLAW_OPEN_DEG   = 60.0   # UPDATED
 CLAW_CLOSE_DEG  = 146.0  # UPDATED
 
 
@@ -88,11 +88,11 @@ SERVO_DEG_PER_STEP = 0.8
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 50.0        
+APPROACH_SHELF_DIST = 30.0        
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 190.0,    
-    "meat":       340.0,  
+    "meat":       350.0,  
     "bun_top":    472.0,  
 }
 
