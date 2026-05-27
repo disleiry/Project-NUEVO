@@ -41,7 +41,7 @@ LIFT_PICKUP_TICKS  = -8300     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 1800     
 LIFT_TOLERANCE     = 30      
-LIFT_JOG_STEP      = 1500     
+LIFT_JOG_STEP      = 100     
 LIFT_TIMEOUT_S     = 20.0    
 
 # Offset for each stacked burger piece (~1 inch thick)
@@ -55,7 +55,7 @@ LIFT_ITEM_THICKNESS_TICKS = -1800
 
 CLAW_SERVO      = ServoChannel.CH_13
 CLAW_OPEN_DEG   = 60.0   # UPDATED
-CLAW_CLOSE_DEG  = 132.0  # UPDATED
+CLAW_CLOSE_DEG  = 146.0  # UPDATED
 
 
 # ===========================================================================
@@ -75,8 +75,8 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 80
-TURN_FROM_SHELF_DEG = -80
+TURN_TO_SHELF_DEG   = 79
+TURN_FROM_SHELF_DEG = -79
 TURN_TOLERANCE_DEG  = 2.0     
 
 TURN_VELOCITY = 30.0
@@ -88,12 +88,12 @@ SERVO_DEG_PER_STEP = 0.8
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 50.0        
+APPROACH_SHELF_DIST = 18.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 190.0,    
-    "meat":       340.0,  
-    "bun_top":    472.0,  
+    "bun_bottom": 220.0,    
+    "meat":       350.0,  
+    "bun_top":    475.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
