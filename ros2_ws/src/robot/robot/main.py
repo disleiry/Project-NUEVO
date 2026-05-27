@@ -41,7 +41,7 @@ LIFT_PICKUP_TICKS  = -8300     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 1800     
 LIFT_TOLERANCE     = 30      
-LIFT_JOG_STEP      = 1500     
+LIFT_JOG_STEP      = 100     
 LIFT_TIMEOUT_S     = 20.0    
 
 # Offset for each stacked burger piece (~1 inch thick)
@@ -55,7 +55,7 @@ LIFT_ITEM_THICKNESS_TICKS = -1800
 
 CLAW_SERVO      = ServoChannel.CH_13
 CLAW_OPEN_DEG   = 60.0   # UPDATED
-CLAW_CLOSE_DEG  = 132.0  # UPDATED
+CLAW_CLOSE_DEG  = 118.0  # UPDATED
 
 
 # ===========================================================================
