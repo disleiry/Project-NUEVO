@@ -1,10 +1,7 @@
 """
 test_gender_detection.py
-Standalone gender detection test.
-Rules:
-  - Male at 1.00 confidence → Customer B
-  - Female at >= 0.95 confidence → Customer A
-  - Anything else → keep scanning
+Standalone gender detection test with majority vote.
+Takes 10 frames, counts votes, picks the winner.
 """
 
 import sys
@@ -13,6 +10,10 @@ import cv2
 
 sys.path.insert(0, '/ros2_ws/src/vision')
 from vision.gender_detection import GenderDetector
+
+FRAMES       = 10     # number of frames to sample
+FRAME_DELAY  = 0.2    # seconds between frames
+MIN_CONF     = 0.70   # ignore detections below this confidence
 
 
 def main():
@@ -25,33 +26,36 @@ def main():
 
     print("\n--- GENDER DETECTION TEST ---")
     print("Stand in front of the camera.")
-    print("Customer A = Female (conf >= 0.95)")
-    print("Customer B = Male   (conf = 1.00)")
+    print("Customer A = Female")
+    print("Customer B = Male")
     print("Press Ctrl+C to stop.\n")
 
     try:
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                print("[ERROR] Frame capture failed")
-                time.sleep(0.5)
+            votes = {"Male": 0, "Female": 0}
+
+            for i in range(FRAMES):
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+                gender, conf = detector.detect(frame)
+                if gender and conf >= MIN_CONF:
+                    votes[gender] += 1
+                    print(f"  frame {i+1}/{FRAMES}: {gender} ({conf:.2f})")
+                else:
+                    print(f"  frame {i+1}/{FRAMES}: no detection")
+                time.sleep(FRAME_DELAY)
+
+            total = votes["Male"] + votes["Female"]
+            if total == 0:
+                print("[WAITING]  No face detected — trying again\n")
                 continue
 
-            gender, conf = detector.detect(frame)
-
-            if gender is None:
-                print("[WAITING]  No face detected")
-
-            elif gender == "Male" and conf >= 1.00:
-                print(f"[DETECTED] Male ({conf:.2f}) → Customer B")
-
-            elif gender == "Female" and conf >= 0.95:
-                print(f"[DETECTED] Female ({conf:.2f}) → Customer A")
-
-            else:
-                print(f"[UNSURE]   {gender} ({conf:.2f}) — confidence too low, keep scanning")
-
-            time.sleep(0.5)
+            result   = "Male" if votes["Male"] > votes["Female"] else "Female"
+            customer = "Customer B" if result == "Male" else "Customer A"
+            print(f"\n[RESULT] {result} "
+                  f"(Female:{votes['Female']} Male:{votes['Male']}) "
+                  f"→ {customer}\n")
 
     except KeyboardInterrupt:
         print("\nTest stopped.")
