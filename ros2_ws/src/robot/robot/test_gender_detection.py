@@ -1,6 +1,10 @@
 """
 test_gender_detection.py
-Standalone gender detection test with majority vote for reliability.
+Standalone gender detection test.
+Rules:
+  - Male at 1.00 confidence → Customer B
+  - Female at >= 0.95 confidence → Customer A
+  - Anything else → keep scanning
 """
 
 import sys
@@ -21,33 +25,33 @@ def main():
 
     print("\n--- GENDER DETECTION TEST ---")
     print("Stand in front of the camera.")
-    print("Customer A = Female")
-    print("Customer B = Male")
+    print("Customer A = Female (conf >= 0.95)")
+    print("Customer B = Male   (conf = 1.00)")
     print("Press Ctrl+C to stop.\n")
 
     try:
         while True:
-            votes = {"Male": 0, "Female": 0}
+            ret, frame = cap.read()
+            if not ret:
+                print("[ERROR] Frame capture failed")
+                time.sleep(0.5)
+                continue
 
-            # take 15 frames and vote
-            for i in range(15):
-                ret, frame = cap.read()
-                if not ret:
-                    continue
-                gender, conf = detector.detect(frame)
-                if gender:
-                    votes[gender] += 1
-                time.sleep(0.1)
+            gender, conf = detector.detect(frame)
 
-            # result
-            if votes["Male"] == 0 and votes["Female"] == 0:
+            if gender is None:
                 print("[WAITING]  No face detected")
+
+            elif gender == "Male" and conf >= 1.00:
+                print(f"[DETECTED] Male ({conf:.2f}) → Customer B")
+
+            elif gender == "Female" and conf >= 0.95:
+                print(f"[DETECTED] Female ({conf:.2f}) → Customer A")
+
             else:
-                result = "Male" if votes["Male"] > votes["Female"] else "Female"
-                customer = "Customer A" if result == "Female" else "Customer B"
-                print(f"[DETECTED] {result} "
-                      f"(Female:{votes['Female']} Male:{votes['Male']}) "
-                      f"→ deliver to {customer}")
+                print(f"[UNSURE]   {gender} ({conf:.2f}) — confidence too low, keep scanning")
+
+            time.sleep(0.5)
 
     except KeyboardInterrupt:
         print("\nTest stopped.")
