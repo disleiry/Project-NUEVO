@@ -1,11 +1,6 @@
 """
 test_gender_detection.py
-
-Standalone test for gender detection.
-No ROS2, no robot, no bridge needed.
-
-Run from Docker terminal:
-    python3 /ros2_ws/src/vision/vision/test_gender_detection.py
+Standalone gender detection test with majority vote for reliability.
 """
 
 import sys
@@ -32,21 +27,27 @@ def main():
 
     try:
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                print("[ERROR] Frame capture failed")
-                time.sleep(0.5)
-                continue
+            votes = {"Male": 0, "Female": 0}
 
-            gender, conf = detector.detect(frame)
+            # take 15 frames and vote
+            for i in range(15):
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+                gender, conf = detector.detect(frame)
+                if gender:
+                    votes[gender] += 1
+                time.sleep(0.1)
 
-            if gender:
-                customer = "Customer A" if gender == "Female" else "Customer B"
-                print(f"[DETECTED] {gender} ({conf:.2f}) → deliver to {customer}")
-            else:
+            # result
+            if votes["Male"] == 0 and votes["Female"] == 0:
                 print("[WAITING]  No face detected")
-
-            time.sleep(0.5)
+            else:
+                result = "Male" if votes["Male"] > votes["Female"] else "Female"
+                customer = "Customer A" if result == "Female" else "Customer B"
+                print(f"[DETECTED] {result} "
+                      f"(Female:{votes['Female']} Male:{votes['Male']}) "
+                      f"→ deliver to {customer}")
 
     except KeyboardInterrupt:
         print("\nTest stopped.")
