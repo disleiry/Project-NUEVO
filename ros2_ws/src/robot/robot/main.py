@@ -75,8 +75,8 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 80
-TURN_FROM_SHELF_DEG = -80
+TURN_TO_SHELF_DEG   = 82
+TURN_FROM_SHELF_DEG = -82
 TURN_TOLERANCE_DEG  = 2.0     
 
 TURN_VELOCITY = 30.0
@@ -91,9 +91,9 @@ DIST_TO_INGREDIENT_AREA = 640.0
 APPROACH_SHELF_DIST = 30.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 190.0,    
+    "bun_bottom": 210.0,    
     "meat":       350.0,  
-    "bun_top":    472.0,  
+    "bun_top":    485.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
