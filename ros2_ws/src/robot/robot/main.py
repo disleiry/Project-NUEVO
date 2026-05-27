@@ -105,8 +105,8 @@ PURE_PURSUIT_CONTROL_POINTS = [
     (690.0, 3540.0),    # Mid-corner apex
     (730.0, 3300.0),    # Easing out of the turn
     (750.0, 3000.0),    # Fully straightened out safely a
-    (950.0, 1000.0),     # Safe line down the center of the ramp
-    (1600.0, 1000.0),    
+    (950.0, 800.0),     # Safe line down the center of the ramp
+    (1600.0, 800.0),    
 ]
 
 
