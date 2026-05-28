@@ -36,7 +36,7 @@ from robot.robot import FirmwareState, Robot
 # ===========================================================================
 
 LIFT_MOTOR         = Motor.DC_M3
-LIFT_CARRY_TICKS   = -12800    # UPDATED: Drop off / travel height
+LIFT_CARRY_TICKS   = -14000    # UPDATED: Drop off / travel height
 LIFT_PICKUP_TICKS  = -8700     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 1800     
@@ -55,7 +55,7 @@ LIFT_ITEM_THICKNESS_TICKS = -2500
 
 CLAW_SERVO      = ServoChannel.CH_13
 CLAW_OPEN_DEG   = 60.0   # UPDATED
-CLAW_CLOSE_DEG  = 140.0  # UPDATED
+CLAW_CLOSE_DEG  = 143.0  # UPDATED
 
 
 # ===========================================================================
