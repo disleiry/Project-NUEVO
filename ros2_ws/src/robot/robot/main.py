@@ -87,7 +87,7 @@ SERVO_DEG_PER_STEP = 0.8
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 640.0    
+DIST_TO_INGREDIENT_AREA = 1015.0    
 APPROACH_SHELF_DIST = 18.0        
 
 INGREDIENT_SLOTS = {
