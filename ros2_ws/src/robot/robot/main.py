@@ -343,7 +343,16 @@ def run(robot: Robot) -> None:
     next_fsm_state = ""
     manual_skip_triggered = False
     
+    # --- RESTORED TIMING VARIABLES ---
+    period = 1.0 / float(DEFAULT_FSM_HZ)
+    next_tick = time.monotonic()
+    
+    internal_target_ticks = 0
     requested_final_ticks = 0
+    last_step_time = 0.0
+    step_delay_s = 0.150
+    # ---------------------------------
+
     requested_claw_deg = CLAW_CLOSE_BUN_DEG
     current_claw_deg = CLAW_CLOSE_BUN_DEG
     active_close_deg = CLAW_CLOSE_BUN_DEG
@@ -375,6 +384,7 @@ def run(robot: Robot) -> None:
                 robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
             elif robot.was_button_pressed(Button.BTN_10):
                 robot.reset_motor_position(LIFT_MOTOR)
+                internal_target_ticks = 0
                 requested_final_ticks = 0
                 time.sleep(0.15)
                 print("[INIT] Encoder zeroed -> INITIAL_MOVE_FORWARD")
@@ -385,7 +395,6 @@ def run(robot: Robot) -> None:
             print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
             robot.move_forward(distance=INITIAL_MOVE_DIST, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
             robot.stop()
-            # STRICT FSM BREAK: Guarantee the move ends before turn starts.
             state = "WAIT_BEFORE_TURN"
 
         elif state == "WAIT_BEFORE_TURN":
@@ -396,12 +405,10 @@ def run(robot: Robot) -> None:
             print(f"[NAV] Turning {TRAFFIC_LIGHT_TURN_DEG} degrees to face traffic light")
             robot.turn_by(delta_deg=TRAFFIC_LIGHT_TURN_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
             robot.stop()
-            # STRICT FSM BREAK: Guarantee the turn finishes before fetching camera frames
             state = "WAIT_AFTER_TURN"
             
         elif state == "WAIT_AFTER_TURN":
             time.sleep(0.5) 
-            # Clear stale camera frames so it doesn't instantly skip the wait state
             if ENABLE_VISION:
                 robot.get_detections("traffic light") 
             state = "WAIT_GREEN_LIGHT"
@@ -599,11 +606,20 @@ def run(robot: Robot) -> None:
             break
 
         # ==================================================================
-        # ASYNCHRONOUS MOTOR SPOON-FEEDER (Physical Leash Fix)
+        # ASYNCHRONOUS MOTOR SPOON-FEEDER (The Physical Leash Fix)
         # ==================================================================
         current_phys = get_lift_ticks(robot)
         if abs(current_phys - requested_final_ticks) > LIFT_TOLERANCE:
-            robot.set_motor_position(LIFT_MOTOR, requested_final_ticks, max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, blocking=False)
+            now = time.monotonic()
+            if now - last_step_time > step_delay_s:
+                last_step_time = now
+                robot.set_motor_position(
+                    LIFT_MOTOR, 
+                    requested_final_ticks, 
+                    max_vel_ticks=LIFT_MAX_VEL, 
+                    tolerance_ticks=LIFT_TOLERANCE, 
+                    blocking=False
+                )
             
         if requested_claw_deg > current_claw_deg:
             current_claw_deg = min(requested_claw_deg, current_claw_deg + SERVO_DEG_PER_STEP)
@@ -613,11 +629,18 @@ def run(robot: Robot) -> None:
         robot.set_servo(CLAW_SERVO, current_claw_deg)
         
         # Estop Break Check
-        if robot.was_button_pressed(Button.BTN_2):
-            robot.stop()
-            led_error(robot)
-            lift_return_to_zero(robot)
-            robot.estop()
-            break
+        if state not in {"INIT", "INIT_JOG"}:
+            if robot.was_button_pressed(Button.BTN_2):
+                robot.stop()
+                led_error(robot)
+                lift_return_to_zero(robot)
+                robot.estop()
+                break
 
-        time.sleep(1.0 / DEFAULT_FSM_HZ)
+        # ── tick-rate control ──────────────────────────────────────────────
+        next_tick += period
+        sleep_s = next_tick - time.monotonic()
+        if sleep_s > 0.0:
+            time.sleep(sleep_s)
+        else:
+            next_tick = time.monotonic()
