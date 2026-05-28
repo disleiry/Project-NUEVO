@@ -46,7 +46,7 @@ LIFT_TIMEOUT_S     = 20.0
 
 # Offset for each stacked burger piece (~1 inch thick)
 # UPDATED: Since positive is now UP, this is a positive value.
-LIFT_ITEM_THICKNESS_TICKS = -1800  
+LIFT_ITEM_THICKNESS_TICKS = -2200  
 
 
 # ===========================================================================
