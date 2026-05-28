@@ -37,7 +37,7 @@ from robot.robot import FirmwareState, Robot
 
 LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -12800    # UPDATED: Drop off / travel height
-LIFT_PICKUP_TICKS  = -8300     # UPDATED: Base pickup height
+LIFT_PICKUP_TICKS  = -8700     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 1800     
 LIFT_TOLERANCE     = 30      
@@ -55,7 +55,7 @@ LIFT_ITEM_THICKNESS_TICKS = -1800
 
 CLAW_SERVO      = ServoChannel.CH_13
 CLAW_OPEN_DEG   = 60.0   # UPDATED
-CLAW_CLOSE_DEG  = 146.0  # UPDATED
+CLAW_CLOSE_DEG  = 111.0  # UPDATED
 
 
 # ===========================================================================
@@ -91,9 +91,9 @@ DIST_TO_INGREDIENT_AREA = 980.0
 APPROACH_SHELF_DIST = 30.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 220.0,    
+    "bun_bottom": 210.0,    
     "meat":       350.0,  
-    "bun_top":    475.0,  
+    "bun_top":    480.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
