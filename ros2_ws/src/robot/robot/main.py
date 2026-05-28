@@ -222,8 +222,9 @@ def run(robot: Robot) -> None:
         
         # --- UNIVERSAL CANCEL BUTTON ---
         if robot.was_button_pressed(Button.BTN_2):
-            print("[FSM] BTN_2 PRESSED! Canceling motion and returning to INIT.")
+            print("[FSM] BTN_2 PRESSED! Canceling motion and returning to IDLE.")
             robot.stop()
+            robot.set_state(FirmwareState.IDLE)
             state = "INIT"
 
         # --- STATE MACHINE ---
@@ -231,8 +232,8 @@ def run(robot: Robot) -> None:
             if robot.was_button_pressed(Button.BTN_1):
                 print("[FSM] BTN_1 PRESSED! Initializing sequence...")
                 
-                # NOTE: The robot is already carrying the burger from the obstacle course, 
-                # so we don't need to re-initialize the claw or lift here.
+                # CRITICAL: Wake the physical motors up from IDLE!
+                robot.set_state(FirmwareState.RUNNING)
                 
                 print("[FSM] Sending Pure Pursuit start command...")
                 motion_handle = start_pure_pursuit_stage(robot, STATION_CONTROL_POINTS)
@@ -329,6 +330,7 @@ def run(robot: Robot) -> None:
 
         elif state == "DONE":
             robot.stop()
+            robot.set_state(FirmwareState.IDLE)
             time.sleep(0.1)
 
         time.sleep(1.0 / DEFAULT_FSM_HZ)
