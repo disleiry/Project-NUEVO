@@ -53,9 +53,10 @@ LIFT_ITEM_THICKNESS_TICKS = -1800
 # CLAW SERVO
 # ===========================================================================
 
-CLAW_SERVO      = ServoChannel.CH_13
-CLAW_OPEN_DEG   = 60.0   # UPDATED
-CLAW_CLOSE_DEG  = 145.0  # UPDATED
+CLAW_SERVO          = ServoChannel.CH_13
+CLAW_OPEN_DEG       = 60.0   # UPDATED
+CLAW_CLOSE_MEAT_DEG = 150.0  # NEW: Tighter or looser angle for meat
+CLAW_CLOSE_BUN_DEG  = 140.0  # NEW: Angle for buns / whole burger
 
 
 # ===========================================================================
@@ -206,9 +207,9 @@ def lift_return_to_zero(robot: Robot) -> None:
 # CLAW HELPERS
 # ===========================================================================
 
-def claw_close(robot: Robot) -> None:
+def claw_close(robot: Robot, angle: float = CLAW_CLOSE_BUN_DEG) -> None:
     robot.enable_servo(CLAW_SERVO)
-    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+    robot.set_servo(CLAW_SERVO, angle)
     time.sleep(0.5)
 
 def claw_open(robot: Robot) -> None:
@@ -307,8 +308,9 @@ def run(robot: Robot) -> None:
     last_step_time = 0.0
     step_delay_s = 0.150  
     
-    requested_claw_deg = CLAW_CLOSE_DEG  
-    current_claw_deg = CLAW_CLOSE_DEG
+    requested_claw_deg = CLAW_CLOSE_BUN_DEG  
+    current_claw_deg = CLAW_CLOSE_BUN_DEG
+    active_close_deg = CLAW_CLOSE_BUN_DEG # NEW: Tracks the dynamic grab angle
 
     print()
     print("=" * 56)
@@ -322,7 +324,7 @@ def run(robot: Robot) -> None:
         # ==================================================================
         if state == "INIT":
             robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-            claw_close(robot)  
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)  
             led_idle(robot)
             print("  LIFT ALIGNMENT — align carriage to Sharpie mark")
             print("  BTN_1: UP | BTN_2: DOWN | BTN_10: Confirm")
@@ -389,6 +391,7 @@ def run(robot: Robot) -> None:
             approach_shelf(robot)
             robot.stop()
             
+            active_close_deg = CLAW_CLOSE_MEAT_DEG # Set grab angle for meat
             action_sub_state = "OPEN_CLAW"
             next_fsm_state = "PLACE_MEAT"
             state = "DO_PICK"
@@ -414,6 +417,7 @@ def run(robot: Robot) -> None:
             approach_shelf(robot)
             robot.stop()
             
+            active_close_deg = CLAW_CLOSE_BUN_DEG # Set grab angle for bun
             action_sub_state = "OPEN_CLAW"
             next_fsm_state = "PLACE_AND_GRAB_STACK"
             state = "DO_PICK"
@@ -457,8 +461,8 @@ def run(robot: Robot) -> None:
                 
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Reached pickup height at: {current} ticks")
-                    print(f"[ARM] Closing claw to {CLAW_CLOSE_DEG} degrees...")
-                    requested_claw_deg = CLAW_CLOSE_DEG  # Smooth transition
+                    print(f"[ARM] Closing claw to {active_close_deg} degrees...")
+                    requested_claw_deg = active_close_deg  # Use dynamic angle based on target
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_CLOSE"
                     
@@ -558,7 +562,7 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
                     print("[ARM] At base height. Grabbing entire burger...")
-                    requested_claw_deg = CLAW_CLOSE_DEG  # Smooth transition
+                    requested_claw_deg = CLAW_CLOSE_BUN_DEG  # Grab full stack with bun angle
                     action_timer = time.monotonic()
                     action_sub_state = "WAIT_CLOSE"
 
