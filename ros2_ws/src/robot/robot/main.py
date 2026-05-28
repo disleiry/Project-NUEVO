@@ -37,7 +37,7 @@ from robot.robot import FirmwareState, Robot
 
 LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -14500    # UPDATED: Drop off / travel height
-LIFT_PICKUP_TICKS  = -9000     # UPDATED: Base pickup height
+LIFT_PICKUP_TICKS  = -9200     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 1800     
 LIFT_TOLERANCE     = 30      
@@ -54,7 +54,7 @@ LIFT_ITEM_THICKNESS_TICKS = -2200
 # ===========================================================================
 
 CLAW_SERVO          = ServoChannel.CH_13
-CLAW_OPEN_DEG       = 60.0   # UPDATED
+CLAW_OPEN_DEG       = 40.0   # UPDATED
 CLAW_CLOSE_MEAT_DEG = 150.0  # NEW: Tighter or looser angle for meat
 CLAW_CLOSE_BUN_DEG  = 140.0  # NEW: Angle for buns / whole burger
 
@@ -92,7 +92,7 @@ DIST_TO_INGREDIENT_AREA = 980.0
 APPROACH_SHELF_DIST = 30.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 210.0,    
+    "bun_bottom": 213.0,    
     "meat":       350.0,  
     "bun_top":    480.0,  
 }
