@@ -214,11 +214,10 @@ def run(robot: Robot) -> None:
 
     while True:
         # --- HARDWARE ESTOP CHECK ---
-        # This will explicitly tell us if the hardware is blocking commands.
         hw_state = robot.get_state()
         if hw_state in (FirmwareState.ESTOP, FirmwareState.ERROR):
             print(f"[WARNING] Robot is currently in {hw_state.name} state! Please disengage ESTOP on your controller.")
-            time.sleep(2.0)  # Avoid spamming the console
+            time.sleep(2.0)
             continue
         
         # --- UNIVERSAL CANCEL BUTTON ---
@@ -232,16 +231,8 @@ def run(robot: Robot) -> None:
             if robot.was_button_pressed(Button.BTN_1):
                 print("[FSM] BTN_1 PRESSED! Initializing sequence...")
                 
-                # NOTE: Removed robot.reset_odometry().
-                # Since this starts at the end of the obstacle course, zeroing odometry 
-                # here breaks Pure Pursuit because the waypoints are 4 meters away.
-                
-                print("[FSM] Closing claw...")
-                claw_close(robot)
-                
-                print("[FSM] Raising lift to carry height...")
-                robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-                robot.set_motor_position(LIFT_MOTOR, LIFT_CARRY_TICKS, max_vel_ticks=LIFT_MAX_VEL)
+                # NOTE: The robot is already carrying the burger from the obstacle course, 
+                # so we don't need to re-initialize the claw or lift here.
                 
                 print("[FSM] Sending Pure Pursuit start command...")
                 motion_handle = start_pure_pursuit_stage(robot, STATION_CONTROL_POINTS)
@@ -289,6 +280,7 @@ def run(robot: Robot) -> None:
                 robot.turn_by(delta_deg=TURN_TO_SHELF_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
                 
                 print(f"[FSM] Lowering lift to drop-off height: {LIFT_PICKUP_TICKS}")
+                robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
                 robot.set_motor_position(
                     LIFT_MOTOR, LIFT_PICKUP_TICKS, 
                     max_vel_ticks=LIFT_MAX_VEL, tolerance_ticks=LIFT_TOLERANCE, 
@@ -341,7 +333,5 @@ def run(robot: Robot) -> None:
 
         time.sleep(1.0 / DEFAULT_FSM_HZ)
 
-
-# ROS2 ignores everything below this, but it is kept for syntax safety
 if __name__ == "__main__":
     pass
