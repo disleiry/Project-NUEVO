@@ -508,9 +508,9 @@ def run(robot: Robot) -> None:
 
     # Open camera and detector once — kept open for the whole mission
     detector = GenderDetector()
-    cap      = cv2.VideoCapture(CAMERA_DEVICE)
-    if not cap.isOpened():
-        print(f"[warn] camera {CAMERA_DEVICE} unavailable — face detection will default to A")
+    #cap      = cv2.VideoCapture(CAMERA_DEVICE)
+    #if not cap.isOpened():
+     #   print(f"[warn] camera {CAMERA_DEVICE} unavailable — face detection will default to A")
 
     # FSM state
     state         = "INIT"
@@ -609,14 +609,38 @@ def run(robot: Robot) -> None:
         # NOTE: robot is stationary; BTN_2 is not checked during the scan
         #       (~4.5 s max).  Acceptable since the robot is stopped.
         # ==================================================================
+        # ==================================================================
+        # FACE_DETECT — camera-based customer identification
+        # ==================================================================
         elif state == "FACE_DETECT":
             led_detect(robot)
             robot.stop()
+            
+            print("[FSM] Settling for 1.5 seconds to stop physical momentum...")
+            time.sleep(1.5)  # Let the robot physically stop shaking/rolling
+
+            print(f"[VISION] Opening camera {CAMERA_DEVICE}...")
+            cap = cv2.VideoCapture(CAMERA_DEVICE)
+            
+            # Quick retry if it fails the first time
+            if not cap.isOpened():
+                time.sleep(0.5)
+                cap = cv2.VideoCapture(CAMERA_DEVICE)
 
             if cap.isOpened():
+                print("[VISION] Camera opened. Warming up sensor...")
+                # Discard the first 5 frames so the camera auto-exposure can adjust to the lighting
+                for _ in range(5):
+                    cap.read()
+                    time.sleep(0.05)
+                    
+                # Run the actual voting logic
                 customer = run_face_detection(detector, cap)
+                
+                # Close the camera to free up the USB bus
+                cap.release()
             else:
-                print("[FACE] Camera unavailable — defaulting to Customer A")
+                print("[FACE] Camera unavailable after retries — defaulting to Customer A")
                 customer = "A"
 
             travel_mm = CUSTOMER_A_TRAVEL_MM if customer == "A" else CUSTOMER_B_TRAVEL_MM
