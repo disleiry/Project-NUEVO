@@ -108,13 +108,6 @@ CUSTOMER_B_DROPOFF_POINTS = densify_polyline(CUSTOMER_B_DROPOFF_POINTS, spacing=
 # STARTUP & CONFIGURATION HELPERS
 # ==========================================
 
-def start_robot(robot: Robot) -> None:
-    """Crucial step: Ensures robot is not in ESTOP state from a previous run."""
-    state = robot.get_state()
-    if state in (FirmwareState.ESTOP, FirmwareState.ERROR):
-        robot.reset_estop()
-    robot.set_state(FirmwareState.RUNNING)
-
 def configure_robot(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(
@@ -191,7 +184,7 @@ def detect_customer_gender() -> str:
         return "Male"
 
 def start_pure_pursuit_stage(robot: Robot, waypoints: list[tuple[float, float]]):
-    print(f"[FSM] MOVING pure pursuit stage with {len(waypoints)} waypoints.")
+    print(f"[FSM] Starting pure pursuit with {len(waypoints)} waypoints.")
     return robot.purepursuit_follow_path(
         waypoints=waypoints,
         velocity=PURE_PURSUIT_VELOCITY_MM_S,
@@ -209,33 +202,57 @@ def start_pure_pursuit_stage(robot: Robot, waypoints: list[tuple[float, float]])
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
-    start_robot(robot)  # Unlocks the robot from ESTOP
     
     state = "INIT"
     motion_handle = None
     timer = 0.0
 
     print("=====================================================")
-    print(" DELIVERY COURSE STARTING")
-    print(" Press BTN_1 to begin.")
+    print(" DELIVERY COURSE STARTING (ROS2 NODE ACTIVE)")
+    print(" Press BTN_1 to begin. Press BTN_2 to cancel.")
     print("=====================================================")
 
     while True:
+        # --- HARDWARE ESTOP CHECK ---
+        # This will explicitly tell us if the hardware is blocking commands.
+        hw_state = robot.get_state()
+        if hw_state in (FirmwareState.ESTOP, FirmwareState.ERROR):
+            print(f"[WARNING] Robot is currently in {hw_state.name} state! Please disengage ESTOP on your controller.")
+            time.sleep(2.0)  # Avoid spamming the console
+            continue
+        
+        # --- UNIVERSAL CANCEL BUTTON ---
+        if robot.was_button_pressed(Button.BTN_2):
+            print("[FSM] BTN_2 PRESSED! Canceling motion and returning to INIT.")
+            robot.stop()
+            state = "INIT"
 
+        # --- STATE MACHINE ---
         if state == "INIT":
             if robot.was_button_pressed(Button.BTN_1):
-                robot.reset_odometry()
-                robot.wait_for_odometry_reset(timeout=2.0)
+                print("[FSM] BTN_1 PRESSED! Initializing sequence...")
                 
+                # NOTE: Removed robot.reset_odometry().
+                # Since this starts at the end of the obstacle course, zeroing odometry 
+                # here breaks Pure Pursuit because the waypoints are 4 meters away.
+                
+                print("[FSM] Closing claw...")
                 claw_close(robot)
+                
+                print("[FSM] Raising lift to carry height...")
                 robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
                 robot.set_motor_position(LIFT_MOTOR, LIFT_CARRY_TICKS, max_vel_ticks=LIFT_MAX_VEL)
                 
+                print("[FSM] Sending Pure Pursuit start command...")
                 motion_handle = start_pure_pursuit_stage(robot, STATION_CONTROL_POINTS)
-                state = "NAV_TO_STATION"
+                
+                if motion_handle is None:
+                    print("[ERROR] Pure pursuit failed to start! (Are coordinates too far away?)")
+                else:
+                    state = "NAV_TO_STATION"
 
         elif state == "NAV_TO_STATION":
-            if motion_handle.is_done():
+            if motion_handle and motion_handle.is_done():
                 print("[FSM] Arrived at camera station.")
                 robot.stop()
                 state = "DETECT_CUSTOMER"
@@ -244,7 +261,6 @@ def run(robot: Robot) -> None:
             print("[VISION] Beginning 15-frame gender detection...")
             result = detect_customer_gender()
             
-            # Decide which waypoint path to use based on the camera
             if result == "Female":
                 customer = "Customer A (Female)"
                 active_dropoff_points = CUSTOMER_A_DROPOFF_POINTS
@@ -261,12 +277,11 @@ def run(robot: Robot) -> None:
             if ENABLE_GPS:
                 robot.disable_gps()
             
-            # Start pure pursuit using the dynamically selected path
             motion_handle = start_pure_pursuit_stage(robot, active_dropoff_points)
             state = "NAV_TO_DROPOFF"
 
         elif state == "NAV_TO_DROPOFF":
-            if motion_handle.is_done():
+            if motion_handle and motion_handle.is_done():
                 print(f"[FSM] Reached {customer} drop-off spot on Y-axis.")
                 robot.stop()
                 
@@ -327,11 +342,6 @@ def run(robot: Robot) -> None:
         time.sleep(1.0 / DEFAULT_FSM_HZ)
 
 
+# ROS2 ignores everything below this, but it is kept for syntax safety
 if __name__ == "__main__":
-    from robot.robot import Robot
-    robot = Robot()
-    try:
-        run(robot)
-    except KeyboardInterrupt:
-        print("\n[FSM] Mission interrupted by user. Stopping robot.")
-        robot.stop()
+    pass
