@@ -131,8 +131,8 @@ STATUS_PRINT_INTERVAL_S = 0.5
 # =============================================================================
 # ABSOLUTE HEADINGS  (degrees; INITIAL_THETA_DEG = 90 → robot starts facing +Y)
 # =============================================================================
-HEADING_POS_X  =   0.0    # after first right turn:  facing +X
-HEADING_NEG_Y  = -79.0    # after second right turn:  facing -Y (toward customers)
+HEADING_POS_X  =   +11.0    # after first right turn:  facing +X
+HEADING_NEG_Y  = -68.0    # after second right turn:  facing -Y (toward customers)
 
 # =============================================================================
 # MISSION GEOMETRY  *** tune these distances on the real arena ***
@@ -167,9 +167,9 @@ MIN_STOP_CONFIDENCE = 0.50    # vision confidence threshold for stop-sign trigge
 # FACE DETECTION
 # =============================================================================
 CAMERA_DEVICE      = '/dev/video10'
-FACE_SAMPLE_FRAMES = 15       # frames per voting pass
+FACE_SAMPLE_FRAMES = 100       # frames per voting pass
 FACE_FRAME_DELAY_S = 0.10     # delay between frames (seconds)
-FACE_MAX_ATTEMPTS  =  10       # retry passes before giving up
+FACE_MAX_ATTEMPTS  =  100       # retry passes before giving up
 
 # =============================================================================
 # ASYNC LIFT SPOON-FEEDER  (mirrors test_burger_pickup.py)
