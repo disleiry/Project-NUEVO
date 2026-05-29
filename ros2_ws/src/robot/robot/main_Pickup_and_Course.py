@@ -24,6 +24,21 @@ from robot.hardware_map import (
     ServoChannel,
     WHEEL_BASE,
     WHEEL_DIAMETER,
+    LIDAR_FOV_DEG,
+    LIDAR_MOUNT_THETA_DEG,
+    LIDAR_MOUNT_X_MM,
+    LIDAR_MOUNT_Y_MM,
+    LIDAR_RANGE_MAX_MM,
+    LIDAR_RANGE_MIN_MM,
+    LEFT_WHEEL_DIR_INVERTED,
+    LEFT_WHEEL_MOTOR,
+    POSITION_UNIT,
+    RIGHT_WHEEL_DIR_INVERTED,
+    RIGHT_WHEEL_MOTOR,
+    TAG_BODY_OFFSET_X_MM,
+    TAG_BODY_OFFSET_Y_MM,
+    WHEEL_BASE,
+    WHEEL_DIAMETER,
 )
 from robot.robot import FirmwareState, Robot
 from robot.util import densify_polyline
@@ -31,6 +46,9 @@ from robot.util import densify_polyline
 # ===========================================================================
 # LIFT MOTOR
 # ===========================================================================
+course_stage_start_time = 0.0
+
+
 
 LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -14000    # UPDATED: Drop off / travel height
@@ -73,8 +91,8 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 79
-TURN_FROM_SHELF_DEG = -79
+TURN_TO_SHELF_DEG   = 70
+TURN_FROM_SHELF_DEG = -70
 TURN_TOLERANCE_DEG  = 2.0     
 
 TURN_VELOCITY = 30.0
@@ -85,8 +103,8 @@ SERVO_DEG_PER_STEP = 0.8
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 780.0    
-APPROACH_SHELF_DIST = 30.0    
+DIST_TO_INGREDIENT_AREA = 740.0    
+APPROACH_SHELF_DIST = 25.0    
 INITIAL_MOVE_DIST = 200.0
 
 INGREDIENT_SLOTS = {
@@ -130,7 +148,7 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 
 # Absolute headings for traffic light viewing and returning.
 # Assuming INITIAL_THETA_DEG is 90, 120.0 looks 30 degrees left.
-TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 125.0
+TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 110.0
 TRAFFIC_LIGHT_RETURN_ANGLE_DEG = 90.0
 TURN_TOLERANCE_DEG = 2.0
 
@@ -732,7 +750,7 @@ def run(robot: Robot) -> None:
   
 
     while True:
-
+        now = time.monotonic()
         # ==================================================================
         # INIT & WAIT_GREEN
         # ==================================================================
@@ -767,33 +785,34 @@ def run(robot: Robot) -> None:
                 internal_target_ticks = 0
                 requested_final_ticks = 0
                 time.sleep(0.15)
-                print("[INIT] Encoder zeroed -> WAIT_GREEN")
+                print("[INIT] Encoder zeroed -> Traffic Light Detection")
                 led_moving(robot)
-                state = "IDLE"
+                state = "INITIAL_MOVE_FORWARD"
 
-         # ── IDLE ─────────────────────────────────────────────────────────────
-        elif state == "IDLE":
-            robot.stop()
-            if robot.was_button_pressed(Button.BTN_1):
-                reset_mission_pose(robot)
-
-                dim_all_leds(robot)
-                show_running_leds(robot)
-                print(f"[FSM] TURN_TO_LIGHT — turning to absolute heading {TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°")
-
-                motion_handle = robot.turn_to(
-                    TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
-                    blocking=False,
-                    tolerance_deg=TURN_TOLERANCE_DEG,
-                )
-                last_status_print_at = now
-                state = "INITIAL_MOVE_FORWARDT"
-              
         elif state == "INITIAL_MOVE_FORWARD":
                 print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
                 robot.move_forward(distance=INITIAL_MOVE_DIST, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
                 robot.stop()
-                state = "TURN_TO_LIGHT"
+                state = "IDLE"
+            
+         # ── IDLE ─────────────────────────────────────────────────────────────
+        elif state == "IDLE":
+            robot.stop()
+            reset_mission_pose(robot)
+
+            dim_all_leds(robot)
+            show_running_leds(robot)
+            print(f"[FSM] TURN_TO_LIGHT — turning to absolute heading {TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°")
+
+            motion_handle = robot.turn_to(
+                TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
+                blocking=False,
+                tolerance_deg=TURN_TOLERANCE_DEG,
+            )
+            last_status_print_at = now
+            state = "TURN_TO_LIGHT"
+              
+        
 
         # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
         # Turn to absolute traffic light angle. Do NOT move forward.
@@ -880,8 +899,6 @@ def run(robot: Robot) -> None:
                     robot.stop()
                     print("[FSM] Forward heading restored — resetting odometry and starting course")
                     reset_mission_pose(robot)
-                    course_stage_index = 0
-                    motion_handle = start_course_stage(robot, course_stage_index)
                     last_status_print_at = time.monotonic()
                     state = "PREP_INITIAL_MOVE"
 
@@ -974,6 +991,10 @@ def run(robot: Robot) -> None:
        # ── COURSE_MOVING ───────────────────────────────────────────────────
         # Run pure pursuit first, then LAPF waypoints.
         elif state == "COURSE_MOVING":
+            # Add this right below the overrides to kick off the obstacle course:
+            # Start the motion and record the exact time it started
+            
+            
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
                 motion_handle = None
@@ -990,34 +1011,40 @@ def run(robot: Robot) -> None:
                 state = "IDLE"
 
             else:
-                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
-                    print_course_status(robot, course_stage_index)
-                    last_status_print_at = now
+                if motion_handle is None:
+                    motion_handle = start_course_stage(robot, course_stage_index)
+                    course_stage_start_time = time.monotonic() 
+                    last_status_print_at = time.monotonic()
+        
+                # Wait at least 0.5 seconds before trusting the "done" flag
+                elif time.monotonic() - course_stage_start_time > 0.5:
+                
+                    # PUT YOUR EXISTING DONE CHECK HERE (e.g., if motion_handle.done():)
+                
+                # ... your existing logic that increments the stage ...
+                    if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                        print_course_status(robot, course_stage_index)
+                        last_status_print_at = now
+                     
+                        
+                    if motion_handle is not None and motion_handle.is_finished():
+                        print(f"[FSM] DONE — course stage {course_stage_index + 1}/{len(MISSION_STAGES)} complete")
+                        print_course_status(robot, course_stage_index)
+    
+                        robot.stop()
+                        time.sleep(STAGE_PAUSE_S)
+    
+                        course_stage_index += 1
+                        if course_stage_index >= len(MISSION_STAGES):
+                            motion_handle = None
+                            show_idle_leds(robot)
+                            print("[FSM] IDLE — full traffic-light/course mission complete. Press BTN_1 to run again")
+                            state = "IDLE"
+                        else:
+                            motion_handle = start_course_stage(robot, course_stage_index)
+                            last_status_print_at = time.monotonic()
 
-                if motion_handle is not None and motion_handle.is_finished():
-                    print(f"[FSM] DONE — course stage {course_stage_index + 1}/{len(MISSION_STAGES)} complete")
-                    print_course_status(robot, course_stage_index)
-
-                    robot.stop()
-                    time.sleep(STAGE_PAUSE_S)
-
-                    course_stage_index += 1
-                    if course_stage_index >= len(MISSION_STAGES):
-                        motion_handle = None
-                        show_idle_leds(robot)
-                        print("[FSM] IDLE — full traffic-light/course mission complete. Press BTN_1 to run again")
-                        state = "IDLE"
-                    else:
-                        motion_handle = start_course_stage(robot, course_stage_index)
-                        last_status_print_at = time.monotonic()
-
-        # ── Tick-rate control ────────────────────────────────────────────────
-        next_tick += period
-        sleep_s = next_tick - time.monotonic()
-        if sleep_s > 0.0:
-            time.sleep(sleep_s)
-        else:
-            next_tick = time.monotonic()
+        
 
         
 
@@ -1233,5 +1260,3 @@ def run(robot: Robot) -> None:
             time.sleep(sleep_s)
         else:
             next_tick = time.monotonic()
-
-
