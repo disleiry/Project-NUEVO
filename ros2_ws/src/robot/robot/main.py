@@ -106,7 +106,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
     (300.0, 3700.0),      # Waypoint 1: home straight
     (980.0, 3700.0),    # Waypoint 2: transition / turn
-    (980.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1070.0, 700.0),     # Waypoint 3: ramp / return direction
     (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
@@ -144,10 +144,10 @@ LAPF_MAX_ANGULAR_RAD_S = 0.6
 LEASH_LENGTH_MM = 150.0
 REPULSION_RANGE_MM = 300.0
 TARGET_SPEED_MM_S = 200.0
-REPULSION_GAIN = 350.0
+REPULSION_GAIN = 550.0
 ATTRACTION_GAIN = 1.0
 FORCE_EMA_ALPHA = 0.35
-INFLATION_MARGIN_MM = 150.0
+INFLATION_MARGIN_MM = 250.0
 LEASH_HALF_ANGLE_DEG = 25.0
 
 STATUS_PRINT_INTERVAL_S = 0.5
