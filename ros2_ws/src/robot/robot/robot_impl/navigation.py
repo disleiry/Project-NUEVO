@@ -565,6 +565,7 @@ class NavigationMixin:
     def turn_to(
         self,
         angle_deg: float,
+        angular_velocity_deg: float,
         blocking: bool = True,
         tolerance_deg: float = 2.0,
         timeout: float = None,
@@ -577,23 +578,28 @@ class NavigationMixin:
         """
         target_rad = math.radians(angle_deg)
         tol_rad    = math.radians(tolerance_deg)
+        max_angular_rad = math.radians(angular_velocity_deg)
 
         def target():
-            self._turn_to_heading(target_rad, tol_rad, max_angular_rad=0.4)
+            self._turn_to_heading(target_rad, tol_rad, max_angular_rad=max_angular_rad)
 
         return self._start_nav(target, blocking, timeout)
 
     def turn_by(
         self,
         delta_deg: float,
+        angular_velocity_deg: float,
         blocking: bool = True,
         tolerance_deg: float = 2.0,
         timeout: float = None,
     ) -> MotionHandle:
         """Rotate by delta_deg relative to current heading."""
         _, _, cur_deg = self.get_pose()
-        return self.turn_to(cur_deg + delta_deg, blocking=blocking,
-                            tolerance_deg=tolerance_deg, timeout=timeout)
+        return self.turn_to(cur_deg + delta_deg, 
+                            angular_velocity_deg=angular_velocity_deg,
+                            blocking=blocking,
+                            tolerance_deg=tolerance_deg, 
+                            timeout=timeout)
 
     def purepursuit_follow_path(
         self,
