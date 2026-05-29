@@ -604,6 +604,7 @@ def run(robot: Robot) -> None:
 
                     motion_handle = robot.turn_to(
                         forward_theta_deg,
+                        angular_velocity_deg = 20,
                         blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
