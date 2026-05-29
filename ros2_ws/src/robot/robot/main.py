@@ -896,8 +896,6 @@ def run(robot: Robot) -> None:
                     robot.stop()
                     print("[FSM] Forward heading restored — resetting odometry and starting course")
                     reset_mission_pose(robot)
-                    course_stage_index = 0
-                    motion_handle = start_course_stage(robot, course_stage_index)
                     last_status_print_at = time.monotonic()
                     state = "PREP_INITIAL_MOVE"
 
@@ -990,6 +988,11 @@ def run(robot: Robot) -> None:
        # ── COURSE_MOVING ───────────────────────────────────────────────────
         # Run pure pursuit first, then LAPF waypoints.
         elif state == "COURSE_MOVING":
+            # Add this right below the overrides to kick off the obstacle course:
+            if motion_handle is None:
+                motion_handle = start_course_stage(robot, course_stage_index)
+                last_status_print_at = time.monotonic()
+            
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
                 motion_handle = None
