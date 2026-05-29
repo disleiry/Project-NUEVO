@@ -784,8 +784,14 @@ def run(robot: Robot) -> None:
                 time.sleep(0.15)
                 print("[INIT] Encoder zeroed -> Traffic Light Detection")
                 led_moving(robot)
-                state = "IDLE"
+                state = "INITIAL_MOVE_FORWARD"
 
+        elif state == "INITIAL_MOVE_FORWARD":
+                print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
+                robot.move_forward(distance=INITIAL_MOVE_DIST, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+                robot.stop()
+                state = "IDLE"
+            
          # ── IDLE ─────────────────────────────────────────────────────────────
         elif state == "IDLE":
             robot.stop()
@@ -801,23 +807,19 @@ def run(robot: Robot) -> None:
                 tolerance_deg=TURN_TOLERANCE_DEG,
             )
             last_status_print_at = now
-            state = "INITIAL_MOVE_FORWARD"
+            state = "TURN_TO_LIGHT"
               
-        elif state == "INITIAL_MOVE_FORWARD":
-                print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
-                robot.move_forward(distance=INITIAL_MOVE_DIST, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
-                robot.stop()
-                state = "TURN_TO_LIGHT"
+        
 
         # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
         # Turn to absolute traffic light angle. Do NOT move forward.
         elif state == "TURN_TO_LIGHT":
-            if robot.was_button_pressed(Button.BTN_2):
-                cancel_motion(robot, motion_handle)
-                motion_handle = None
-                show_idle_leds(robot)
-                print("[FSM] IDLE — mission cancelled while turning to traffic light")
-                state = "IDLE"
+            
+            cancel_motion(robot, motion_handle)
+            motion_handle = None
+            show_idle_leds(robot)
+            print("[FSM] IDLE — mission cancelled while turning to traffic light")
+            state = "IDLE"
 
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
