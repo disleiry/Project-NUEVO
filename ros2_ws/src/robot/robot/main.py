@@ -376,7 +376,7 @@ def run(robot: Robot) -> None:
             robot.move_forward(DIST_TO_SCAN_MM, DRIVE_VELOCITY,
                                POS_TOLERANCE_MM, blocking=True)
             robot.stop()
-            robot.turn_by(15, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+            robot.turn_by(8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
             # ── 3. Face detection ──────────────────────────────────────────
             print("[FACE] Starting customer detection...")
             if cap.isOpened():
@@ -391,8 +391,8 @@ def run(robot: Robot) -> None:
                   f"— travel {travel_mm:.0f} mm to customer row")
 
             # ── 4. Turn right to face -Y ───────────────────────────────────
-            robot.turn_by(-15, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
-            robot.move_forward(100, DRIVE_VELOCITY,
+            robot.turn_by(-8 ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+            robot.move_forward(250, DRIVE_VELOCITY,
                                POS_TOLERANCE_MM, blocking=True)
             print("[NAV] Turning right to face -Y (theta → -90°)")
             robot.turn_to(-68.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
