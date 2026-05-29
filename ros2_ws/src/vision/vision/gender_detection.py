@@ -73,7 +73,7 @@ class GenderDetector:
             inp     = (rgb.transpose(2, 0, 1).astype(np.float32) / 255.0)[np.newaxis]
 
             preds  = self.gender_sess.run(None, {self._gender_input: inp})[0][0]
-            # preds[0] > 0 → Female, preds[0] < 0 → Male
+            print(f"[DEBUG] face_conf={face_conf:.2f} preds={preds} → {gender}")
             gender = "Female" if preds[0] > 0 else "Male"
 
             if face_conf > best_conf:
