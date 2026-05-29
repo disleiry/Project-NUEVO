@@ -903,6 +903,7 @@ def run(robot: Robot) -> None:
                     robot.stop()
                     print("[FSM] Forward heading restored — resetting odometry and starting course")
                     reset_mission_pose(robot)
+                    time.sleep(0.2)
                     last_status_print_at = time.monotonic()
                     state = "PREP_INITIAL_MOVE"
 
@@ -934,7 +935,12 @@ def run(robot: Robot) -> None:
         # NAVIGATION TO INGREDIENTS
         # ==================================================================
         elif state == "BURGER_PICKUP":
-            robot.move_forward(distance=DIST_TO_INGREDIENT_AREA, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+                
+                # 2. Allow the chassis to settle
+                
+                # 3. Fire the main drive using the remaining distance
+            robot.move_forward(distance=DIST_TO_INGREDIENT_AREA, velocity=40, tolerance=POS_TOLERANCE_MM, blocking=True)   
+            
             robot.stop()
             current_slot  = None
             pick_attempts = 0
