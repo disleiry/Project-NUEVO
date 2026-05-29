@@ -782,27 +782,26 @@ def run(robot: Robot) -> None:
                 internal_target_ticks = 0
                 requested_final_ticks = 0
                 time.sleep(0.15)
-                print("[INIT] Encoder zeroed -> WAIT_GREEN")
+                print("[INIT] Encoder zeroed -> Traffic Light Detection")
                 led_moving(robot)
                 state = "IDLE"
 
          # ── IDLE ─────────────────────────────────────────────────────────────
         elif state == "IDLE":
             robot.stop()
-            if robot.was_button_pressed(Button.BTN_1):
-                reset_mission_pose(robot)
+            reset_mission_pose(robot)
 
-                dim_all_leds(robot)
-                show_running_leds(robot)
-                print(f"[FSM] TURN_TO_LIGHT — turning to absolute heading {TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°")
+            dim_all_leds(robot)
+            show_running_leds(robot)
+            print(f"[FSM] TURN_TO_LIGHT — turning to absolute heading {TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°")
 
-                motion_handle = robot.turn_to(
-                    TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
-                    blocking=False,
-                    tolerance_deg=TURN_TOLERANCE_DEG,
-                )
-                last_status_print_at = now
-                state = "INITIAL_MOVE_FORWARDT"
+            motion_handle = robot.turn_to(
+                TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
+                blocking=False,
+                tolerance_deg=TURN_TOLERANCE_DEG,
+            )
+            last_status_print_at = now
+            state = "INITIAL_MOVE_FORWARDT"
               
         elif state == "INITIAL_MOVE_FORWARD":
                 print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
