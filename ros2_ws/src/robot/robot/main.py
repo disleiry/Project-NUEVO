@@ -69,6 +69,7 @@ TURN_VELOCITY_DEG  = 45.0   # deg/s
 TURN_TO_SHELF_DEG   =  79.0
 TURN_FROM_SHELF_DEG = -79.0
 APPROACH_SHELF_DIST =  18.0  # mm
+ANGULAR_VELOCITY_DEG = 20
 
 # ==========================================
 # --- SENSOR SETUP ---
@@ -288,7 +289,7 @@ def do_dropoff(robot: Robot) -> None:
       open claw → lift clear → retreat → turn right back to -Y
     """
     print("[DROPOFF] Turning to face shelf")
-    robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG,
+    robot.turn_by(TURN_TO_SHELF_DEG, ANGULAR_VELOCITY_DEG, TURN_VELOCITY_DEG,
                   tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
     print(f"[DROPOFF] Approaching {APPROACH_SHELF_DIST:.0f} mm")
@@ -311,7 +312,7 @@ def do_dropoff(robot: Robot) -> None:
                         POS_TOLERANCE_MM, blocking=True)
 
     print("[DROPOFF] Turning back to -Y heading")
-    robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG,
+    robot.turn_by(TURN_FROM_SHELF_DEG, ANGULAR_VELOCITY_DEG, TURN_VELOCITY_DEG,
                   tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
     robot.stop()
     print("[DROPOFF] Complete")
@@ -368,7 +369,7 @@ def run(robot: Robot) -> None:
         elif state == "DELIVERY":
             # ── 1. Turn right to face +X ──────────────────────────────────
             print("[NAV] Turning right to face +X (theta → 0°)")
-            robot.turn_to(0.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+            robot.turn_to(0.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
             # ── 2. Drive to face-detection zone ───────────────────────────
             print(f"[NAV] Driving {DIST_TO_SCAN_MM:.0f} mm in +X to scan zone")
@@ -391,7 +392,7 @@ def run(robot: Robot) -> None:
 
             # ── 4. Turn right to face -Y ───────────────────────────────────
             print("[NAV] Turning right to face -Y (theta → -90°)")
-            robot.turn_to(-90.0, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+            robot.turn_to(-90.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
             # ── 5. Drive to customer row ───────────────────────────────────
             # GPS fuses while tag is visible; gracefully falls back to odometry
