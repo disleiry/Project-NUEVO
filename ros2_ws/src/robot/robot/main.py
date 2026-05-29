@@ -106,7 +106,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
     (300.0, 3700.0),      # Waypoint 1: home straight
     (980.0, 3700.0),    # Waypoint 2: transition / turn
-    (1070.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1100.0, 700.0),     # Waypoint 3: ramp / return direction
     (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
@@ -198,7 +198,7 @@ TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 
 DIST_TO_INGREDIENT_AREA = 980.0
-APPROACH_SHELF_DIST = 35.0
+APPROACH_SHELF_DIST = 25.0
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
