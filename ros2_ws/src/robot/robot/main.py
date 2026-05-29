@@ -88,8 +88,8 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 79
-TURN_FROM_SHELF_DEG = -79
+TURN_TO_SHELF_DEG   = 70
+TURN_FROM_SHELF_DEG = -70
 TURN_TOLERANCE_DEG  = 2.0     
 
 TURN_VELOCITY = 30.0
@@ -100,7 +100,7 @@ SERVO_DEG_PER_STEP = 0.8
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 780.0    
+DIST_TO_INGREDIENT_AREA = 740.0    
 APPROACH_SHELF_DIST = 30.0    
 INITIAL_MOVE_DIST = 200.0
 
