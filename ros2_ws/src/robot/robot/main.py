@@ -259,19 +259,9 @@ def configure_robot(robot: Robot) -> None:
         robot.start_lidar_world_publisher()
         print("[sensor] lidar enabled — subscribing to /scan")
 
-    if ENABLE_GPS:
-        robot.enable_gps()
-        robot.set_tracked_tag_id(TAG_ID)
-        robot.set_tag_body_offset(TAG_BODY_OFFSET_X_MM, TAG_BODY_OFFSET_Y_MM)
-        robot.set_position_fusion_alpha(GPS_POSITION_ALPHA)
-        print(f"[sensor] GPS enabled — tracking ArUco tag {TAG_ID}")
-
-        if ENABLE_GPS_TANGENT_HEADING:
-            robot.enable_gps_tangent_heading(
-                alpha=GPS_TANGENT_ALPHA,
-                min_displacement_mm=GPS_TANGENT_MIN_DISPLACEMENT_MM,
-            )
-            print("[sensor] GPS tangent heading enabled")
+    # NOTE: GPS is intentionally NOT enabled here.
+    # It is enabled in BURGER_DONE, after the burger pickup is complete,
+    # so it does not interfere with odometry-based burger pickup motion.
 
 
 def start_robot(robot: Robot) -> None:
@@ -724,8 +714,23 @@ def run(robot: Robot) -> None:
             state = "BURGER_DONE"
 
         # ── BURGER_DONE ───────────────────────────────────────────────────────
-        # Reset odometry and immediately begin the course (pure pursuit → LAPF).
+        # Enable GPS, reset odometry, and immediately begin the course (pure pursuit -> LAPF).
         elif state == "BURGER_DONE":
+            print("[FSM] Burger pickup complete — enabling GPS.")
+            if ENABLE_GPS:
+                robot.enable_gps()
+                robot.set_tracked_tag_id(TAG_ID)
+                robot.set_tag_body_offset(TAG_BODY_OFFSET_X_MM, TAG_BODY_OFFSET_Y_MM)
+                robot.set_position_fusion_alpha(GPS_POSITION_ALPHA)
+                print(f"[sensor] GPS enabled — tracking ArUco tag {TAG_ID}")
+
+                if ENABLE_GPS_TANGENT_HEADING:
+                    robot.enable_gps_tangent_heading(
+                        alpha=GPS_TANGENT_ALPHA,
+                        min_displacement_mm=GPS_TANGENT_MIN_DISPLACEMENT_MM,
+                    )
+                    print("[sensor] GPS tangent heading enabled")
+
             print("[FSM] Resetting odometry and starting course.")
             reset_mission_pose(robot)
             dim_all_leds(robot)
