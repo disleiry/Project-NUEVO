@@ -1,19 +1,17 @@
 """
-main.py — fixed traffic-light turn + pure pursuit + LAPF obstacle navigation
-============================================================================
+main_combined.py — burger pickup → pure pursuit → LAPF obstacle navigation
+===========================================================================
 
 Mission order:
-1. Robot starts facing forward and DOES NOT move forward.
-2. Robot turns in place by a fixed angle, usually 15 degrees left, so the
-   camera can face the traffic light.
-3. Robot stops and waits for the traffic light to be green.
-4. Once green is detected, robot turns back to the original forward heading.
-5. Robot resets odometry and begins the course:
-   - Pure pursuit for the straight/ramp section.
-   - LAPF + LiDAR for the obstacle-course section.
+1. INIT: robot enables lift motor, closes claw, waits for lift jog alignment.
+2. INIT_JOG: BTN_1 jogs lift up, BTN_2 jogs lift down, BTN_10 zeroes encoder.
+3. WAIT_GREEN: BTN_5 starts the burger pickup sequence.
+4. BURGER_PICKUP: fetches meat, assembles burger, grabs full stack.
+5. BURGER_DONE: odometry is reset automatically, course begins immediately.
+6. COURSE_MOVING: pure pursuit for straight/ramp section, then LAPF for obstacle course.
 
 How to run:
-    cp main.py ros2_ws/src/robot/main.py
+    cp main_combined.py ros2_ws/src/robot/main.py
     ros2 run robot robot
 
 Make sure these are running in separate terminals as needed:
@@ -22,8 +20,9 @@ Make sure these are running in separate terminals as needed:
     ros2 run robot robot
 
 Controls:
-    BTN_1 starts the full mission.
-    BTN_2 cancels and returns to IDLE.
+    BTN_1 / BTN_2 / BTN_10  lift jog during INIT_JOG alignment phase.
+    BTN_5                    starts the burger pickup sequence from WAIT_GREEN.
+    BTN_2                    cancels and returns to COURSE_IDLE during the course phase.
 """
 
 from __future__ import annotations
@@ -33,6 +32,7 @@ from typing import Any
 
 from robot.hardware_map import (
     Button,
+    DCMotorMode,
     DEFAULT_FSM_HZ,
     LED,
     LEDMode,
@@ -45,9 +45,11 @@ from robot.hardware_map import (
     LIDAR_RANGE_MIN_MM,
     LEFT_WHEEL_DIR_INVERTED,
     LEFT_WHEEL_MOTOR,
+    Motor,
     POSITION_UNIT,
     RIGHT_WHEEL_DIR_INVERTED,
     RIGHT_WHEEL_MOTOR,
+    ServoChannel,
     TAG_BODY_OFFSET_X_MM,
     TAG_BODY_OFFSET_Y_MM,
     WHEEL_BASE,
@@ -168,6 +170,41 @@ for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
             "waypoint": waypoint,
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Burger pickup constants
+# ---------------------------------------------------------------------------
+
+LIFT_MOTOR = Motor.DC_M3
+LIFT_CARRY_TICKS = -14000
+LIFT_PICKUP_TICKS = -9000
+LIFT_ITEM_THICKNESS_TICKS = -1800
+LIFT_MAX_VEL = 1800
+LIFT_TOLERANCE = 30
+LIFT_JOG_STEP = 100
+
+CLAW_SERVO = ServoChannel.CH_13
+CLAW_OPEN_DEG = 60.0
+CLAW_CLOSE_MEAT_DEG = 150.0
+CLAW_CLOSE_BUN_DEG = 140.0
+
+DRIVE_VELOCITY = 100.0
+APPROACH_VELOCITY = 60.0
+POS_TOLERANCE_MM = 20.0
+
+TURN_VELOCITY_DEG = 45.0
+TURN_TO_SHELF_DEG = 79
+TURN_FROM_SHELF_DEG = -79
+
+DIST_TO_INGREDIENT_AREA = 980.0
+APPROACH_SHELF_DIST = 30.0
+
+INGREDIENT_SLOTS = {
+    "bun_bottom": 207.0,
+    "meat": 350.0,
+    "bun_top": 485.0,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +364,7 @@ def stop_sign_detected(robot: Robot) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Motion helpers
+# Motion helpers (course)
 # ---------------------------------------------------------------------------
 
 def cancel_motion(robot: Robot, handle) -> None:
@@ -392,6 +429,79 @@ def start_course_stage(robot: Robot, stage_index: int):
 
 
 # ---------------------------------------------------------------------------
+# Burger pickup helpers
+# ---------------------------------------------------------------------------
+
+def claw_close(robot: Robot, angle: float):
+    robot.enable_servo(CLAW_SERVO)
+    robot.set_servo(CLAW_SERVO, angle)
+    time.sleep(0.5)
+
+
+def claw_open(robot: Robot):
+    robot.enable_servo(CLAW_SERVO)
+    robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
+    time.sleep(0.5)
+
+
+def get_lift_ticks(robot: Robot) -> int:
+    dc = robot.get_dc_state()
+    if dc is None:
+        return 0
+    return int(dc.motors[LIFT_MOTOR - 1].position)
+
+
+def move_lift(robot: Robot, target_ticks: int):
+    """Safely ramps the motor target to prevent firmware leash errors."""
+    robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+    current_ticks = float(get_lift_ticks(robot))
+
+    step_rate_hz = 50.0
+    delay_s = 1.0 / step_rate_hz
+    ticks_per_step = LIFT_MAX_VEL / step_rate_hz
+
+    internal_target = current_ticks
+
+    # Spoon-feed intermediate positions to avoid math overflows in firmware
+    while abs(internal_target - target_ticks) > LIFT_TOLERANCE:
+        if target_ticks > internal_target:
+            internal_target = min(float(target_ticks), internal_target + ticks_per_step)
+        else:
+            internal_target = max(float(target_ticks), internal_target - ticks_per_step)
+
+        robot.set_motor_position(
+            LIFT_MOTOR, int(internal_target),
+            max_vel_ticks=LIFT_MAX_VEL,
+            tolerance_ticks=LIFT_TOLERANCE,
+            blocking=False
+        )
+        time.sleep(delay_s)
+
+    # Final blocking wait to ensure it completely settles at the final destination
+    robot.set_motor_position(
+        LIFT_MOTOR, int(target_ticks),
+        max_vel_ticks=LIFT_MAX_VEL,
+        tolerance_ticks=LIFT_TOLERANCE,
+        blocking=True, timeout=2.0
+    )
+
+
+def drive_to_slot(robot: Robot, current_pos: float, target_slot: str) -> float:
+    target_pos = INGREDIENT_SLOTS[target_slot]
+    delta = target_pos - current_pos
+    if delta > 0:
+        robot.move_forward(delta, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+    elif delta < 0:
+        robot.move_backward(abs(delta), DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+    return target_pos
+
+
+def led_moving(robot: Robot) -> None:
+    robot.set_led(LED.ORANGE, 0)
+    robot.set_led(LED.GREEN, 200)
+
+
+# ---------------------------------------------------------------------------
 # Status / config printing
 # ---------------------------------------------------------------------------
 
@@ -439,13 +549,6 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
 
 def print_config(robot: Robot) -> None:
     lapf_cfg = resolve_lapf_config()
-
-    print("[CFG] Traffic-light fixed turn:")
-    print(
-        f"      turn_angle={TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
-        f"return_angle={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
-        f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
-    )
 
     print("[CFG] Pure pursuit control points:")
     for i, waypoint in enumerate(PURE_PURSUIT_CONTROL_POINTS, start=1):
@@ -504,12 +607,19 @@ def print_config(robot: Robot) -> None:
 
 def run(robot: Robot) -> None:
     configure_robot(robot)
+    start_robot(robot)
+    robot.reset_odometry()
+    robot.wait_for_pose_update(timeout=0.5)
 
     state = "INIT"
+
+    # Burger pickup state
+    current_x = 0.0
+    jog_ticks = 0
+
+    # Course state
     course_stage_index = 0
     motion_handle = None
-    forward_theta_deg = None
-    light_theta_deg = None
     last_status_print_at = 0.0
 
     period = 1.0 / float(DEFAULT_FSM_HZ)
@@ -520,141 +630,121 @@ def run(robot: Robot) -> None:
 
         # ── INIT ─────────────────────────────────────────────────────────────
         if state == "INIT":
-            start_robot(robot)
+            robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            print("=== LIFT ALIGNMENT ===")
+            print(" BTN_1: UP | BTN_2: DOWN | BTN_10: Confirm")
+            state = "INIT_JOG"
+
+        # ── INIT_JOG ─────────────────────────────────────────────────────────
+        elif state == "INIT_JOG":
+            if robot.was_button_pressed(Button.BTN_1):
+                jog_ticks += LIFT_JOG_STEP
+                move_lift(robot, jog_ticks)
+            elif robot.was_button_pressed(Button.BTN_2):
+                jog_ticks -= LIFT_JOG_STEP
+                move_lift(robot, jog_ticks)
+            elif robot.was_button_pressed(Button.BTN_10):
+                robot.reset_motor_position(LIFT_MOTOR)
+                time.sleep(0.15)
+                print("[INIT] Encoder zeroed -> WAIT_GREEN")
+                led_moving(robot)
+                state = "WAIT_GREEN"
+            time.sleep(0.05)
+
+        # ── WAIT_GREEN ────────────────────────────────────────────────────────
+        elif state == "WAIT_GREEN":
+            # Start burger sequence on button press
+            if robot.was_button_pressed(Button.BTN_5):
+                print("[FSM] Proceeding to pickup.")
+                state = "BURGER_PICKUP"
+            time.sleep(0.1)
+
+        # ── BURGER_PICKUP ─────────────────────────────────────────────────────
+        elif state == "BURGER_PICKUP":
+            # 1. PREP INITIAL MOVE
+            claw_open(robot)
+            move_lift(robot, LIFT_CARRY_TICKS)
+
+            # 2. NAVIGATE TO INGREDIENT AREA
+            robot.move_forward(DIST_TO_INGREDIENT_AREA, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            # 3. FETCH MEAT
+            current_x = drive_to_slot(robot, current_x, "meat")
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            move_lift(robot, LIFT_PICKUP_TICKS)
+            claw_close(robot, CLAW_CLOSE_MEAT_DEG)
+            move_lift(robot, LIFT_CARRY_TICKS)
+
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+            # 4. PLACE MEAT
+            current_x = drive_to_slot(robot, current_x, "bun_bottom")
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
+            claw_open(robot)
+            move_lift(robot, LIFT_CARRY_TICKS)
+
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+            # 5. FETCH TOP BUN
+            current_x = drive_to_slot(robot, current_x, "bun_top")
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            move_lift(robot, LIFT_PICKUP_TICKS)
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            move_lift(robot, LIFT_CARRY_TICKS)
+
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+            # 6. PLACE TOP BUN & GRAB FULL STACK
+            current_x = drive_to_slot(robot, current_x, "bun_bottom")
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS))
+            claw_open(robot)
+
+            move_lift(robot, LIFT_PICKUP_TICKS)
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            move_lift(robot, LIFT_CARRY_TICKS)
+
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+            print("[FSM] Burger pickup complete.")
+            state = "BURGER_DONE"
+
+        # ── BURGER_DONE ───────────────────────────────────────────────────────
+        # Reset odometry and immediately begin the course (pure pursuit → LAPF).
+        elif state == "BURGER_DONE":
+            print("[FSM] Resetting odometry and starting course.")
             reset_mission_pose(robot)
             dim_all_leds(robot)
-            show_idle_leds(robot)
-            robot.stop()
+            show_running_leds(robot)
             print_config(robot)
-            print("[FSM] IDLE — press BTN_1 to start traffic-light/course mission")
-            state = "IDLE"
+            course_stage_index = 0
+            motion_handle = start_course_stage(robot, course_stage_index)
+            last_status_print_at = time.monotonic()
+            state = "COURSE_MOVING"
 
-        # ── IDLE ─────────────────────────────────────────────────────────────
-        elif state == "IDLE":
-            robot.stop()
-            if robot.was_button_pressed(Button.BTN_1):
-                reset_mission_pose(robot)
-                _, _, forward_theta_deg = robot.get_odometry_pose()
-                light_theta_deg = normalize_angle_deg(forward_theta_deg + TRAFFIC_LIGHT_TURN_DEG)
-
-                dim_all_leds(robot)
-                show_running_leds(robot)
-                print(
-                    f"[FSM] TURN_TO_LIGHT — turning {TRAFFIC_LIGHT_TURN_DEG:+.1f}° in place "
-                    f"from θ={forward_theta_deg:.1f}° to θ={light_theta_deg:.1f}°"
-                )
-
-                motion_handle = robot.turn_by(
-                    delta_deg=TRAFFIC_LIGHT_TURN_DEG,
-                    angular_velocity_deg = 20,
-                    blocking=False,
-                    tolerance_deg=TURN_TOLERANCE_DEG,
-                )
-                last_status_print_at = now
-                state = "TURN_TO_LIGHT"
-
-        # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
-        # Turn exactly TRAFFIC_LIGHT_TURN_DEG in place. Do NOT move forward.
-        elif state == "TURN_TO_LIGHT":
-            if robot.was_button_pressed(Button.BTN_2):
-                cancel_motion(robot, motion_handle)
-                motion_handle = None
-                show_idle_leds(robot)
-                print("[FSM] IDLE — mission cancelled while turning to traffic light")
-                state = "IDLE"
-
-            else:
-                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
-                    _, _, theta = robot.get_odometry_pose()
-                    print(
-                        f"  turning to traffic light: θ={theta:.1f}° "
-                        f"delta={TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
-                    )
-                    last_status_print_at = now
-
-                if motion_handle is not None and motion_handle.is_finished():
-                    robot.stop()
-                    motion_handle = None
-                    print("[FSM] WAIT_FOR_GREEN — fixed traffic-light angle reached")
-                    state = "WAIT_FOR_GREEN"
-
-        # ── WAIT_FOR_GREEN ───────────────────────────────────────────────────
-        # Stay stopped. Red = wait. Green = turn back to original forward heading.
-        elif state == "WAIT_FOR_GREEN":
-            robot.stop()
-
-            if robot.was_button_pressed(Button.BTN_2):
-                show_idle_leds(robot)
-                print("[FSM] IDLE — mission cancelled while waiting for green")
-                state = "IDLE"
-
-            elif stop_sign_detected(robot):
-                robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
-                robot.set_led(LED.GREEN, 0)
-                print("[VISION] stop sign detected — stopped")
-
-            else:
-                traffic_light_color = find_traffic_light_color(robot)
-
-                if traffic_light_color == "green":
-                    show_traffic_light_color(robot, "green")
-                    print("[VISION] green light — turning back to forward heading")
-                    if forward_theta_deg is None:
-                        _, _, forward_theta_deg = robot.get_odometry_pose()
-
-                    motion_handle = robot.turn_to(
-                        forward_theta_deg,
-                        angular_velocity_deg = 20,
-                        blocking=False,
-                        tolerance_deg=TURN_TOLERANCE_DEG,
-                    )
-                    last_status_print_at = now
-                    state = "RETURN_TO_FORWARD"
-
-                elif traffic_light_color == "red":
-                    show_traffic_light_color(robot, "red")
-
-                else:
-                    # No detection yet: remain stopped at the fixed 15-degree viewing angle.
-                    pass
-
-        # ── RETURN_TO_FORWARD ────────────────────────────────────────────────
-        # Turn in place back to the heading the robot had before the 15-degree turn.
-        elif state == "RETURN_TO_FORWARD":
-            if robot.was_button_pressed(Button.BTN_2):
-                cancel_motion(robot, motion_handle)
-                motion_handle = None
-                show_idle_leds(robot)
-                print("[FSM] IDLE — mission cancelled while returning to forward")
-                state = "IDLE"
-
-            else:
-                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
-                    _, _, theta = robot.get_odometry_pose()
-                    print(
-                        f"  returning to forward: θ={theta:.1f}° "
-                        f"delta={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
-                    )
-                    last_status_print_at = now
-
-                if motion_handle is not None and motion_handle.is_finished():
-                    robot.stop()
-                    print("[FSM] Forward heading restored — resetting odometry and starting course")
-                    reset_mission_pose(robot)
-                    course_stage_index = 0
-                    motion_handle = start_course_stage(robot, course_stage_index)
-                    last_status_print_at = time.monotonic()
-                    state = "COURSE_MOVING"
-
-        # ── COURSE_MOVING ───────────────────────────────────────────────────
+        # ── COURSE_MOVING ─────────────────────────────────────────────────────
         # Run pure pursuit first, then LAPF waypoints.
         elif state == "COURSE_MOVING":
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
                 motion_handle = None
                 show_idle_leds(robot)
-                print("[FSM] IDLE — course mission cancelled")
-                state = "IDLE"
+                print("[FSM] COURSE_IDLE — course mission cancelled")
+                state = "COURSE_IDLE"
 
             elif ENABLE_STOP_SIGN_OVERRIDE and stop_sign_detected(robot):
                 cancel_motion(robot, motion_handle)
@@ -662,7 +752,7 @@ def run(robot: Robot) -> None:
                 robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
                 robot.set_led(LED.GREEN, 0)
                 print("[VISION] stop sign detected during course — mission stopped")
-                state = "IDLE"
+                state = "COURSE_IDLE"
 
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
@@ -680,13 +770,19 @@ def run(robot: Robot) -> None:
                     if course_stage_index >= len(MISSION_STAGES):
                         motion_handle = None
                         show_idle_leds(robot)
-                        print("[FSM] IDLE — full traffic-light/course mission complete. Press BTN_1 to run again")
-                        state = "IDLE"
+                        print("[FSM] COURSE_IDLE — full course complete.")
+                        state = "COURSE_IDLE"
                     else:
                         motion_handle = start_course_stage(robot, course_stage_index)
                         last_status_print_at = time.monotonic()
 
-        # ── Tick-rate control ────────────────────────────────────────────────
+        # ── COURSE_IDLE ───────────────────────────────────────────────────────
+        # Resting state after course completion or cancellation.
+        elif state == "COURSE_IDLE":
+            robot.stop()
+            time.sleep(1.0)
+
+        # ── Tick-rate control ─────────────────────────────────────────────────
         next_tick += period
         sleep_s = next_tick - time.monotonic()
         if sleep_s > 0.0:
