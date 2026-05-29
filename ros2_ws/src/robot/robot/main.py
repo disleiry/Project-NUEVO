@@ -36,8 +36,8 @@ from robot.robot import FirmwareState, Robot
 # ===========================================================================
 
 LIFT_MOTOR         = Motor.DC_M3
-LIFT_CARRY_TICKS   = -12800    # UPDATED: Drop off / travel height
-LIFT_PICKUP_TICKS  = -8300     # UPDATED: Base pickup height
+LIFT_CARRY_TICKS   = -14000    # UPDATED: Drop off / travel height
+LIFT_PICKUP_TICKS  = -9000     # UPDATED: Base pickup height
 LIFT_DOWN_TICKS    = 0        
 LIFT_MAX_VEL       = 1800     
 LIFT_TOLERANCE     = 30      
@@ -53,9 +53,10 @@ LIFT_ITEM_THICKNESS_TICKS = -1800
 # CLAW SERVO
 # ===========================================================================
 
-CLAW_SERVO      = ServoChannel.CH_13
-CLAW_OPEN_DEG   = 60.0   # UPDATED
-CLAW_CLOSE_DEG  = 146.0  # UPDATED
+CLAW_SERVO          = ServoChannel.CH_13
+CLAW_OPEN_DEG       = 60.0   # UPDATED
+CLAW_CLOSE_MEAT_DEG = 150.0  # NEW: Tighter or looser angle for meat
+CLAW_CLOSE_BUN_DEG  = 140.0  # NEW: Angle for buns / whole burger
 
 
 # ===========================================================================
@@ -87,13 +88,13 @@ SERVO_DEG_PER_STEP = 0.8
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 640.0    
-APPROACH_SHELF_DIST = 18.0        
+DIST_TO_INGREDIENT_AREA = 980.0    
+APPROACH_SHELF_DIST = 30.0        
 
 INGREDIENT_SLOTS = {
-    "bun_bottom": 220.0,    
+    "bun_bottom": 207.0,    
     "meat":       350.0,  
-    "bun_top":    475.0,  
+    "bun_top":    485.0,  
 }
 
 # The bottom bun is our assembly base. We only fetch meat and top bun.
@@ -206,9 +207,9 @@ def lift_return_to_zero(robot: Robot) -> None:
 # CLAW HELPERS
 # ===========================================================================
 
-def claw_close(robot: Robot) -> None:
+def claw_close(robot: Robot, angle: float = CLAW_CLOSE_BUN_DEG) -> None:
     robot.enable_servo(CLAW_SERVO)
-    robot.set_servo(CLAW_SERVO, CLAW_CLOSE_DEG)
+    robot.set_servo(CLAW_SERVO, angle)
     time.sleep(0.5)
 
 def claw_open(robot: Robot) -> None:
@@ -307,8 +308,9 @@ def run(robot: Robot) -> None:
     last_step_time = 0.0
     step_delay_s = 0.150  
     
-    requested_claw_deg = CLAW_CLOSE_DEG  
-    current_claw_deg = CLAW_CLOSE_DEG
+    requested_claw_deg = CLAW_CLOSE_BUN_DEG  
+    current_claw_deg = CLAW_CLOSE_BUN_DEG
+    active_close_deg = CLAW_CLOSE_BUN_DEG 
 
     print()
     print("=" * 56)
@@ -322,7 +324,7 @@ def run(robot: Robot) -> None:
         # ==================================================================
         if state == "INIT":
             robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
-            claw_close(robot)  
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)  
             led_idle(robot)
             print("  LIFT ALIGNMENT — align carriage to Sharpie mark")
             print("  BTN_1: UP | BTN_2: DOWN | BTN_10: Confirm")
@@ -355,17 +357,23 @@ def run(robot: Robot) -> None:
                 state = "PREP_INITIAL_MOVE"
 
         # ==================================================================
-        # PREP MOVE
+        # PREP MOVE (Claw first, then Lift)
         # ==================================================================
         elif state == "PREP_INITIAL_MOVE":
-            print("[ARM] Prepping arm for travel...")
+            print("[ARM] Opening claw for travel heading...")
             robot.enable_servo(CLAW_SERVO)
             requested_claw_deg = CLAW_OPEN_DEG  # Smooth transition
-            requested_final_ticks = LIFT_CARRY_TICKS
-            action_timer = time.monotonic()
-            state = "WAIT_PREP_INITIAL"
+            state = "WAIT_PREP_INITIAL_CLAW"
 
-        elif state == "WAIT_PREP_INITIAL":
+        elif state == "WAIT_PREP_INITIAL_CLAW":
+            # Wait until claw finishes moving before assigning lift movement
+            if abs(current_claw_deg - requested_claw_deg) <= 0.5:
+                print("[ARM] Claw opened. Raising lift to carry height...")
+                requested_final_ticks = LIFT_CARRY_TICKS
+                action_timer = time.monotonic()
+                state = "WAIT_PREP_INITIAL_LIFT"
+
+        elif state == "WAIT_PREP_INITIAL_LIFT":
             current = get_lift_ticks(robot)
             if abs(current - LIFT_CARRY_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
                 print("[ARM] Arm prepped at carry height. Moving out.")
@@ -389,6 +397,7 @@ def run(robot: Robot) -> None:
             approach_shelf(robot)
             robot.stop()
             
+            active_close_deg = CLAW_CLOSE_MEAT_DEG 
             action_sub_state = "OPEN_CLAW"
             next_fsm_state = "PLACE_MEAT"
             state = "DO_PICK"
@@ -414,6 +423,7 @@ def run(robot: Robot) -> None:
             approach_shelf(robot)
             robot.stop()
             
+            active_close_deg = CLAW_CLOSE_BUN_DEG 
             action_sub_state = "OPEN_CLAW"
             next_fsm_state = "PLACE_AND_GRAB_STACK"
             state = "DO_PICK"
@@ -441,11 +451,11 @@ def run(robot: Robot) -> None:
             if action_sub_state == "OPEN_CLAW":
                 robot.enable_servo(CLAW_SERVO)
                 requested_claw_deg = CLAW_OPEN_DEG  # Smooth transition
-                action_timer = time.monotonic()
                 action_sub_state = "WAIT_OPEN"
                 
             elif action_sub_state == "WAIT_OPEN":
-                if time.monotonic() - action_timer >= 0.5:
+                # Ensure claw is fully open before allowing lift to go down
+                if abs(current_claw_deg - requested_claw_deg) <= 0.5:
                     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
                     requested_final_ticks = LIFT_PICKUP_TICKS
                     action_timer = time.monotonic()
@@ -457,13 +467,13 @@ def run(robot: Robot) -> None:
                 
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Reached pickup height at: {current} ticks")
-                    print(f"[ARM] Closing claw to {CLAW_CLOSE_DEG} degrees...")
-                    requested_claw_deg = CLAW_CLOSE_DEG  # Smooth transition
-                    action_timer = time.monotonic()
+                    print(f"[ARM] Closing claw to {active_close_deg} degrees...")
+                    requested_claw_deg = active_close_deg  
                     action_sub_state = "WAIT_CLOSE"
                     
             elif action_sub_state == "WAIT_CLOSE":
-                if time.monotonic() - action_timer >= 1.5:
+                # Ensure claw is completely closed before allowing lift to move up
+                if abs(current_claw_deg - requested_claw_deg) <= 0.5:
                     print("[ARM] Claw closed. Lifting to carry height...")
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
@@ -508,12 +518,12 @@ def run(robot: Robot) -> None:
                 if abs(current - active_drop_ticks) <= LIFT_TOLERANCE or time_elapsed > LIFT_TIMEOUT_S:
                     print(f"[ARM] Lift stopped at dynamic dropoff: {current} ticks")
                     print(f"[ARM] Opening claw to {CLAW_OPEN_DEG} degrees...")
-                    requested_claw_deg = CLAW_OPEN_DEG  # Smooth transition
-                    action_timer = time.monotonic()
+                    requested_claw_deg = CLAW_OPEN_DEG  
                     action_sub_state = "WAIT_OPEN"
                     
             elif action_sub_state == "WAIT_OPEN":
-                if time.monotonic() - action_timer >= 0.5:
+                # Ensure claw is fully open before allowing lift to move up
+                if abs(current_claw_deg - requested_claw_deg) <= 0.5:
                     print("[ARM] Claw is open. Lifting safely to carry height FIRST...")
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
@@ -543,12 +553,12 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 if abs(current - active_drop_ticks) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
                     print("[ARM] Reached stack height. Dropping top bun...")
-                    requested_claw_deg = CLAW_OPEN_DEG  # Smooth transition
-                    action_timer = time.monotonic()
+                    requested_claw_deg = CLAW_OPEN_DEG  
                     action_sub_state = "WAIT_OPEN"
 
             elif action_sub_state == "WAIT_OPEN":
-                if time.monotonic() - action_timer >= 0.5:
+                # Ensure claw is fully open before allowing lift to drop to the base
+                if abs(current_claw_deg - requested_claw_deg) <= 0.5:
                     print("[ARM] Dropped bun. Lowering to base to grab entire burger...")
                     requested_final_ticks = LIFT_PICKUP_TICKS
                     action_timer = time.monotonic()
@@ -558,12 +568,12 @@ def run(robot: Robot) -> None:
                 current = get_lift_ticks(robot)
                 if abs(current - LIFT_PICKUP_TICKS) <= LIFT_TOLERANCE or (time.monotonic() - action_timer > LIFT_TIMEOUT_S):
                     print("[ARM] At base height. Grabbing entire burger...")
-                    requested_claw_deg = CLAW_CLOSE_DEG  # Smooth transition
-                    action_timer = time.monotonic()
+                    requested_claw_deg = CLAW_CLOSE_BUN_DEG  
                     action_sub_state = "WAIT_CLOSE"
 
             elif action_sub_state == "WAIT_CLOSE":
-                if time.monotonic() - action_timer >= 1.5:
+                # Ensure claw has firmly closed around the full stack before lifting up
+                if abs(current_claw_deg - requested_claw_deg) <= 0.5:
                     print("[ARM] Grabbed entire burger. Lifting to carry height...")
                     requested_final_ticks = LIFT_CARRY_TICKS
                     action_timer = time.monotonic()
@@ -643,3 +653,5 @@ def run(robot: Robot) -> None:
             time.sleep(sleep_s)
         else:
             next_tick = time.monotonic()
+
+
