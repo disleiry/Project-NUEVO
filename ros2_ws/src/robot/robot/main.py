@@ -1,13 +1,17 @@
 import time
-from robot.robot import Robot
-from robot.hardware_map import Button, DCMotorMode, Motor, ServoChannel, LED, LEDMode
+from robot.robot import FirmwareState, Robot
+from robot.hardware_map import (
+    Button, DCMotorMode, Motor, ServoChannel, LED, LEDMode,
+    POSITION_UNIT, WHEEL_DIAMETER, WHEEL_BASE, INITIAL_THETA_DEG,
+    LEFT_WHEEL_MOTOR, LEFT_WHEEL_DIR_INVERTED, 
+    RIGHT_WHEEL_MOTOR, RIGHT_WHEEL_DIR_INVERTED
+)
 
 # --- CONSTANTS ---
 LIFT_MOTOR = Motor.DC_M3
 LIFT_CARRY_TICKS = -14000
 LIFT_PICKUP_TICKS = -9000
 LIFT_ITEM_THICKNESS_TICKS = -1800
-LIFT_DOWN_TICKS = 0
 LIFT_MAX_VEL = 1800
 LIFT_TOLERANCE = 30
 LIFT_JOG_STEP = 100
@@ -34,6 +38,22 @@ INGREDIENT_SLOTS = {
     "bun_top": 485.0,
 }
 
+# --- MINIMAL SETUP TO PREVENT FREEZING ---
+def configure_and_start_robot(robot: Robot):
+    robot.set_unit(POSITION_UNIT)
+    robot.set_odometry_parameters(
+        wheel_diameter=WHEEL_DIAMETER, wheel_base=WHEEL_BASE,
+        initial_theta_deg=INITIAL_THETA_DEG,
+        left_motor_id=LEFT_WHEEL_MOTOR, left_motor_dir_inverted=LEFT_WHEEL_DIR_INVERTED,
+        right_motor_id=RIGHT_WHEEL_MOTOR, right_motor_dir_inverted=RIGHT_WHEEL_DIR_INVERTED,
+    )
+    robot.enable_vision()
+    if robot.get_state() in (FirmwareState.ESTOP, FirmwareState.ERROR):
+        robot.reset_estop()
+    robot.set_state(FirmwareState.RUNNING)
+    robot.reset_odometry()
+    robot.wait_for_pose_update(timeout=0.5)
+
 # --- HELPER FUNCTIONS ---
 def claw_close(robot: Robot, angle: float):
     robot.enable_servo(CLAW_SERVO)
@@ -46,17 +66,13 @@ def claw_open(robot: Robot):
     time.sleep(0.5)
 
 def move_lift(robot: Robot, target_ticks: int):
-    """Synchronous (blocking) lift movement."""
     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
     robot.set_motor_position(
-        LIFT_MOTOR, target_ticks,
-        max_vel_ticks=LIFT_MAX_VEL,
-        tolerance_ticks=LIFT_TOLERANCE,
-        blocking=True, timeout=15.0
+        LIFT_MOTOR, target_ticks, max_vel_ticks=LIFT_MAX_VEL,
+        tolerance_ticks=LIFT_TOLERANCE, blocking=True, timeout=15.0
     )
 
 def drive_to_slot(robot: Robot, current_pos: float, target_slot: str) -> float:
-    """Calculates relative distance to next slot and drives there, returning new position."""
     target_pos = INGREDIENT_SLOTS[target_slot]
     delta = target_pos - current_pos
     if delta > 0:
@@ -68,12 +84,11 @@ def drive_to_slot(robot: Robot, current_pos: float, target_slot: str) -> float:
 def led_moving(robot: Robot) -> None:
     robot.set_led(LED.ORANGE, 0)
     robot.set_led(LED.GREEN, 200)
-    robot.set_led(LED.RED, 0)
-    robot.set_led(LED.BLUE, 0)
 
 # --- MAIN LOOP ---
 def run(robot: Robot) -> None:
-    # If you need to call configure_robot(robot) / start_robot(robot) from your original code, add them here.
+    print("[INIT] Configuring robot to clear E-Stop...")
+    configure_and_start_robot(robot)
     
     state = "INIT"
     current_x = 0.0
@@ -88,28 +103,22 @@ def run(robot: Robot) -> None:
             state = "INIT_JOG"
 
         elif state == "INIT_JOG":
-            # We now use blocking moves for the jog steps so we don't need manual math spoon-feeding
             if robot.was_button_pressed(Button.BTN_1): 
                 jog_ticks += LIFT_JOG_STEP
                 move_lift(robot, jog_ticks)
-                print(f"[JOG] Stepped UP to: {jog_ticks}")
-            
             elif robot.was_button_pressed(Button.BTN_2):
                 jog_ticks -= LIFT_JOG_STEP
                 move_lift(robot, jog_ticks)
-                print(f"[JOG] Stepped DOWN to: {jog_ticks}")
-            
             elif robot.was_button_pressed(Button.BTN_10):
                 robot.reset_motor_position(LIFT_MOTOR)
                 time.sleep(0.15)
                 print("[INIT] Encoder zeroed -> WAIT_GREEN")
                 led_moving(robot)
                 state = "WAIT_GREEN"
-            
             time.sleep(0.05)
 
         elif state == "WAIT_GREEN":
-            # Assuming you can map this to BTN_5 or add `detect_green_light(robot)` back in
+            # Can use detection here or just a button press
             if robot.was_button_pressed(Button.BTN_5): 
                 print("[FSM] Proceeding to pickup.")
                 state = "BURGER_PICKUP"
@@ -140,7 +149,7 @@ def run(robot: Robot) -> None:
             robot.turn_by(TURN_TO_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
-            move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS) # Place 1 thickness up
+            move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
             move_lift(robot, LIFT_CARRY_TICKS)
             
@@ -164,10 +173,9 @@ def run(robot: Robot) -> None:
             robot.turn_by(TURN_TO_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
-            move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS)) # Place 2 thicknesses up
+            move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS)) 
             claw_open(robot)
             
-            # Drop down entirely to base height and scoop the whole burger
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
