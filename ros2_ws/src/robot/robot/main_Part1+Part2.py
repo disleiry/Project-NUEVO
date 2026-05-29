@@ -110,12 +110,19 @@ PURE_PURSUIT_CONTROL_POINTS = [
     (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
+PURE_PURSUIT_CONTROL_POINTS_2 = [
+    #(0.0, 0.0),        # start
+    (1800.0, 3700.0),      # Waypoint 1: home straight
+    (2200.0, 3700.0),    # Waypoint 2: transition / turn
+
+]
 # Optional: densify long pure-pursuit segments for smoother tracking.
 PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
+PURE_PURSUIT_CONTROL_POINTS_2 = densify_polyline(PURE_PURSUIT_CONTROL_POINTS_2, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (1800.0, 3700.0),   # Obstacle waypoint / finish
+    (1800.0, 3300.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
@@ -168,6 +175,15 @@ for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
             "name": f"Obstacle course LAPF waypoint {i}",
             "type": "lapf",
             "waypoint": waypoint,
+        }
+    )
+    
+for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=2):
+    MISSION_STAGES.append(
+        {
+            "name": f"Pure Pursuit part 2 {i}",
+            "type": "pure_pursuit_2",
+            "waypoint": PURE_PURSUIT_CONTROL_POINTS_2,
         }
     )
 
@@ -414,6 +430,9 @@ def start_course_stage(robot: Robot, stage_index: int):
 
     if stage["type"] == "lapf":
         return start_lapf_stage(robot, stage)
+        
+    if stage["type"] == "pure_pursuit_2":
+        return start_pure_pursuit_stage(robot, stage)
 
     raise ValueError(f"Unknown stage type: {stage['type']}")
 
