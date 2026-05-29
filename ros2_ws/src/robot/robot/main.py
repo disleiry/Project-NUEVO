@@ -125,7 +125,7 @@ def resolve_lapf_config() -> dict[str, float]:
         "leash_half_angle_deg": float(LEASH_HALF_ANGLE_DEG),
     }
 
-# STEP 1: Start with pure base-odometry only for clean burger pickup maneuvers
+# STEP 1: Baseline Odometry setup only (for burger maneuvers)
 def configure_and_start_robot_for_pickup(robot: Robot) -> None:
     robot.set_unit(POSITION_UNIT)
     robot.set_odometry_parameters(
@@ -140,16 +140,31 @@ def configure_and_start_robot_for_pickup(robot: Robot) -> None:
     if ENABLE_VISION:
         robot.enable_vision()
         
-    # Keep GPS and LIDAR completely off right now to avoid messing up local odometry
     if robot.get_state() in (FirmwareState.ESTOP, FirmwareState.ERROR):
         robot.reset_estop()
     robot.set_state(FirmwareState.RUNNING)
     robot.reset_odometry()
     robot.wait_for_pose_update(timeout=0.5)
 
-# STEP 2: Dynamically turn on GPS and LIDAR fusion after the burger is safely picked up
-def enable_sensors_for_course(robot: Robot) -> None:
-    print("[INIT] Activating LIDAR tracking layers...")
+# STEP 2: Activated immediately after burger pickup is completed
+def enable_gps_after_pickup(robot: Robot) -> None:
+    print("[INIT] Burger pickup done -> Connecting GPS sensor fusion streams...")
+    robot.enable_gps()
+    robot.set_tracked_tag_id(TAG_ID)
+    robot.set_tag_body_offset(TAG_BODY_OFFSET_X_MM, TAG_BODY_OFFSET_Y_MM)
+    robot.set_position_fusion_alpha(GPS_POSITION_ALPHA)
+    if ENABLE_GPS_TANGENT_HEADING:
+        robot.enable_gps_tangent_heading(
+            alpha=GPS_TANGENT_ALPHA,
+            min_displacement_mm=GPS_TANGENT_MIN_DISPLACEMENT_MM,
+        )
+    # Give the localization filter a split second to lock before moving onto the ramp
+    time.sleep(0.3)
+    robot.wait_for_pose_update(timeout=0.5)
+
+# STEP 3: Activated ONLY when transitioning into the LAPF stage at (1600, 600)
+def enable_lidar_for_obstacles(robot: Robot) -> None:
+    print("[INIT] Reached (1600, 600) -> Activating LIDAR tracking layers...")
     robot.enable_lidar()
     robot.set_lidar_mount(
         x_mm=LIDAR_MOUNT_X_MM,
@@ -162,20 +177,7 @@ def enable_sensors_for_course(robot: Robot) -> None:
         fov_deg=LIDAR_FOV_DEG,
     )
     robot.start_lidar_world_publisher()
-    
-    print("[INIT] Connecting GPS sensor fusion streams...")
-    robot.enable_gps()
-    robot.set_tracked_tag_id(TAG_ID)
-    robot.set_tag_body_offset(TAG_BODY_OFFSET_X_MM, TAG_BODY_OFFSET_Y_MM)
-    robot.set_position_fusion_alpha(GPS_POSITION_ALPHA)
-    if ENABLE_GPS_TANGENT_HEADING:
-        robot.enable_gps_tangent_heading(
-            alpha=GPS_TANGENT_ALPHA,
-            min_displacement_mm=GPS_TANGENT_MIN_DISPLACEMENT_MM,
-        )
-    # Give the localization filter a brief split-second to lock onto global coordinates
-    time.sleep(0.3)
-    robot.wait_for_pose_update(timeout=0.5)
+    time.sleep(0.1)
 
 def get_best_pose(robot: Robot) -> tuple[str, float, float, float]:
     if robot.has_fused_pose():
@@ -266,6 +268,9 @@ def start_pure_pursuit_stage(robot: Robot, stage: dict[str, Any]):
     )
 
 def start_lapf_stage(robot: Robot, stage: dict[str, Any]):
+    # Turn on LIDAR mapping layers ONLY right here as we start Stage 2/2
+    enable_lidar_for_obstacles(robot)
+    
     cfg = resolve_lapf_config()
     goal_x, goal_y = stage["waypoint"]
     print(f"[FSM] MOVING - LAPF obstacle waypoint goal=({goal_x:.0f}, {goal_y:.0f}) mm")
@@ -432,10 +437,10 @@ def run(robot: Robot) -> None:
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-            print("[FSM] Burger pickup complete! Transitioning to obstacle course context...")
+            print("[FSM] Burger pickup complete! Turning on GPS streams...")
             
-            # Now that pickup is finished, spin up GPS tracking layers and LIDAR maps safely
-            enable_sensors_for_course(robot)
+            # Fire up GPS stream and snap to absolute map frames right here
+            enable_gps_after_pickup(robot)
             
             course_stage_index = 0
             last_status_print_at = time.monotonic()
@@ -466,9 +471,10 @@ def run(robot: Robot) -> None:
                         course_stage_index += 1
                         if STAGE_PAUSE_S > 0:
                             time.sleep(STAGE_PAUSE_S)
+                        # When entering stage index 1 (the LAPF stage), it will activate the LIDAR
                         motion_handle = start_course_stage(robot, course_stage_index)
                     else:
-                        print("[FSM] Course tracking complete! All straight/ramp targets and obstacle goals reached.")
+                        print("[FSM] Course tracking complete! Target reached.")
                         state = "DONE"
                         
             time.sleep(0.05)
