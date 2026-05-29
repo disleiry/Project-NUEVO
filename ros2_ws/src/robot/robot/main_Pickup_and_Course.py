@@ -806,6 +806,7 @@ def run(robot: Robot) -> None:
 
             motion_handle = robot.turn_to(
                 TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
+                angular_velocity_deg=15.0,
                 blocking=False,
                 tolerance_deg=TURN_TOLERANCE_DEG,
             )
@@ -863,6 +864,7 @@ def run(robot: Robot) -> None:
 
                     motion_handle = robot.turn_to(
                         TRAFFIC_LIGHT_RETURN_ANGLE_DEG,
+                        angular_velocity_deg=15.0,
                         blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
