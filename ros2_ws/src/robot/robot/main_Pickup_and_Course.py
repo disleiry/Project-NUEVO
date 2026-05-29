@@ -789,11 +789,11 @@ def run(robot: Robot) -> None:
                 last_status_print_at = now
                 state = "INITIAL_MOVE_FORWARDT"
               
-      elif state == "INITIAL_MOVE_FORWARD":
-            print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
-            robot.move_forward(distance=INITIAL_MOVE_DIST, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
-            robot.stop()
-            state = "TURN_TO_LIGHT"
+        elif state == "INITIAL_MOVE_FORWARD":
+                print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
+                robot.move_forward(distance=INITIAL_MOVE_DIST, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+                robot.stop()
+                state = "TURN_TO_LIGHT"
 
         # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
         # Turn to absolute traffic light angle. Do NOT move forward.
