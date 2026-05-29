@@ -111,7 +111,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
 
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
-PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
+PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=50.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
@@ -541,7 +541,6 @@ def run(robot: Robot) -> None:
 
                 motion_handle = robot.turn_to(
                     TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
-                    angular_velocity_deg = 20,
                     blocking=False,
                     tolerance_deg=TURN_TOLERANCE_DEG,
                 )
@@ -597,7 +596,6 @@ def run(robot: Robot) -> None:
 
                     motion_handle = robot.turn_to(
                         TRAFFIC_LIGHT_RETURN_ANGLE_DEG,
-                        angular_velocity_deg = 20,
                         blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
