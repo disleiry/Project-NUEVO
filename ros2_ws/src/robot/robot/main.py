@@ -546,6 +546,7 @@ def run(robot: Robot) -> None:
 
                 motion_handle = robot.turn_by(
                     delta_deg=TRAFFIC_LIGHT_TURN_DEG,
+                    angular_velocity_deg = 20,
                     blocking=False,
                     tolerance_deg=TURN_TOLERANCE_DEG,
                 )
