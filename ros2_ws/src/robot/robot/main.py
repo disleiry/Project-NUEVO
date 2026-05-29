@@ -1,7 +1,7 @@
 import time
 from robot.robot import FirmwareState, Robot
 from robot.hardware_map import (
-    Button, DCMotorMode, Motor, ServoChannel, LED, LEDMode,
+    Button, DCMotorMode, Motor, ServoChannel, LED,
     POSITION_UNIT, WHEEL_DIAMETER, WHEEL_BASE, INITIAL_THETA_DEG,
     LEFT_WHEEL_MOTOR, LEFT_WHEEL_DIR_INVERTED, 
     RIGHT_WHEEL_MOTOR, RIGHT_WHEEL_DIR_INVERTED
@@ -65,11 +65,44 @@ def claw_open(robot: Robot):
     robot.set_servo(CLAW_SERVO, CLAW_OPEN_DEG)
     time.sleep(0.5)
 
+def get_lift_ticks(robot: Robot) -> int:
+    dc = robot.get_dc_state()
+    if dc is None:
+        return 0
+    return int(dc.motors[LIFT_MOTOR - 1].position)
+
 def move_lift(robot: Robot, target_ticks: int):
+    """Safely ramps the motor target to prevent firmware leash errors."""
     robot.enable_motor(LIFT_MOTOR, DCMotorMode.POSITION)
+    current_ticks = float(get_lift_ticks(robot))
+    
+    step_rate_hz = 50.0
+    delay_s = 1.0 / step_rate_hz
+    ticks_per_step = LIFT_MAX_VEL / step_rate_hz
+    
+    internal_target = current_ticks
+    
+    # Spoon-feed intermediate positions to avoid math overflows in firmware
+    while abs(internal_target - target_ticks) > LIFT_TOLERANCE:
+        if target_ticks > internal_target:
+            internal_target = min(float(target_ticks), internal_target + ticks_per_step)
+        else:
+            internal_target = max(float(target_ticks), internal_target - ticks_per_step)
+            
+        robot.set_motor_position(
+            LIFT_MOTOR, int(internal_target), 
+            max_vel_ticks=LIFT_MAX_VEL, 
+            tolerance_ticks=LIFT_TOLERANCE, 
+            blocking=False
+        )
+        time.sleep(delay_s)
+        
+    # Final blocking wait to ensure it completely settles at the final destination
     robot.set_motor_position(
-        LIFT_MOTOR, target_ticks, max_vel_ticks=LIFT_MAX_VEL,
-        tolerance_ticks=LIFT_TOLERANCE, blocking=True, timeout=15.0
+        LIFT_MOTOR, int(target_ticks), 
+        max_vel_ticks=LIFT_MAX_VEL, 
+        tolerance_ticks=LIFT_TOLERANCE, 
+        blocking=True, timeout=2.0
     )
 
 def drive_to_slot(robot: Robot, current_pos: float, target_slot: str) -> float:
@@ -118,7 +151,7 @@ def run(robot: Robot) -> None:
             time.sleep(0.05)
 
         elif state == "WAIT_GREEN":
-            # Can use detection here or just a button press
+            # Start sequence on button press
             if robot.was_button_pressed(Button.BTN_5): 
                 print("[FSM] Proceeding to pickup.")
                 state = "BURGER_PICKUP"
