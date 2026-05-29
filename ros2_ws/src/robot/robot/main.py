@@ -369,7 +369,7 @@ def run(robot: Robot) -> None:
         elif state == "DELIVERY":
             # ── 1. Turn right to face +X ──────────────────────────────────
             print("[NAV] Turning right to face +X (theta → 0°)")
-            robot.turn_to(0.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+            robot.turn_to(-11.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
             # ── 2. Drive to face-detection zone ───────────────────────────
             print(f"[NAV] Driving {DIST_TO_SCAN_MM:.0f} mm in +X to scan zone")
