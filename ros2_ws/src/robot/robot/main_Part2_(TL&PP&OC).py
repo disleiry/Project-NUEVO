@@ -69,7 +69,7 @@ ENABLE_GPS = True
 TAG_ID = 25
 
 # GPS tuning.
-GPS_POSITION_ALPHA = 0.01
+GPS_POSITION_ALPHA = 0.15
 ENABLE_GPS_TANGENT_HEADING = True
 GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
@@ -102,10 +102,10 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (300.0, 3500.0),      # Waypoint 1: home straight
-    (920.0, 3500.0),    # Waypoint 2: transition / turn
-    (920.0, 700.0),     # Waypoint 3: ramp / return direction
-    (1800.0, 700.0),    # Waypoint 4: entrance toward obstacle course
+    (300.0, 3700.0),      # Waypoint 1: home straight
+    (980.0, 3700.0),    # Waypoint 2: transition / turn
+    (980.0, 700.0),     # Waypoint 3: ramp / return direction
+    (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -113,7 +113,7 @@ PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spac
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (1800.0, 3250.0),   # Obstacle waypoint / finish
+    (1800.0, 3700.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
@@ -546,6 +546,7 @@ def run(robot: Robot) -> None:
 
                 motion_handle = robot.turn_by(
                     delta_deg=TRAFFIC_LIGHT_TURN_DEG,
+                    angular_velocity_deg = 20,
                     blocking=False,
                     tolerance_deg=TURN_TOLERANCE_DEG,
                 )
@@ -603,6 +604,7 @@ def run(robot: Robot) -> None:
 
                     motion_handle = robot.turn_to(
                         forward_theta_deg,
+                        angular_velocity_deg = 20,
                         blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
