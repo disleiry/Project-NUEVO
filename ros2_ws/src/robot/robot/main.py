@@ -935,7 +935,14 @@ def run(robot: Robot) -> None:
         # NAVIGATION TO INGREDIENTS
         # ==================================================================
         elif state == "BURGER_PICKUP":
-            robot.move_forward(distance=DIST_TO_INGREDIENT_AREA, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(distance=25.0, velocity=30.0, tolerance=POS_TOLERANCE_MM, blocking=True)
+                
+                # 2. Allow the chassis to settle
+            time.sleep(0.2)
+                
+                # 3. Fire the main drive using the remaining distance
+            robot.move_forward(distance=DIST_TO_INGREDIENT_AREA - 25.0, velocity=DRIVE_VELOCITY, tolerance=POS_TOLERANCE_MM, blocking=True)   
+            
             robot.stop()
             current_slot  = None
             pick_attempts = 0
