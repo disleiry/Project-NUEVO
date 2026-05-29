@@ -3,37 +3,36 @@ gender_detection.py
 
 Standalone gender detection using:
   - smahesh29 TensorFlow face detector
-  - Gil Levi / Tal Hassner Caffe gender classifier
-
-Run directly to test:
-    python3 gender_detection.py
+  - InsightFace genderage.onnx gender classifier (replaces Caffe model)
 """
 
 import os
 import cv2
 import numpy as np
+import onnxruntime as ort
 
 _BASE = os.path.dirname(os.path.abspath(__file__))
 
 FACE_PROTO   = os.path.join(_BASE, "opencv_face_detector.pbtxt")
 FACE_MODEL   = os.path.join(_BASE, "opencv_face_detector_uint8.pb")
-GENDER_PROTO = os.path.join(_BASE, "gender_deploy.prototxt")
-GENDER_MODEL = os.path.join(_BASE, "gender_net.caffemodel")
+GENDER_MODEL = os.path.join(_BASE, "genderage.onnx")
 
-MODEL_MEAN_VALUES = (78.4263377603, 87.7689143744, 114.895847746)
-GENDER_LIST       = ["Male", "Female"]
-FACE_CONFIDENCE   = 0.7
+FACE_CONFIDENCE = 0.7
 
 
 class GenderDetector:
     def __init__(self):
         if not all(os.path.exists(p) for p in
-                   [FACE_PROTO, FACE_MODEL, GENDER_PROTO, GENDER_MODEL]):
+                   [FACE_PROTO, FACE_MODEL, GENDER_MODEL]):
             raise FileNotFoundError(
-                "Model files missing — run the wget commands to download them"
+                "Model files missing — check FACE_PROTO, FACE_MODEL, GENDER_MODEL paths"
             )
-        self.face_net   = cv2.dnn.readNetFromTensorflow(FACE_MODEL, FACE_PROTO)
-        self.gender_net = cv2.dnn.readNet(GENDER_MODEL, GENDER_PROTO)
+        self.face_net      = cv2.dnn.readNetFromTensorflow(FACE_MODEL, FACE_PROTO)
+        self.gender_sess   = ort.InferenceSession(
+            GENDER_MODEL,
+            providers=['CPUExecutionProvider']
+        )
+        self._gender_input = self.gender_sess.get_inputs()[0].name
         print("[GenderDetector] Models loaded successfully")
 
     def detect(self, frame):
@@ -68,18 +67,17 @@ class GenderDetector:
             if face_crop.size == 0:
                 continue
 
-            gender_blob = cv2.dnn.blobFromImage(
-                face_crop, 1.0, (227, 227),
-                MODEL_MEAN_VALUES, swapRB=False
-            )
-            self.gender_net.setInput(gender_blob)
-            preds = self.gender_net.forward()
+            # genderage.onnx: input [1,3,96,96], RGB, float32, /255
+            resized = cv2.resize(face_crop, (96, 96))
+            rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            inp     = (rgb.transpose(2, 0, 1).astype(np.float32) / 255.0)[np.newaxis]
 
-            idx  = int(preds[0].argmax())
-            conf = float(preds[0][idx])
+            preds  = self.gender_sess.run(None, {self._gender_input: inp})[0][0]
+            # preds[0] > 0 → Female, preds[0] < 0 → Male
+            gender = "Female" if preds[0] > 0 else "Male"
 
-            if conf > best_conf:
-                best_conf   = conf
-                best_gender = GENDER_LIST[idx]
+            if face_conf > best_conf:
+                best_conf   = face_conf
+                best_gender = gender
 
         return best_gender, best_conf
