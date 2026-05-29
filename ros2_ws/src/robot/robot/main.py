@@ -814,12 +814,12 @@ def run(robot: Robot) -> None:
         # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
         # Turn to absolute traffic light angle. Do NOT move forward.
         elif state == "TURN_TO_LIGHT":
-            
-            cancel_motion(robot, motion_handle)
-            motion_handle = None
-            show_idle_leds(robot)
-            print("[FSM] IDLE — mission cancelled while turning to traffic light")
-            state = "IDLE"
+            if robot.was_button_pressed(Button.BTN_2):
+                cancel_motion(robot, motion_handle)
+                motion_handle = None
+                show_idle_leds(robot)
+                print("[FSM] IDLE — mission cancelled while turning to traffic light")
+                state = "IDLE"
 
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
