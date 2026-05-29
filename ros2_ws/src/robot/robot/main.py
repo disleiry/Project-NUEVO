@@ -46,6 +46,9 @@ from robot.util import densify_polyline
 # ===========================================================================
 # LIFT MOTOR
 # ===========================================================================
+course_stage_start_time = 0.0
+
+
 
 LIFT_MOTOR         = Motor.DC_M3
 LIFT_CARRY_TICKS   = -14000    # UPDATED: Drop off / travel height
@@ -101,7 +104,7 @@ SERVO_DEG_PER_STEP = 0.8
 # ===========================================================================
 
 DIST_TO_INGREDIENT_AREA = 740.0    
-APPROACH_SHELF_DIST = 30.0    
+APPROACH_SHELF_DIST = 25.0    
 INITIAL_MOVE_DIST = 200.0
 
 INGREDIENT_SLOTS = {
@@ -145,7 +148,7 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 
 # Absolute headings for traffic light viewing and returning.
 # Assuming INITIAL_THETA_DEG is 90, 120.0 looks 30 degrees left.
-TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 125.0
+TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 110.0
 TRAFFIC_LIGHT_RETURN_ANGLE_DEG = 90.0
 TURN_TOLERANCE_DEG = 2.0
 
@@ -989,9 +992,8 @@ def run(robot: Robot) -> None:
         # Run pure pursuit first, then LAPF waypoints.
         elif state == "COURSE_MOVING":
             # Add this right below the overrides to kick off the obstacle course:
-            if motion_handle is None:
-                motion_handle = start_course_stage(robot, course_stage_index)
-                last_status_print_at = time.monotonic()
+            # Start the motion and record the exact time it started
+            
             
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
@@ -1009,26 +1011,38 @@ def run(robot: Robot) -> None:
                 state = "IDLE"
 
             else:
-                if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
-                    print_course_status(robot, course_stage_index)
-                    last_status_print_at = now
-
-                if motion_handle is not None and motion_handle.is_finished():
-                    print(f"[FSM] DONE — course stage {course_stage_index + 1}/{len(MISSION_STAGES)} complete")
-                    print_course_status(robot, course_stage_index)
-
-                    robot.stop()
-                    time.sleep(STAGE_PAUSE_S)
-
-                    course_stage_index += 1
-                    if course_stage_index >= len(MISSION_STAGES):
-                        motion_handle = None
-                        show_idle_leds(robot)
-                        print("[FSM] IDLE — full traffic-light/course mission complete. Press BTN_1 to run again")
-                        state = "IDLE"
-                    else:
-                        motion_handle = start_course_stage(robot, course_stage_index)
-                        last_status_print_at = time.monotonic()
+                if motion_handle is None:
+                    motion_handle = start_course_stage(robot, course_stage_index)
+                    course_stage_start_time = time.monotonic() 
+                    last_status_print_at = time.monotonic()
+        
+                # Wait at least 0.5 seconds before trusting the "done" flag
+                elif time.monotonic() - course_stage_start_time > 0.5:
+                
+                    # PUT YOUR EXISTING DONE CHECK HERE (e.g., if motion_handle.done():)
+                
+                # ... your existing logic that increments the stage ...
+                    if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
+                        print_course_status(robot, course_stage_index)
+                        last_status_print_at = now
+                     
+                        
+                    if motion_handle is not None and motion_handle.is_finished():
+                        print(f"[FSM] DONE — course stage {course_stage_index + 1}/{len(MISSION_STAGES)} complete")
+                        print_course_status(robot, course_stage_index)
+    
+                        robot.stop()
+                        time.sleep(STAGE_PAUSE_S)
+    
+                        course_stage_index += 1
+                        if course_stage_index >= len(MISSION_STAGES):
+                            motion_handle = None
+                            show_idle_leds(robot)
+                            print("[FSM] IDLE — full traffic-light/course mission complete. Press BTN_1 to run again")
+                            state = "IDLE"
+                        else:
+                            motion_handle = start_course_stage(robot, course_stage_index)
+                            last_status_print_at = time.monotonic()
 
         
 
