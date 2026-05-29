@@ -61,7 +61,7 @@ LIFT_TIMEOUT_S     = 20.0
 
 # Offset for each stacked burger piece (~1 inch thick)
 # UPDATED: Since positive is now UP, this is a positive value.
-LIFT_ITEM_THICKNESS_TICKS = -1800  
+LIFT_ITEM_THICKNESS_TICKS = -2000  
 
 
 # ===========================================================================
@@ -91,11 +91,11 @@ APPROACH_VELOCITY   = 60.0
 POS_TOLERANCE_MM    = 20.0    
 
 # Tunable turn angles (adjust if shelf isn't exactly 90 degrees)
-TURN_TO_SHELF_DEG   = 70
-TURN_FROM_SHELF_DEG = -70
-TURN_TOLERANCE_DEG  = 2.0     
+TURN_TO_SHELF_DEG   = 79
+TURN_FROM_SHELF_DEG = -79
+TURN_TOLERANCE_DEG  = 0.5     
 
-TURN_VELOCITY = 30.0
+TURN_VELOCITY = 20.0
 SERVO_DEG_PER_STEP = 0.8
 
 
@@ -103,7 +103,7 @@ SERVO_DEG_PER_STEP = 0.8
 # BURGER PICKUP PARAMETERS
 # ===========================================================================
 
-DIST_TO_INGREDIENT_AREA = 740.0    
+DIST_TO_INGREDIENT_AREA = 780.0    
 APPROACH_SHELF_DIST = 25.0    
 INITIAL_MOVE_DIST = 200.0
 
@@ -407,6 +407,7 @@ def turn_to_face_shelf(robot: Robot) -> None:
     print(f"[NAV] Turn {TURN_TO_SHELF_DEG}° to face shelf")
     robot.turn_by(
         delta_deg=TURN_TO_SHELF_DEG, 
+        angular_velocity_deg=20.0,
         blocking=True, 
         tolerance_deg=TURN_TOLERANCE_DEG
     )
@@ -415,6 +416,7 @@ def turn_away_from_shelf(robot: Robot) -> None:
     print(f"[NAV] Turn {TURN_FROM_SHELF_DEG}° to resume heading")
     robot.turn_by(
         delta_deg=TURN_FROM_SHELF_DEG, 
+        angular_velocity_deg=20.0,
         blocking=True, 
         tolerance_deg=TURN_TOLERANCE_DEG
     )
