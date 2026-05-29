@@ -178,14 +178,13 @@ for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
         }
     )
     
-for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=2):
-    MISSION_STAGES.append(
-        {
-            "name": f"Pure Pursuit part 2 {i}",
-            "type": "pure_pursuit_2",
-            "waypoint": PURE_PURSUIT_CONTROL_POINTS_2,
-        }
-    )
+MISSION_STAGES.append(
+    {
+        "name": "Pure Pursuit part 2",
+        "type": "pure_pursuit_2",
+        "waypoints": PURE_PURSUIT_CONTROL_POINTS_2,
+    }
+)
 
 
 # ---------------------------------------------------------------------------
