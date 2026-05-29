@@ -25,6 +25,8 @@ DRIVE_VELOCITY = 100.0
 APPROACH_VELOCITY = 60.0
 POS_TOLERANCE_MM = 20.0
 
+# NEW: Added turn velocity
+TURN_VELOCITY_DEG = 45.0
 TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 TURN_TOLERANCE_DEG = 2.0
@@ -167,7 +169,7 @@ def run(robot: Robot) -> None:
             
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
-            robot.turn_by(TURN_TO_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
             move_lift(robot, LIFT_PICKUP_TICKS)
@@ -175,11 +177,11 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_CARRY_TICKS)
             
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(TURN_FROM_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             
             # 4. PLACE MEAT
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
-            robot.turn_by(TURN_TO_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
@@ -187,11 +189,11 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_CARRY_TICKS)
             
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(TURN_FROM_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 5. FETCH TOP BUN
             current_x = drive_to_slot(robot, current_x, "bun_top")
-            robot.turn_by(TURN_TO_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
             move_lift(robot, LIFT_PICKUP_TICKS)
@@ -199,11 +201,11 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_CARRY_TICKS)
             
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(TURN_FROM_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 6. PLACE TOP BUN & GRAB FULL STACK
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
-            robot.turn_by(TURN_TO_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
             move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS)) 
@@ -214,7 +216,7 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_CARRY_TICKS)
             
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(TURN_FROM_SHELF_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(TURN_FROM_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             print("[FSM] Burger pickup complete.")
             state = "DONE"
