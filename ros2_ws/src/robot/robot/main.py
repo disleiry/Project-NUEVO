@@ -69,7 +69,7 @@ ENABLE_GPS = True
 TAG_ID = 25
 
 # GPS tuning.
-GPS_POSITION_ALPHA = 0.01
+GPS_POSITION_ALPHA = 0.20
 ENABLE_GPS_TANGENT_HEADING = True
 GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
@@ -83,11 +83,10 @@ LED_BRIGHTNESS = 255
 VISION_STALE_SEC = 3.0
 MIN_TRAFFIC_CONFIDENCE = 0.50
 
-# Fixed traffic-light viewing turn.
-# The robot turns this many degrees in place, then stops and waits.
-# Use 45.0 if the traffic light is farther out of view.
-# If the robot turns the wrong direction, flip the sign.
-TRAFFIC_LIGHT_TURN_DEG = 30.0
+# Absolute headings for traffic light viewing and returning.
+# Assuming INITIAL_THETA_DEG is 90, 120.0 looks 30 degrees left.
+TRAFFIC_LIGHT_LOOK_ANGLE_DEG = 125.0
+TRAFFIC_LIGHT_RETURN_ANGLE_DEG = 90.0
 TURN_TOLERANCE_DEG = 2.0
 
 # Stop sign safety override from the traffic-light example.
@@ -101,12 +100,15 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 # With INITIAL_THETA_DEG = 90, +Y is usually the robot's initial forward direction.
 
 PURE_PURSUIT_CONTROL_POINTS = [
-    #(0.0, 0.0),        # start
-    (300.0, 3500.0),      # Waypoint 1: home straight
-    (920.0, 3500.0),    # Waypoint 2: transition / turn
-    (920.0, 700.0),     # Waypoint 3: ramp / return direction
-    (1800.0, 700.0),    # Waypoint 4: entrance toward obstacle course
+    (300.0, 3700.0),    # Home straight
+    (620.0, 3700.0),    # Start the turn early at 700 (True coordinate)
+    (690.0, 3540.0),    # Mid-corner apex
+    (730.0, 3300.0),    # Easing out of the turn
+    (750.0, 3000.0),    # Fully straightened out safely a
+    (950.0, 600.0),     # Safe line down the center of the ramp
+    (1600.0, 600.0),    
 ]
+
 
 # Optional: densify long pure-pursuit segments for smoother tracking.
 PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
@@ -125,9 +127,9 @@ LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 # ---------------------------------------------------------------------------
 
 PURE_PURSUIT_VELOCITY_MM_S = 150.0
-LOOKAHEAD_MM = 200.0
+LOOKAHEAD_MM = 225.0
 PURE_PURSUIT_TOLERANCE_MM = 25.0
-ADVANCE_RADIUS_MM = 150.0
+ADVANCE_RADIUS_MM = 75.0
 PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 
 
@@ -440,10 +442,10 @@ def print_course_status(robot: Robot, stage_index: int) -> None:
 def print_config(robot: Robot) -> None:
     lapf_cfg = resolve_lapf_config()
 
-    print("[CFG] Traffic-light fixed turn:")
+    print("[CFG] Traffic-light absolute turn:")
     print(
-        f"      turn_angle={TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
-        f"return_angle={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°, "
+        f"      look_angle={TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°, "
+        f"return_angle={TRAFFIC_LIGHT_RETURN_ANGLE_DEG:.1f}°, "
         f"tolerance={TURN_TOLERANCE_DEG:.1f}°"
     )
 
@@ -508,8 +510,6 @@ def run(robot: Robot) -> None:
     state = "INIT"
     course_stage_index = 0
     motion_handle = None
-    forward_theta_deg = None
-    light_theta_deg = None
     last_status_print_at = 0.0
 
     period = 1.0 / float(DEFAULT_FSM_HZ)
@@ -534,19 +534,13 @@ def run(robot: Robot) -> None:
             robot.stop()
             if robot.was_button_pressed(Button.BTN_1):
                 reset_mission_pose(robot)
-                _, _, forward_theta_deg = robot.get_odometry_pose()
-                light_theta_deg = normalize_angle_deg(forward_theta_deg + TRAFFIC_LIGHT_TURN_DEG)
 
                 dim_all_leds(robot)
                 show_running_leds(robot)
-                print(
-                    f"[FSM] TURN_TO_LIGHT — turning {TRAFFIC_LIGHT_TURN_DEG:+.1f}° in place "
-                    f"from θ={forward_theta_deg:.1f}° to θ={light_theta_deg:.1f}°"
-                )
+                print(f"[FSM] TURN_TO_LIGHT — turning to absolute heading {TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°")
 
-                motion_handle = robot.turn_by(
-                    delta_deg=TRAFFIC_LIGHT_TURN_DEG,
-                    angular_velocity_deg = 20,
+                motion_handle = robot.turn_to(
+                    TRAFFIC_LIGHT_LOOK_ANGLE_DEG,
                     blocking=False,
                     tolerance_deg=TURN_TOLERANCE_DEG,
                 )
@@ -554,7 +548,7 @@ def run(robot: Robot) -> None:
                 state = "TURN_TO_LIGHT"
 
         # ── TURN_TO_LIGHT ────────────────────────────────────────────────────
-        # Turn exactly TRAFFIC_LIGHT_TURN_DEG in place. Do NOT move forward.
+        # Turn to absolute traffic light angle. Do NOT move forward.
         elif state == "TURN_TO_LIGHT":
             if robot.was_button_pressed(Button.BTN_2):
                 cancel_motion(robot, motion_handle)
@@ -568,7 +562,7 @@ def run(robot: Robot) -> None:
                     _, _, theta = robot.get_odometry_pose()
                     print(
                         f"  turning to traffic light: θ={theta:.1f}° "
-                        f"delta={TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
+                        f"target={TRAFFIC_LIGHT_LOOK_ANGLE_DEG:.1f}°"
                     )
                     last_status_print_at = now
 
@@ -598,13 +592,10 @@ def run(robot: Robot) -> None:
 
                 if traffic_light_color == "green":
                     show_traffic_light_color(robot, "green")
-                    print("[VISION] green light — turning back to forward heading")
-                    if forward_theta_deg is None:
-                        _, _, forward_theta_deg = robot.get_odometry_pose()
+                    print(f"[VISION] green light — turning back to absolute heading {TRAFFIC_LIGHT_RETURN_ANGLE_DEG:.1f}°")
 
                     motion_handle = robot.turn_to(
-                        forward_theta_deg,
-                        angular_velocity_deg = 20,
+                        TRAFFIC_LIGHT_RETURN_ANGLE_DEG,
                         blocking=False,
                         tolerance_deg=TURN_TOLERANCE_DEG,
                     )
@@ -633,7 +624,7 @@ def run(robot: Robot) -> None:
                     _, _, theta = robot.get_odometry_pose()
                     print(
                         f"  returning to forward: θ={theta:.1f}° "
-                        f"delta={-TRAFFIC_LIGHT_TURN_DEG:+.1f}°"
+                        f"target={TRAFFIC_LIGHT_RETURN_ANGLE_DEG:.1f}°"
                     )
                     last_status_print_at = now
 
@@ -693,3 +684,4 @@ def run(robot: Robot) -> None:
             time.sleep(sleep_s)
         else:
             next_tick = time.monotonic()
+
