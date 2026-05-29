@@ -1011,13 +1011,7 @@ def run(robot: Robot) -> None:
                         motion_handle = start_course_stage(robot, course_stage_index)
                         last_status_print_at = time.monotonic()
 
-        # ── Tick-rate control ────────────────────────────────────────────────
-        next_tick += period
-        sleep_s = next_tick - time.monotonic()
-        if sleep_s > 0.0:
-            time.sleep(sleep_s)
-        else:
-            next_tick = time.monotonic()
+        
 
         
 
