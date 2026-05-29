@@ -801,7 +801,7 @@ def run(robot: Robot) -> None:
                 tolerance_deg=TURN_TOLERANCE_DEG,
             )
             last_status_print_at = now
-            state = "INITIAL_MOVE_FORWARDT"
+            state = "INITIAL_MOVE_FORWARD"
               
         elif state == "INITIAL_MOVE_FORWARD":
                 print(f"[NAV] Moving forward {INITIAL_MOVE_DIST} mm before turn")
