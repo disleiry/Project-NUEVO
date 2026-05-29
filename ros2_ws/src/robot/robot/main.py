@@ -392,7 +392,7 @@ def run(robot: Robot) -> None:
 
             # ── 4. Turn right to face -Y ───────────────────────────────────
             robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
-            robot.move_forward(400, DRIVE_VELOCITY,
+            robot.move_forward(320, DRIVE_VELOCITY,
                                POS_TOLERANCE_MM, blocking=True)
             print("[NAV] Turning right to face -Y (theta → -90°)")
             robot.turn_to(-60.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
