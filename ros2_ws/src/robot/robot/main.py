@@ -391,7 +391,7 @@ def run(robot: Robot) -> None:
                   f"— travel {travel_mm:.0f} mm to customer row")
 
             # ── 4. Turn right to face -Y ───────────────────────────────────
-            robot.move_forward(500, DRIVE_VELOCITY,
+            robot.move_forward(200, DRIVE_VELOCITY,
                                POS_TOLERANCE_MM, blocking=True)
             print("[NAV] Turning right to face -Y (theta → -90°)")
             robot.turn_to(-68.0, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
