@@ -903,6 +903,7 @@ def run(robot: Robot) -> None:
                     robot.stop()
                     print("[FSM] Forward heading restored — resetting odometry and starting course")
                     reset_mission_pose(robot)
+                    time.sleep(0.2)
                     last_status_print_at = time.monotonic()
                     state = "PREP_INITIAL_MOVE"
 
