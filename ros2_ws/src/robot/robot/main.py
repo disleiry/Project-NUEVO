@@ -104,15 +104,15 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (300.0, 3700.0),      # Waypoint 1: home straight
-    (980.0, 3700.0),    # Waypoint 2: transition / turn
+    (300.0, 3750.0),      # Waypoint 1: home straight
+    (960.0, 3750.0),    # Waypoint 2: transition / turn
     (1100.0, 700.0),     # Waypoint 3: ramp / return direction
     (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
-    (2100.0, 3700.0),      # Waypoint 1: home straight
+    (2000.0, 3700.0),      # Waypoint 1: home straight
     (2300.0, 3700.0),
     (2400.0, 3700.0),
     (2500.0, 3700.0),    # Waypoint 2: transition / turn
@@ -124,7 +124,7 @@ PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spac
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (2100.0, 3400.0),   # Obstacle waypoint / finish
+    (2000.0, 3400.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
