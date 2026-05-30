@@ -113,12 +113,12 @@ PURE_PURSUIT_CONTROL_POINTS = [
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
     (2000.0, 3700.0),      # Waypoint 1: home straight
-    (2500.0, 3700.0),    # Waypoint 2: transition / turn
+    (2600.0, 3700.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
 PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
-PURE_PURSUIT_CONTROL_POINTS_2 = densify_polyline(PURE_PURSUIT_CONTROL_POINTS_2, spacing=100.0)
+#PURE_PURSUIT_CONTROL_POINTS_2 = densify_polyline(PURE_PURSUIT_CONTROL_POINTS_2, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
