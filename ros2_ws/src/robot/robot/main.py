@@ -112,7 +112,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
-    (2000.0, 3700.0),      # Waypoint 1: home straight
+    (2100.0, 3700.0),      # Waypoint 1: home straight
     (2600.0, 3700.0),    # Waypoint 2: transition / turn
 
 ]
@@ -122,7 +122,7 @@ PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spac
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (1800.0, 3400.0),   # Obstacle waypoint / finish
+    (2100.0, 3400.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
@@ -696,6 +696,10 @@ def run(robot: Robot) -> None:
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
+            move_lift(robot, LIFT_PICKUP_TICKS)
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            claw_open(robot)
+            
             move_lift(robot, LIFT_CARRY_TICKS)
 
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
