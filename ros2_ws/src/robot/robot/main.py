@@ -816,27 +816,27 @@ def run(robot: Robot) -> None:
                 
                 traffic_light_color = find_traffic_light_color(robot)
     
-                    if traffic_light_color == "green":
-                        show_traffic_light_color(robot, "green")
-                        print("[VISION] green light — turning back to forward heading")
-                        if forward_theta_deg is None:
-                            _, _, forward_theta_deg = robot.get_odometry_pose()
-    
-                        motion_handle = robot.turn_to(
-                            forward_theta_deg,
-                            angular_velocity_deg = 20,
-                            blocking=False,
-                            tolerance_deg=TURN_TOLERANCE_DEG,
-                        )
-                        last_status_print_at = now
-                        state = "RETURN_TO_FORWARD"
-    
-                    elif traffic_light_color == "red":
-                        show_traffic_light_color(robot, "red")
-    
-                    else:
-                        # No detection yet: remain stopped at the fixed 15-degree viewing angle.
-                        pass
+                if traffic_light_color == "green":
+                    show_traffic_light_color(robot, "green")
+                    print("[VISION] green light — turning back to forward heading")
+                    if forward_theta_deg is None:
+                        _, _, forward_theta_deg = robot.get_odometry_pose()
+
+                    motion_handle = robot.turn_to(
+                        forward_theta_deg,
+                        angular_velocity_deg = 20,
+                        blocking=False,
+                        tolerance_deg=TURN_TOLERANCE_DEG,
+                    )
+                    last_status_print_at = now
+                    state = "RETURN_TO_FORWARD"
+
+                elif traffic_light_color == "red":
+                    show_traffic_light_color(robot, "red")
+
+                else:
+                    # No detection yet: remain stopped at the fixed 15-degree viewing angle.
+                    pass
 
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
