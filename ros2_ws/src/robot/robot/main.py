@@ -824,7 +824,7 @@ def run(robot: Robot) -> None:
 
                     motion_handle = robot.turn_to(90,10,blocking=True,tolerance_deg=TURN_TOLERANCE_DEG)
                     last_status_print_at = now
-                    state = "RETURN_TO_FORWARD"
+                    state = "BURGER_PICKUP"
 
                 elif traffic_light_color == "red":
                     show_traffic_light_color(robot, "red")
