@@ -219,7 +219,7 @@ TURN_VELOCITY_DEG = 45.0
 TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 
-DIST_TO_INGREDIENT_AREA = 970.0
+DIST_TO_INGREDIENT_AREA = 770.0
 APPROACH_SHELF_DIST = 25.0
 
 INGREDIENT_SLOTS = {
@@ -836,14 +836,14 @@ def run(robot: Robot) -> None:
 
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
-            robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            #robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 1. PREP INITIAL MOVE
             claw_open(robot)
             
 
             # 2. NAVIGATE TO INGREDIENT AREA
-            robot.move_forward(DIST_TO_INGREDIENT_AREA, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(DIST_TO_INGREDIENT_AREA, 80 , POS_TOLERANCE_MM, blocking=True)
 
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
