@@ -28,7 +28,7 @@ Controls:
 from __future__ import annotations
 
 
-
+import statistics
 
 import time
 from typing import Any
@@ -294,6 +294,36 @@ def get_front_wall_distance_mm(robot: Robot) -> float:
         return -1.0
         
     return min(front_distances)
+
+def get_robust_wall_distance(robot: Robot, num_samples: int = 5, delay_s: float = 0.1) -> float:
+    """
+    Takes multiple Lidar frames, throws away invalid (-1.0) readings, 
+    and returns the median of the valid readings to reject outliers.
+    """
+    valid_distances = []
+    
+    print(f"[NAV] Taking {num_samples} Lidar samples...")
+    for i in range(num_samples):
+        dist = get_front_wall_distance_mm(robot)
+        
+        # Only keep the reading if it actually saw a wall
+        if dist > 0.0:
+            valid_distances.append(dist)
+            
+        # Keep the ROS heartbeat alive and wait for the Lidar to spin again
+        robot.wait_for_pose_update(timeout=delay_s)
+        
+    # If every single frame was empty, the path is genuinely clear
+    if not valid_distances:
+        print("[NAV] All samples returned empty (-1.0).")
+        return -1.0
+        
+    # The median ignores extreme high/low sensor glitches
+    final_distance = statistics.median(valid_distances)
+    print(f"[NAV] Valid samples: {valid_distances}")
+    print(f"[NAV] Robust median distance: {final_distance:.0f} mm")
+    
+    return final_distance
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
@@ -971,7 +1001,7 @@ def run(robot: Robot) -> None:
                 print("[NAV] Waiting for Lidar to confirm obstacles...")
                 time.sleep(1.0) # Let the Lidar spin 10 times and confirm new tracks
                 
-                distance_to_wall = get_front_wall_distance_mm(robot) 
+                distance_to_wall = get_robust_wall_distance(robot, num_samples=5, delay_s=0.1)                
                 print(f"[NAV] Wall distance measured: {distance_to_wall} mm") 
                 
                 # FIX 2: Safety check to prevent negative distance crashes
