@@ -981,6 +981,10 @@ def run(robot: Robot) -> None:
                     print("[ERROR] Invalid wall distance or too close! Halting to prevent crash.")
                     robot.stop()
 
+                robot.turn_by(-60, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                
+                robot.move_forward(travel_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
                 state = "COURSE_IDLE"
                 print("END OF COURSE")
                 
