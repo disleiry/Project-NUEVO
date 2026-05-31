@@ -118,9 +118,9 @@ PURE_PURSUIT_CONTROL_POINTS = [
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
     (2000.0, 3700.0),      # Waypoint 1: home straight
+    (2200.0, 3700.0),
     (2300.0, 3700.0),
-    (2400.0, 3700.0),
-    (2500.0, 3700.0),    # Waypoint 2: transition / turn
+    (2400.0, 3700.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -931,10 +931,17 @@ def run(robot: Robot) -> None:
 
             else:
                 _, x, y, theta = get_best_pose(robot)
-                if theta > 0.0:
+                print(f"{theta}")
+                
+                if theta > 8.0:
                     robot.turn_by(-(theta - 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                elif theta < 8.0 and theta > 0.0:
+                    robot.turn_by((8-theta), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 elif theta < 0.0:
-                    robot.turn_by(-(theta + 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                    robot.turn_by((-theta) + 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                    
+                _, x2, y2, theta2 = get_best_pose(robot)
+                print(f"{theta2}")
 
                 # ── 3. Face detection ──────────────────────────────────────────
                 print("[FACE] Starting customer detection...")
@@ -948,12 +955,10 @@ def run(robot: Robot) -> None:
                 to_stop_mm  = CUSTOMER_A_TO_STOP_MM  if customer == "A" else CUSTOMER_B_TO_STOP_MM
                 print(f"[FACE] Customer {customer} ({'Female' if customer == 'A' else 'Male'}) "
                       f"— travel {travel_mm:.0f} mm to customer row")
-    
-                # ── 4. Turn right to face -Y ───────────────────────────────────
+
+                
                 robot.turn_by(-8, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-                # ── 4. Turn right to face -Y ─────────────────────────────────── 
-                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True) 
                 
                 # FIX 1: Wait for the Lidar tracker to update after the turn!
                 print("[NAV] Waiting for Lidar to confirm obstacles...")
