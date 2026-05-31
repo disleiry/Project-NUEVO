@@ -992,6 +992,9 @@ def run(robot: Robot) -> None:
                 print(f"{theta}")
                 
                 robot.turn_by(-(theta), 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                time.sleep(0.5)
+                robot.turn_by(8, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
                     
                 _, x2, y2, theta2 = get_best_pose(robot)
                 print(f"{theta2}")
@@ -1011,7 +1014,7 @@ def run(robot: Robot) -> None:
 
                 
                 # ── 4. Turn right to face -Y ─────────────────────────────────── 
-                #robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG) 
+                robot.turn_by(-8, 15, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG) 
                 
                 print("[NAV] Temporarily boosting Lidar range to 2000mm to see the far wall...")
                 from robot.hardware_map import LIDAR_RANGE_MIN_MM, LIDAR_FOV_DEG
@@ -1045,13 +1048,13 @@ def run(robot: Robot) -> None:
                 
                 # --- FINAL SAFETY CHECK & MOVEMENT ---
                 if distance_to_wall > 100.0:
-                    robot.move_forward(distance_to_wall - 100, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                    robot.move_forward(distance_to_wall - 60, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 else:
                     print("[ERROR] Wall not found after all retries or too close! Halting.")
                     robot.stop()
 
                 time.sleep(2.0)
-                robot.turn_by(-60, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(-80, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(1.0)
                 robot.move_forward(travel_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
