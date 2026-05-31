@@ -914,12 +914,13 @@ def run(robot: Robot) -> None:
                         last_status_print_at = time.monotonic()
 
         elif state == "FACE RECOGNITION":
-            detector = GenderDetector()
-            cap = cv2.VideoCapture(CAMERA_DEVICE)
+            
             import cv2
             import sys
             sys.path.insert(0, '/ros2_ws/src/vision')
             from vision.gender_detection import GenderDetector
+            detector = GenderDetector()
+            cap = cv2.VideoCapture(CAMERA_DEVICE)
             
             if robot.was_button_pressed(Button.BTN_2):
                     cancel_motion(robot, motion_handle)
@@ -929,7 +930,7 @@ def run(robot: Robot) -> None:
                     state = "COURSE_IDLE"
 
             else:
-                x, y, theta = robot.get_fused_pose()
+                x, y, theta = robot.get_best_pose()
 
                 if theta > 0.0:
                     robot.turn_by(-(theta - 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
