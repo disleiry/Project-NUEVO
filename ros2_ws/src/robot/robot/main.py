@@ -160,7 +160,7 @@ REPULSION_RANGE_MM = 300.0
 TARGET_SPEED_MM_S = 200.0
 REPULSION_GAIN = 350.0
 ATTRACTION_GAIN = 1.2
-FORCE_EMA_ALPHA = 0.05
+FORCE_EMA_ALPHA = 0.15
 INFLATION_MARGIN_MM = 250.0
 LEASH_HALF_ANGLE_DEG = 25.0
 
@@ -295,7 +295,7 @@ def get_front_wall_distance_mm(robot: Robot) -> float:
         
     return min(front_distances)
 
-def get_robust_wall_distance(robot: Robot, num_samples: int = 5, delay_s: float = 0.1) -> float:
+def get_robust_wall_distance(robot: Robot, num_samples: int = 10, delay_s: float = 0.1) -> float:
     """
     Takes multiple Lidar frames, throws away invalid (-1.0) readings, 
     and returns the median of the valid readings to reject outliers.
@@ -323,7 +323,7 @@ def get_robust_wall_distance(robot: Robot, num_samples: int = 5, delay_s: float 
     print(f"[NAV] Valid samples: {valid_distances}")
     print(f"[NAV] Robust median distance: {final_distance:.0f} mm")
     
-    return final_distance
+    return statistics.median(valid_distances)
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
