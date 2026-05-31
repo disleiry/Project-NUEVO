@@ -907,7 +907,7 @@ def run(robot: Robot) -> None:
                         motion_handle = start_course_stage(robot, course_stage_index)
                         last_status_print_at = time.monotonic()
 
-        elif state == "FACE RECOGNITION"
+        elif state == "FACE RECOGNITION":
             if robot.was_button_pressed(Button.BTN_2):
                     cancel_motion(robot, motion_handle)
                     motion_handle = None
