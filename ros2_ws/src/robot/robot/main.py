@@ -156,10 +156,10 @@ LAPF_TOLERANCE_MM = 50.0
 LAPF_MAX_ANGULAR_RAD_S = 0.4
 
 LEASH_LENGTH_MM = 150.0
-REPULSION_RANGE_MM = 450.0
+REPULSION_RANGE_MM = 300.0
 TARGET_SPEED_MM_S = 200.0
 REPULSION_GAIN = 350.0
-ATTRACTION_GAIN = 1.0
+ATTRACTION_GAIN = 1.2
 FORCE_EMA_ALPHA = 0.15
 INFLATION_MARGIN_MM = 250.0
 LEASH_HALF_ANGLE_DEG = 25.0
@@ -843,9 +843,9 @@ def run(robot: Robot) -> None:
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
-            move_lift(robot, LIFT_PICKUP_TICKS)
-            claw_close(robot, CLAW_CLOSE_BUN_DEG)
-            claw_open(robot)
+            #move_lift(robot, LIFT_PICKUP_TICKS)
+            #claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            #claw_open(robot)
             
             move_lift(robot, LIFT_CARRY_TICKS)
 
