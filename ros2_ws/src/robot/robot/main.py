@@ -337,7 +337,6 @@ def configure_robot(robot: Robot) -> None:
 
     if ENABLE_VISION:
         robot.enable_vision()
-        wall_checker = WallDistanceChecker(robot._node)
         print("[sensor] vision enabled — traffic-light detection active")
 
     if ENABLE_LIDAR:
@@ -353,6 +352,7 @@ def configure_robot(robot: Robot) -> None:
             fov_deg=LIDAR_FOV_DEG,
         )
         robot.start_lidar_world_publisher()
+        robot.wall_checker = WallDistanceChecker(robot._node)
         print("[sensor] lidar enabled — subscribing to /scan")
 
     # NOTE: GPS is intentionally NOT enabled here.
