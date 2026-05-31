@@ -27,10 +27,7 @@ Controls:
 
 from __future__ import annotations
 
-import cv2
-import sys
-sys.path.insert(0, '/ros2_ws/src/vision')
-from vision.gender_detection import GenderDetector
+
 
 
 import time
@@ -919,6 +916,10 @@ def run(robot: Robot) -> None:
         elif state == "FACE RECOGNITION":
             detector = GenderDetector()
             cap = cv2.VideoCapture(CAMERA_DEVICE)
+            import cv2
+            import sys
+            sys.path.insert(0, '/ros2_ws/src/vision')
+            from vision.gender_detection import GenderDetector
             
             if robot.was_button_pressed(Button.BTN_2):
                     cancel_motion(robot, motion_handle)
