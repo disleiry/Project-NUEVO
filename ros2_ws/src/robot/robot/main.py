@@ -802,24 +802,49 @@ def run(robot: Robot) -> None:
 
         # ── WAIT_GREEN ────────────────────────────────────────────────────────
         elif state == "WAIT_GREEN":
+            
+
             # Start burger sequence on button press
-            if robot.was_button_pressed(Button.BTN_5):
-                print("[FSM] Proceeding to pickup.")
-                state = "BURGER_PICKUP"
-            if robot.was_button_pressed(Button.BTN_1):  # temporary skip
-                print("[FSM] DEBUG: Skipping to stage 3.")
-                reset_mission_pose(robot)
-                course_stage_index = 2  # stage 3 is index 2
-                motion_handle = start_course_stage(robot, course_stage_index)
-                last_status_print_at = time.monotonic()
-                state = "COURSE_MOVING"
-            time.sleep(5.0)
+            if robot.was_button_pressed(Button.BTN_2):
+                show_idle_leds(robot)
+                print("[FSM] IDLE — mission cancelled while waiting for green")
+                state = "IDLE"
+            else:
+                move_lift(robot, LIFT_CARRY_TICKS)
+                robot.move_forward(200, 50, POS_TOLERANCE_MM, blocking=True)
+                robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                
+                traffic_light_color = find_traffic_light_color(robot)
+    
+                    if traffic_light_color == "green":
+                        show_traffic_light_color(robot, "green")
+                        print("[VISION] green light — turning back to forward heading")
+                        if forward_theta_deg is None:
+                            _, _, forward_theta_deg = robot.get_odometry_pose()
+    
+                        motion_handle = robot.turn_to(
+                            forward_theta_deg,
+                            angular_velocity_deg = 20,
+                            blocking=False,
+                            tolerance_deg=TURN_TOLERANCE_DEG,
+                        )
+                        last_status_print_at = now
+                        state = "RETURN_TO_FORWARD"
+    
+                    elif traffic_light_color == "red":
+                        show_traffic_light_color(robot, "red")
+    
+                    else:
+                        # No detection yet: remain stopped at the fixed 15-degree viewing angle.
+                        pass
 
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
+            robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
             # 1. PREP INITIAL MOVE
             claw_open(robot)
-            move_lift(robot, LIFT_CARRY_TICKS)
+            
 
             # 2. NAVIGATE TO INGREDIENT AREA
             robot.move_forward(DIST_TO_INGREDIENT_AREA, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
