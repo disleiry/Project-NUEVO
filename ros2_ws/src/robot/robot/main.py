@@ -26,6 +26,7 @@ Controls:
 """
 
 from __future__ import annotations
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 import time
 from typing import Any
@@ -256,12 +257,19 @@ class WallDistanceChecker:
     def __init__(self, node):
         self.front_distance_m = float('inf') # Default to infinity
         
-        # Subscribe directly to the raw LiDAR scan
+        # Create a QoS profile that matches the LiDAR's BEST_EFFORT policy
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=10
+        )
+        
+        # Subscribe to the raw LiDAR scan using the compatible QoS profile
         self.scan_sub = node.create_subscription(
             LaserScan, 
             '/scan', 
             self._scan_callback, 
-            10
+            qos_profile
         )
 
     def _scan_callback(self, msg: LaserScan):
