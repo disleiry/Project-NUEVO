@@ -104,25 +104,27 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (300.0, 3700.0),      # Waypoint 1: home straight
-    (980.0, 3700.0),    # Waypoint 2: transition / turn
+    (300.0, 3750.0),      # Waypoint 1: home straight
+    (960.0, 3750.0),    # Waypoint 2: transition / turn
     (1100.0, 700.0),     # Waypoint 3: ramp / return direction
     (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
-    (1800.0, 3700.0),      # Waypoint 1: home straight
-    (2200.0, 3700.0),    # Waypoint 2: transition / turn
+    (2000.0, 3700.0),      # Waypoint 1: home straight
+    (2300.0, 3700.0),
+    (2400.0, 3700.0),
+    (2500.0, 3700.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
 PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spacing=100.0)
-PURE_PURSUIT_CONTROL_POINTS_2 = densify_polyline(PURE_PURSUIT_CONTROL_POINTS_2, spacing=100.0)
+#PURE_PURSUIT_CONTROL_POINTS_2 = densify_polyline(PURE_PURSUIT_CONTROL_POINTS_2, spacing=100.0)
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (1800.0, 3300.0),   # Obstacle waypoint / finish
+    (2000.0, 3400.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
@@ -178,14 +180,13 @@ for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=1):
         }
     )
     
-for i, waypoint in enumerate(LAPF_CONTROL_POINTS, start=2):
-    MISSION_STAGES.append(
-        {
-            "name": f"Pure Pursuit part 2 {i}",
-            "type": "pure_pursuit_2",
-            "waypoint": PURE_PURSUIT_CONTROL_POINTS_2,
-        }
-    )
+MISSION_STAGES.append(
+    {
+        "name": "Pure Pursuit part 2",
+        "type": "pure_pursuit_2",
+        "waypoints": PURE_PURSUIT_CONTROL_POINTS_2,
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -697,6 +698,10 @@ def run(robot: Robot) -> None:
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
+            move_lift(robot, LIFT_PICKUP_TICKS)
+            claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            claw_open(robot)
+            
             move_lift(robot, LIFT_CARRY_TICKS)
 
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
