@@ -940,7 +940,7 @@ def run(robot: Robot) -> None:
                 robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
                 current_distance = wall_checker.get_distance_to_wall_mm()
-                print(f"{current_distance)")
+                print(f"{current_distance}")
                 robot.move_forward(current_distance -100, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 robot.turn_by(-60, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
