@@ -224,71 +224,6 @@ INGREDIENT_SLOTS = {
 }
 
 
-
-
-
-# Distance driven in -Y from the scan point to the customer row (100 mm buffer)
-# Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
-# Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
-CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
-CUSTOMER_B_TRAVEL_MM = 2300.0   # *** tune on arena ***
-
-
-MIN_STOP_CONF      = 0.50   # vision confidence threshold
-
-# ==========================================
-# --- FACE DETECTION ---
-# ==========================================
-CAMERA_DEVICE      = '/dev/video10'
-FACE_SAMPLE_FRAMES = 15     # frames per voting pass
-FACE_FRAME_DELAY_S = 0.10   # seconds between frames
-FACE_MAX_ATTEMPTS  =  3     # voting passes before defaulting
-
-# ==========================================
-# --- Distance to Wall ---
-# ==========================================
-
-import math
-def get_front_wall_distance_mm(robot: Robot) -> float:
-    """
-    Finds the closest obstacle directly in front of the robot using existing tracks.
-    Returns distance in mm, or -1.0 if the path is clear.
-    """
-    obstacle_tracks = robot.get_obstacle_tracks()
-    if not obstacle_tracks:
-        return -1.0
-
-    # Get current global pose
-    _, rx, ry, rtheta_deg = get_best_pose(robot)
-    rtheta_rad = math.radians(rtheta_deg)
-    
-    front_distances = []
-    
-    # Check every tracked obstacle
-    for track in obstacle_tracks:
-        ox = float(track["x"])
-        oy = float(track["y"])
-        radius = float(track["radius"])
-        
-        # Calculate delta from robot to obstacle
-        dx = ox - rx
-        dy = oy - ry
-        
-        # Rotate coordinates to the robot's local perspective (X is forward, Y is left)
-        local_x = dx * math.cos(rtheta_rad) + dy * math.sin(rtheta_rad)
-        local_y = -dx * math.sin(rtheta_rad) + dy * math.cos(rtheta_rad)
-        
-        # If the obstacle is in front (local_x > 0) and within a +/- 150mm lateral corridor
-        if local_x > 0 and abs(local_y) < (150.0 + radius):
-            # Distance to the edge of the obstacle
-            dist = local_x - radius
-            if dist > 0:
-                front_distances.append(dist)
-                
-    if not front_distances:
-        return -1.0
-        
-    return min(front_distances)
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
@@ -524,44 +459,6 @@ def get_lift_ticks(robot: Robot) -> int:
     if dc is None:
         return 0
     return int(dc.motors[LIFT_MOTOR - 1].position)
-
-def detect_customer(detector: GenderDetector, cap: cv2.VideoCapture) -> str:
-    """
-    Votes over FACE_SAMPLE_FRAMES frames, repeated up to FACE_MAX_ATTEMPTS times.
-
-    Rule (per spec):
-      • 100% of votes are Male  →  Customer B
-      • Any Female vote, or no face seen  →  Customer A  (Female / uncertain)
-
-    Returns 'A' or 'B'.
-    """
-    for attempt in range(1, FACE_MAX_ATTEMPTS + 1):
-        votes = {"Male": 0, "Female": 0}
-        for _ in range(FACE_SAMPLE_FRAMES):
-            ret, frame = cap.read()
-            if not ret:
-                continue
-            gender, _ = detector.detect(frame)
-            if gender in votes:
-                votes[gender] += 1
-            time.sleep(FACE_FRAME_DELAY_S)
-
-        male_v, female_v = votes["Male"], votes["Female"]
-        print(f"[FACE] Attempt {attempt}/{FACE_MAX_ATTEMPTS} — Male:{male_v}  Female:{female_v}")
-
-        if male_v == 0 and female_v == 0:
-            print("[FACE] No face detected — retrying...")
-            continue
-
-        if female_v == 0:
-            print("[FACE] 100% Male → Customer B")
-            return "B"
-        else:
-            print(f"[FACE] Not 100% Male → Customer A")
-            return "A"
-
-    print("[FACE] No face after all attempts — defaulting to Customer A")
-    return "A"
 
 
 def move_lift(robot: Robot, target_ticks: int):
@@ -902,52 +799,11 @@ def run(robot: Robot) -> None:
                     if course_stage_index >= len(MISSION_STAGES):
                         motion_handle = None
                         show_idle_leds(robot)
-                        print("[FSM] Pure Pursuit course complete.")
-                        state = "FACE RECOGNITION"
+                        print("[FSM] COURSE_IDLE — full course complete.")
+                        state = "COURSE_IDLE"
                     else:
                         motion_handle = start_course_stage(robot, course_stage_index)
                         last_status_print_at = time.monotonic()
-
-        elif state == "FACE RECOGNITION":
-            if robot.was_button_pressed(Button.BTN_2):
-                    cancel_motion(robot, motion_handle)
-                    motion_handle = None
-                    show_idle_leds(robot)
-                    print("[FSM] COURSE_IDLE — course mission cancelled")
-                    state = "COURSE_IDLE"
-
-            else:
-                x, y, theta = robot.get_fused_pose()
-
-                if theta > 0.0:
-                    robot.turn_by(-(theta - 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-                elif theta < 0.0:
-                    robot.turn_by(-(theta + 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-
-                # ── 3. Face detection ──────────────────────────────────────────
-                print("[FACE] Starting customer detection...")
-                if cap.isOpened():
-                    customer = detect_customer(detector, cap)
-                else:
-                    print("[FACE] No camera — defaulting to Customer A")
-                    customer = "A"
-    
-                travel_mm   = CUSTOMER_A_TRAVEL_MM   if customer == "A" else CUSTOMER_B_TRAVEL_MM
-                to_stop_mm  = CUSTOMER_A_TO_STOP_MM  if customer == "A" else CUSTOMER_B_TO_STOP_MM
-                print(f"[FACE] Customer {customer} ({'Female' if customer == 'A' else 'Male'}) "
-                      f"— travel {travel_mm:.0f} mm to customer row")
-    
-                # ── 4. Turn right to face -Y ───────────────────────────────────
-                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
-
-                distance_to_wall = get_front_wall_distance_mm(robot)                
-                print(f"{distance_to_wall}")
-                robot.move_forward(distance_to_wall -100, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                robot.turn_by(-60, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
-
-                state = "COURSE_IDLE"
-                print("END OF COURSE")
-                
 
         # ── COURSE_IDLE ───────────────────────────────────────────────────────
         # Resting state after course completion or cancellation.
