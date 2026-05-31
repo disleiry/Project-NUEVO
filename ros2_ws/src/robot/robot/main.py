@@ -27,6 +27,12 @@ Controls:
 
 from __future__ import annotations
 
+import cv2
+import sys
+sys.path.insert(0, '/ros2_ws/src/vision')
+from vision.gender_detection import GenderDetector
+
+
 import time
 from typing import Any
 
@@ -76,7 +82,9 @@ ENABLE_GPS_TANGENT_HEADING = True
 GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
-
+ANGULAR_VELOCITY_DEG = 20
+CUSTOMER_A_TO_STOP_MM = 1800.0
+CUSTOMER_B_TO_STOP_MM = 1400.0
 # ---------------------------------------------------------------------------
 # Traffic-light start behavior
 # ---------------------------------------------------------------------------
@@ -909,6 +917,9 @@ def run(robot: Robot) -> None:
                         last_status_print_at = time.monotonic()
 
         elif state == "FACE RECOGNITION":
+            detector = GenderDetector()
+            cap = cv2.VideoCapture(CAMERA_DEVICE)
+            
             if robot.was_button_pressed(Button.BTN_2):
                     cancel_motion(robot, motion_handle)
                     motion_handle = None
@@ -938,10 +949,10 @@ def run(robot: Robot) -> None:
                       f"— travel {travel_mm:.0f} mm to customer row")
     
                 # ── 4. Turn right to face -Y ───────────────────────────────────
-                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 # ── 4. Turn right to face -Y ─────────────────────────────────── 
-                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG) 
+                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True) 
                 
                 # FIX 1: Wait for the Lidar tracker to update after the turn!
                 print("[NAV] Waiting for Lidar to confirm obstacles...")
