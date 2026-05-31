@@ -800,6 +800,7 @@ def run(robot: Robot) -> None:
                 state = "WAIT_GREEN"
                 move_lift(robot, LIFT_CARRY_TICKS)
                 robot.move_forward(200, 50, POS_TOLERANCE_MM, blocking=True)
+                time.sleep(1.0)
                 robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             time.sleep(0.05)
             
