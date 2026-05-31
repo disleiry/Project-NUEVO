@@ -778,12 +778,14 @@ def run(robot: Robot) -> None:
                 state = "BURGER_PICKUP"
             if robot.was_button_pressed(Button.BTN_1):  # temporary skip
                 print("[FSM] DEBUG: Skipping to stage 3.")
-                reset_mission_pose(robot)
-                course_stage_index = 2  # stage 3 is index 2
+                robot.reset_odometry()
+                robot.wait_for_odometry_reset(timeout=2.0)
+                robot.set_odometry_pose(2002.0, 3423.0, 85.0)  # approximate stage 3 start
+                course_stage_index = 2
                 motion_handle = start_course_stage(robot, course_stage_index)
                 last_status_print_at = time.monotonic()
                 state = "COURSE_MOVING"
-            time.sleep(0.1)
+            time.sleep(5.0)
 
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
