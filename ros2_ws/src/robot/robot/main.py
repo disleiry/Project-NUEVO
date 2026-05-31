@@ -1056,7 +1056,19 @@ def run(robot: Robot) -> None:
                 time.sleep(2.0)
                 robot.turn_by(-80, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(1.0)
-                robot.move_forward(travel_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.move_forward(travel_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+                
+                time.sleep(0.5)
+                robot.turn_by(79, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                move_lift(robot, LIFT_PICKUP_TICKS)
+                claw_open(robot)
+                robot.turn_by(-79, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+                robot.move_forward(to_stop_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+                
+
 
                 state = "COURSE_IDLE"
                 print("END OF COURSE")
