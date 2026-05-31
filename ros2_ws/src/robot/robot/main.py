@@ -820,15 +820,9 @@ def run(robot: Robot) -> None:
                 if traffic_light_color == "green":
                     show_traffic_light_color(robot, "green")
                     print("[VISION] green light — turning back to forward heading")
-                    if forward_theta_deg is None:
-                        _, _, forward_theta_deg = robot.get_odometry_pose()
+                    
 
-                    motion_handle = robot.turn_to(
-                        forward_theta_deg,
-                        angular_velocity_deg = 20,
-                        blocking=False,
-                        tolerance_deg=TURN_TOLERANCE_DEG,
-                    )
+                    motion_handle = robot.turn_to(90,10,blocking=True,tolerance_deg=TURN_TOLERANCE_DEG)
                     last_status_print_at = now
                     state = "RETURN_TO_FORWARD"
 
