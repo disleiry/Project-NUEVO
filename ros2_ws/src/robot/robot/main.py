@@ -109,7 +109,7 @@ ENABLE_STOP_SIGN_OVERRIDE = False
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (300.0, 3750.0),      # Waypoint 1: home straight
+    (350.0, 3750.0),      # Waypoint 1: home straight
     (960.0, 3750.0),    # Waypoint 2: transition / turn
     (1100.0, 700.0),     # Waypoint 3: ramp / return direction
     (1600.0, 700.0),    # Waypoint 4: entrance toward obstacle course
