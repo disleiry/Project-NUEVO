@@ -224,6 +224,69 @@ INGREDIENT_SLOTS = {
 }
 
 
+
+
+
+# Distance driven in -Y from the scan point to the customer row (100 mm buffer)
+# Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
+# Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
+CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
+CUSTOMER_B_TRAVEL_MM = 2300.0   # *** tune on arena ***
+
+
+MIN_STOP_CONF      = 0.50   # vision confidence threshold
+
+# ==========================================
+# --- FACE DETECTION ---
+# ==========================================
+CAMERA_DEVICE      = '/dev/video10'
+FACE_SAMPLE_FRAMES = 15     # frames per voting pass
+FACE_FRAME_DELAY_S = 0.10   # seconds between frames
+FACE_MAX_ATTEMPTS  =  3     # voting passes before defaulting
+
+# ==========================================
+# --- Distance to Wall ---
+# ==========================================
+
+import rclpy
+from sensor_msgs.msg import LaserScan
+import math
+
+class WallDistanceChecker:
+    def __init__(self, node):
+        self.front_distance_m = float('inf') # Default to infinity
+        
+        # Subscribe directly to the raw LiDAR scan
+        self.scan_sub = node.create_subscription(
+            LaserScan, 
+            '/scan', 
+            self._scan_callback, 
+            10
+        )
+
+    def _scan_callback(self, msg: LaserScan):
+        # The scan ranges are an array. We need to find the index for 0 degrees (straight ahead).
+        # We do this by seeing how far 0 is from the minimum angle, divided by the increment.
+        
+        # Check if 0 radians is within the scanner's field of view
+        if msg.angle_min <= 0.0 <= msg.angle_max:
+            # Calculate the index of the 0-degree measurement
+            index_straight_ahead = int(round((0.0 - msg.angle_min) / msg.angle_increment))
+            
+            # Fetch the distance
+            dist = msg.ranges[index_straight_ahead]
+            
+            # Some LiDARs return 'inf' or 0.0 if the object is too close/far or invalid
+            if math.isinf(dist) or math.isnan(dist) or dist < msg.range_min or dist > msg.range_max:
+                self.front_distance_m = float('inf')
+            else:
+                self.front_distance_m = dist
+
+    def get_distance_to_wall_mm(self):
+        # Convert meters to mm to match your robot's existing POSITION_UNIT
+        if self.front_distance_m == float('inf'):
+            return -1.0 # Return -1 or some other flag to indicate no valid reading
+        return self.front_distance_m * 1000.0
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
@@ -259,6 +322,7 @@ def configure_robot(robot: Robot) -> None:
 
     if ENABLE_VISION:
         robot.enable_vision()
+        wall_checker = WallDistanceChecker(robot._node)
         print("[sensor] vision enabled — traffic-light detection active")
 
     if ENABLE_LIDAR:
@@ -459,6 +523,44 @@ def get_lift_ticks(robot: Robot) -> int:
     if dc is None:
         return 0
     return int(dc.motors[LIFT_MOTOR - 1].position)
+
+def detect_customer(detector: GenderDetector, cap: cv2.VideoCapture) -> str:
+    """
+    Votes over FACE_SAMPLE_FRAMES frames, repeated up to FACE_MAX_ATTEMPTS times.
+
+    Rule (per spec):
+      • 100% of votes are Male  →  Customer B
+      • Any Female vote, or no face seen  →  Customer A  (Female / uncertain)
+
+    Returns 'A' or 'B'.
+    """
+    for attempt in range(1, FACE_MAX_ATTEMPTS + 1):
+        votes = {"Male": 0, "Female": 0}
+        for _ in range(FACE_SAMPLE_FRAMES):
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            gender, _ = detector.detect(frame)
+            if gender in votes:
+                votes[gender] += 1
+            time.sleep(FACE_FRAME_DELAY_S)
+
+        male_v, female_v = votes["Male"], votes["Female"]
+        print(f"[FACE] Attempt {attempt}/{FACE_MAX_ATTEMPTS} — Male:{male_v}  Female:{female_v}")
+
+        if male_v == 0 and female_v == 0:
+            print("[FACE] No face detected — retrying...")
+            continue
+
+        if female_v == 0:
+            print("[FACE] 100% Male → Customer B")
+            return "B"
+        else:
+            print(f"[FACE] Not 100% Male → Customer A")
+            return "A"
+
+    print("[FACE] No face after all attempts — defaulting to Customer A")
+    return "A"
 
 
 def move_lift(robot: Robot, target_ticks: int):
@@ -799,11 +901,52 @@ def run(robot: Robot) -> None:
                     if course_stage_index >= len(MISSION_STAGES):
                         motion_handle = None
                         show_idle_leds(robot)
-                        print("[FSM] COURSE_IDLE — full course complete.")
-                        state = "COURSE_IDLE"
+                        print("[FSM] Pure Pursuit course complete.")
+                        state = "FACE RECOGNITION"
                     else:
                         motion_handle = start_course_stage(robot, course_stage_index)
                         last_status_print_at = time.monotonic()
+
+        elif state == "FACE RECOGNITION"
+            if robot.was_button_pressed(Button.BTN_2):
+                    cancel_motion(robot, motion_handle)
+                    motion_handle = None
+                    show_idle_leds(robot)
+                    print("[FSM] COURSE_IDLE — course mission cancelled")
+                    state = "COURSE_IDLE"
+
+            else:
+                x, y, theta = robot.get_fused_pose()
+
+                if theta > 0.0:
+                    robot.turn_by(-(theta - 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                elif theta < 0.0:
+                    robot.turn_by(-(theta + 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+                # ── 3. Face detection ──────────────────────────────────────────
+                print("[FACE] Starting customer detection...")
+                if cap.isOpened():
+                    customer = detect_customer(detector, cap)
+                else:
+                    print("[FACE] No camera — defaulting to Customer A")
+                    customer = "A"
+    
+                travel_mm   = CUSTOMER_A_TRAVEL_MM   if customer == "A" else CUSTOMER_B_TRAVEL_MM
+                to_stop_mm  = CUSTOMER_A_TO_STOP_MM  if customer == "A" else CUSTOMER_B_TO_STOP_MM
+                print(f"[FACE] Customer {customer} ({'Female' if customer == 'A' else 'Male'}) "
+                      f"— travel {travel_mm:.0f} mm to customer row")
+    
+                # ── 4. Turn right to face -Y ───────────────────────────────────
+                robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+
+                current_distance = wall_checker.get_distance_to_wall_mm()
+                print(f"{current_distance)")
+                robot.move_forward(current_distance -100, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.turn_by(-60, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
+
+                state = "COURSE_IDLE"
+                print("END OF COURSE")
+                
 
         # ── COURSE_IDLE ───────────────────────────────────────────────────────
         # Resting state after course completion or cancellation.
