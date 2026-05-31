@@ -798,7 +798,11 @@ def run(robot: Robot) -> None:
                 print("[INIT] Encoder zeroed -> WAIT_GREEN")
                 led_moving(robot)
                 state = "WAIT_GREEN"
+                move_lift(robot, LIFT_CARRY_TICKS)
+                robot.move_forward(200, 50, POS_TOLERANCE_MM, blocking=True)
+                robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             time.sleep(0.05)
+            
 
         # ── WAIT_GREEN ────────────────────────────────────────────────────────
         elif state == "WAIT_GREEN":
@@ -810,9 +814,6 @@ def run(robot: Robot) -> None:
                 print("[FSM] IDLE — mission cancelled while waiting for green")
                 state = "IDLE"
             else:
-                move_lift(robot, LIFT_CARRY_TICKS)
-                robot.move_forward(200, 50, POS_TOLERANCE_MM, blocking=True)
-                robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 
                 traffic_light_color = find_traffic_light_color(robot)
     
