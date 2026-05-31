@@ -265,22 +265,29 @@ class WallDistanceChecker:
         )
 
     def _scan_callback(self, msg: LaserScan):
-        # The scan ranges are an array. We need to find the index for 0 degrees (straight ahead).
-        # We do this by seeing how far 0 is from the minimum angle, divided by the increment.
-        
-        # Check if 0 radians is within the scanner's field of view
-        if msg.angle_min <= 0.0 <= msg.angle_max:
-            # Calculate the index of the 0-degree measurement
-            index_straight_ahead = int(round((0.0 - msg.angle_min) / msg.angle_increment))
+        try:
+            # 1. Safety check: Ensure we have data and won't divide by zero
+            if not msg.ranges or msg.angle_increment == 0.0:
+                return
             
-            # Fetch the distance
-            dist = msg.ranges[index_straight_ahead]
-            
-            # Some LiDARs return 'inf' or 0.0 if the object is too close/far or invalid
-            if math.isinf(dist) or math.isnan(dist) or dist < msg.range_min or dist > msg.range_max:
-                self.front_distance_m = float('inf')
-            else:
-                self.front_distance_m = dist
+            # 2. Check if 0 radians (straight ahead) is within the current scan window
+            if msg.angle_min <= 0.0 <= msg.angle_max:
+                
+                # Calculate index
+                index_straight_ahead = int(round((0.0 - msg.angle_min) / msg.angle_increment))
+                
+                # 3. Safety check: Ensure our calculated index actually exists in the array
+                if 0 <= index_straight_ahead < len(msg.ranges):
+                    dist = msg.ranges[index_straight_ahead]
+                    
+                    if math.isinf(dist) or math.isnan(dist) or dist < msg.range_min or dist > msg.range_max:
+                        self.front_distance_m = float('inf')
+                    else:
+                        self.front_distance_m = dist
+
+        except Exception as e:
+            # If something unexpected happens, catch it so the robot doesn't crash
+            print(f"[WallChecker Warning] Skipped a bad LiDAR frame: {e}")
 
     def get_distance_to_wall_mm(self):
         # Convert meters to mm to match your robot's existing POSITION_UNIT
