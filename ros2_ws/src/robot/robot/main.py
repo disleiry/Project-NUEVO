@@ -1048,13 +1048,13 @@ def run(robot: Robot) -> None:
                 
                 # --- FINAL SAFETY CHECK & MOVEMENT ---
                 if distance_to_wall > 100.0:
-                    robot.move_forward(distance_to_wall - 60, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                    robot.move_forward(distance_to_wall - 30, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 else:
                     print("[ERROR] Wall not found after all retries or too close! Halting.")
                     robot.stop()
 
                 time.sleep(2.0)
-                robot.turn_by(-80, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(-75, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(1.0)
                 robot.move_forward(travel_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
