@@ -930,8 +930,7 @@ def run(robot: Robot) -> None:
                     state = "COURSE_IDLE"
 
             else:
-                x, y, theta = robot.get_best_pose()
-
+                _, x, y, theta = get_best_pose(robot)
                 if theta > 0.0:
                     robot.turn_by(-(theta - 8), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 elif theta < 0.0:
