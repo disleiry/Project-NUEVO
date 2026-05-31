@@ -26,7 +26,6 @@ Controls:
 """
 
 from __future__ import annotations
-from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy
 
 import time
 from typing import Any
@@ -249,59 +248,47 @@ FACE_MAX_ATTEMPTS  =  3     # voting passes before defaulting
 # --- Distance to Wall ---
 # ==========================================
 
-import rclpy
-from sensor_msgs.msg import LaserScan
 import math
+def get_front_wall_distance_mm(robot: Robot) -> float:
+    """
+    Finds the closest obstacle directly in front of the robot using existing tracks.
+    Returns distance in mm, or -1.0 if the path is clear.
+    """
+    obstacle_tracks = robot.get_obstacle_tracks()
+    if not obstacle_tracks:
+        return -1.0
 
-class WallDistanceChecker:
-    def __init__(self, node):
-        self.front_distance_m = float('inf') # Default to infinity
+    # Get current global pose
+    _, rx, ry, rtheta_deg = get_best_pose(robot)
+    rtheta_rad = math.radians(rtheta_deg)
+    
+    front_distances = []
+    
+    # Check every tracked obstacle
+    for track in obstacle_tracks:
+        ox = float(track["x"])
+        oy = float(track["y"])
+        radius = float(track["radius"])
         
-        # Create a QoS profile that matches the LiDAR's BEST_EFFORT policy
-        qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
-            history=HistoryPolicy.KEEP_LAST,
-            depth=10
-        )
+        # Calculate delta from robot to obstacle
+        dx = ox - rx
+        dy = oy - ry
         
-        # Subscribe to the raw LiDAR scan using the compatible QoS profile
-        self.scan_sub = node.create_subscription(
-            LaserScan, 
-            '/scan', 
-            self._scan_callback, 
-            qos_profile
-        )
-
-    def _scan_callback(self, msg: LaserScan):
-        try:
-            # 1. Safety check: Ensure we have data and won't divide by zero
-            if not msg.ranges or msg.angle_increment == 0.0:
-                return
-            
-            # 2. Check if 0 radians (straight ahead) is within the current scan window
-            if msg.angle_min <= 0.0 <= msg.angle_max:
+        # Rotate coordinates to the robot's local perspective (X is forward, Y is left)
+        local_x = dx * math.cos(rtheta_rad) + dy * math.sin(rtheta_rad)
+        local_y = -dx * math.sin(rtheta_rad) + dy * math.cos(rtheta_rad)
+        
+        # If the obstacle is in front (local_x > 0) and within a +/- 150mm lateral corridor
+        if local_x > 0 and abs(local_y) < (150.0 + radius):
+            # Distance to the edge of the obstacle
+            dist = local_x - radius
+            if dist > 0:
+                front_distances.append(dist)
                 
-                # Calculate index
-                index_straight_ahead = int(round((0.0 - msg.angle_min) / msg.angle_increment))
-                
-                # 3. Safety check: Ensure our calculated index actually exists in the array
-                if 0 <= index_straight_ahead < len(msg.ranges):
-                    dist = msg.ranges[index_straight_ahead]
-                    
-                    if math.isinf(dist) or math.isnan(dist) or dist < msg.range_min or dist > msg.range_max:
-                        self.front_distance_m = float('inf')
-                    else:
-                        self.front_distance_m = dist
-
-        except Exception as e:
-            # If something unexpected happens, catch it so the robot doesn't crash
-            print(f"[WallChecker Warning] Skipped a bad LiDAR frame: {e}")
-
-    def get_distance_to_wall_mm(self):
-        # Convert meters to mm to match your robot's existing POSITION_UNIT
-        if self.front_distance_m == float('inf'):
-            return -1.0 # Return -1 or some other flag to indicate no valid reading
-        return self.front_distance_m * 1000.0
+    if not front_distances:
+        return -1.0
+        
+    return min(front_distances)
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
@@ -352,7 +339,6 @@ def configure_robot(robot: Robot) -> None:
             fov_deg=LIDAR_FOV_DEG,
         )
         robot.start_lidar_world_publisher()
-        robot.wall_checker = WallDistanceChecker(robot._node)
         print("[sensor] lidar enabled — subscribing to /scan")
 
     # NOTE: GPS is intentionally NOT enabled here.
@@ -954,9 +940,9 @@ def run(robot: Robot) -> None:
                 # ── 4. Turn right to face -Y ───────────────────────────────────
                 robot.turn_by(-8, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
-                current_distance = wall_checker.get_distance_to_wall_mm()
-                print(f"{current_distance}")
-                robot.move_forward(current_distance -100, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                distance_to_wall = get_front_wall_distance_mm(robot)                
+                print(f"{distance_to_wall}")
+                robot.move_forward(distance_to_wall -100, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 robot.turn_by(-60, ANGULAR_VELOCITY_DEG, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG)
 
                 state = "COURSE_IDLE"
