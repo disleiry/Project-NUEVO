@@ -776,6 +776,13 @@ def run(robot: Robot) -> None:
             if robot.was_button_pressed(Button.BTN_5):
                 print("[FSM] Proceeding to pickup.")
                 state = "BURGER_PICKUP"
+            if robot.was_button_pressed(Button.BTN_1):  # temporary skip
+                print("[FSM] DEBUG: Skipping to stage 3.")
+                reset_mission_pose(robot)
+                course_stage_index = 2  # stage 3 is index 2
+                motion_handle = start_course_stage(robot, course_stage_index)
+                last_status_print_at = time.monotonic()
+                state = "COURSE_MOVING"
             time.sleep(0.1)
 
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
