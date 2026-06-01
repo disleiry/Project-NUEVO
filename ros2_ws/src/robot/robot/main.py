@@ -792,8 +792,9 @@ def run(robot: Robot) -> None:
             elif robot.was_button_pressed(Button.BTN_2):
                 jog_ticks -= LIFT_JOG_STEP
             elif robot.was_button_pressed(Button.BTN_8):
-                state == "COURSE_MOVING"
+                state = "COURSE_MOVING"
                 course_stage_index = 1
+                print("Skipping to LiDAR")
             elif robot.was_button_pressed(Button.BTN_9):
                 robot.reset_motor_position(LIFT_MOTOR)
                 time.sleep(0.15)
