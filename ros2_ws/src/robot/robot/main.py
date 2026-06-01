@@ -794,7 +794,7 @@ def run(robot: Robot) -> None:
             elif robot.was_button_pressed(Button.BTN_8):
                 state == "COURSE_MOVING"
                 course_stage_index = 1
-            elif robot.was_button_pressed(Button.BTN_10):
+            elif robot.was_button_pressed(Button.BTN_9):
                 robot.reset_motor_position(LIFT_MOTOR)
                 time.sleep(0.15)
                 print("[INIT] Encoder zeroed -> WAIT_GREEN")
