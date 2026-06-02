@@ -80,8 +80,8 @@ GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 ANGULAR_VELOCITY_DEG = 20
-CUSTOMER_A_TO_STOP_MM = 1300.0
-CUSTOMER_B_TO_STOP_MM = 1100.0
+CUSTOMER_A_TO_STOP_MM = 1000.0
+CUSTOMER_B_TO_STOP_MM = 800.0
 
 
 WALL_TARGET_MM = 160.0
@@ -248,7 +248,7 @@ INGREDIENT_SLOTS = {
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
 CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
-CUSTOMER_B_TRAVEL_MM = 2100.0   # *** tune on arena ***
+CUSTOMER_B_TRAVEL_MM = 2150.0   # *** tune on arena ***
 
 
 MIN_STOP_CONF      = 0.50   # vision confidence threshold
@@ -1174,7 +1174,7 @@ def run(robot: Robot) -> None:
 
                 
                 time.sleep(0.5)
-                robot.turn_by(75, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(72, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 robot.move_forward(50, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
                 move_lift(robot, LIFT_PICKUP_TICKS)
