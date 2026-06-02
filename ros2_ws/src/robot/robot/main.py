@@ -235,8 +235,8 @@ INGREDIENT_SLOTS = {
 # Distance driven in -Y from the scan point to the customer row (100 mm buffer)
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
-CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
-CUSTOMER_B_TRAVEL_MM = 2300.0   # *** tune on arena ***
+CUSTOMER_A_TRAVEL_MM = 1700.0   # *** tune on arena ***
+CUSTOMER_B_TRAVEL_MM = 2100.0   # *** tune on arena ***
 
 
 MIN_STOP_CONF      = 0.50   # vision confidence threshold
@@ -1060,10 +1060,11 @@ def run(robot: Robot) -> None:
 
                 
                 time.sleep(0.5)
-                robot.turn_by(79, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(75, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 move_lift(robot, LIFT_PICKUP_TICKS)
                 claw_open(robot)
-                robot.turn_by(-79, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                move_lift(robot, LIFT_CARRY_TICKS)
+                robot.turn_by(-75, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 robot.move_forward(to_stop_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
