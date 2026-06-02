@@ -687,45 +687,37 @@ def get_lift_ticks(robot: Robot) -> int:
         return 0
     return int(dc.motors[LIFT_MOTOR - 1].position)
 
-def detect_customer(detector: GenderDetector, cap: cv2.VideoCapture) -> str:
+def detect_customer(robot: Robot) -> str:
     """
-    Votes over FACE_SAMPLE_FRAMES frames, repeated up to FACE_MAX_ATTEMPTS times.
-
-    Rule (per spec):
-      • 100% of votes are Male  →  Customer B
-      • Any Female vote, or no face seen  →  Customer A  (Female / uncertain)
-
-    Returns 'A' or 'B'.
+    Polls robot.get_detections('person') and votes over FACE_SAMPLE_FRAMES
+    frames. Any person detection with a 'gender' attribute counts as a vote.
+    Returns 'A' for Female, 'B' for Male, defaults to 'A' if no votes.
     """
     for attempt in range(1, FACE_MAX_ATTEMPTS + 1):
-        votes = {"Male": 0, "Female": 0}
+        votes = {"Female": 0, "Male": 0}
+        samples = 0
+
+        print(f"[FACE] Voting pass {attempt}/{FACE_MAX_ATTEMPTS}...")
+
         for _ in range(FACE_SAMPLE_FRAMES):
-            ret, frame = cap.read()
-            if not ret:
-                continue
-            gender, _ = detector.detect(frame)
-            if gender in votes:
-                votes[gender] += 1
+            detections = robot.get_detections("person")
+            for det in detections:
+                attributes = det.get("attributes", {})
+                gender_attr = attributes.get("gender", {})
+                gender = gender_attr.get("value")
+                if gender in votes:
+                    votes[gender] += 1
+                    samples += 1
             time.sleep(FACE_FRAME_DELAY_S)
 
-        male_v, female_v = votes["Male"], votes["Female"]
-        print(f"[FACE] Attempt {attempt}/{FACE_MAX_ATTEMPTS} — Male:{male_v}  Female:{female_v}")
+        print(f"[FACE] Pass {attempt} votes: {votes} ({samples} valid samples)")
 
-        if male_v == 0 and female_v == 0:
-            print("[FACE] No face detected — retrying...")
-            continue
+        if samples > 0:
+            winner = max(votes, key=votes.get)
+            print(f"[FACE] Result: {winner}")
+            return "A" if winner == "Female" else "B"
 
-        if female_v < 2:
-            print("[FACE] Male → Customer B")
-            return "B"
-        elif male_v < 2:
-            print(f"[FACE] Female → Customer A")
-            return "A"
-        else:
-            print(f"[FACE} Unsure → Customer A")
-            return "A"
-
-    print("[FACE] No face after all attempts — defaulting to Customer A")
+    print("[FACE] No valid detections after all attempts — defaulting to Customer A")
     return "A"
 
 
