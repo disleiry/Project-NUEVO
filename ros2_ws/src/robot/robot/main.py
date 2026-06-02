@@ -149,7 +149,12 @@ def run(robot: Robot) -> None:
             # Add this inside the while True loop, before the confidence check:
             raw = robot.get_detections("stop sign")
             if raw:
-                print(f"[STOP] Raw stop sign detections: {raw}")
+                print(f"[STOP] Full detection object: {raw}")
+                for det in raw:
+                    print(f"[STOP] Keys in det: {det.keys()}")
+                    print(f"[STOP] confidence key value: {det.get('confidence', 'KEY NOT FOUND')}")
+
+            
             if robot.get_detections("stop sign"):
                 robot.stop()
                 robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
