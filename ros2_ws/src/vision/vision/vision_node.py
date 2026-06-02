@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import time
 
+from vision.gender_detection import GenderDetector
+
 from ament_index_python.packages import get_package_share_directory
 from bridge_interfaces.msg import VisionDetection, VisionDetectionArray
 import rclpy
@@ -137,6 +139,8 @@ class VisionNode(Node):
             class_filter=self._class_filter,
             ncnn_threads=self._ncnn_threads,
         )
+        self._gender_detector = GenderDetector()
+        
         self.get_logger().info(
             "Loaded NCNN YOLO model path=%s max_imgsz=%d classes=%d filter=%s ncnn_threads=%s confidence=%.2f yellow_block=%s"
             % (
@@ -231,6 +235,10 @@ class VisionNode(Node):
                         person_crop = object_crop
                         face_lighting_label, face_lighting_score = classify_person_face_lighting(person_crop)
                         detection.add_attribute("face_lighting", face_lighting_label, face_lighting_score)
+                    
+                        gender_label, gender_score = self._gender_detector.detect(person_crop)
+                        if gender_label is not None:
+                            detection.add_attribute("gender", gender_label, gender_score)
                 
                 all_detections = yolo_detections + yellow_block_detections
 
