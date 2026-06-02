@@ -419,28 +419,30 @@ def drive_until_stop_sign(robot: Robot, final_distance_mm: float) -> None:
     """
     robot.enable_vision()
     robot.sleep(0.5)
+
+    if not robot.is_vision_active(timeout_s=5.0):
+        print("[STOP] WARNING — vision node not detected as active. Stop sign detection may fail.")
+    else:
+        print("[STOP] Vision node confirmed active.")
+        
     # ── Phase 1: pre-detection advance ────────────────────────────────────
     print(f"[STOP] Pre-detection advance {STOP_SIGN_APPROACH_MM:.0f} mm...")
     robot.move_forward(STOP_SIGN_APPROACH_MM, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
     # ── Phase 2: creep forward watching for stop sign ─────────────────────
+    # ── Phase 2: creep forward watching for stop sign ─────────────────────
     print("[STOP] Scanning for stop sign...")
     robot.set_velocity(STOP_SIGN_SCAN_VELOCITY, 0.0)
-
+    
     while True:
-        detections = robot.get_detections("stop sign")
-        best_conf = 0.0
-        for det in detections:
-            conf = float(det.get("confidence", 0.0))
-            if conf > best_conf:
-                best_conf = conf
-
-        if best_conf >= MIN_STOP_CONF:
+        if robot.get_detections("stop sign"):
+            for det in robot.get_detections("stop sign"):
+                print(f"[STOP] Stop sign detected — confidence: {det.get('confidence', 'N/A'):.4f}")
             robot.stop()
-            print(f"[STOP] Stop sign detected (conf={best_conf:.2f}) — waiting 2 s")
+            print("[STOP] Stopping — waiting 2 s")
             time.sleep(2.0)
             break
-
+    
         # Keep velocity command alive (set_velocity is not latched)
         robot.set_velocity(STOP_SIGN_SCAN_VELOCITY, 0.0)
         robot.wait_for_pose_update(timeout=0.05)
