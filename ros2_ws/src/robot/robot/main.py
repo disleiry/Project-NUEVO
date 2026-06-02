@@ -1089,12 +1089,6 @@ def run(robot: Robot) -> None:
 
         elif state == "FACE RECOGNITION":
             
-            import cv2
-            import sys
-            sys.path.insert(0, '/ros2_ws/src/vision')
-            from vision.gender_detection import GenderDetector
-            detector = GenderDetector()
-            cap = cv2.VideoCapture(CAMERA_DEVICE)
             
             if robot.was_button_pressed(Button.BTN_2):
                     cancel_motion(robot, motion_handle)
@@ -1125,11 +1119,7 @@ def run(robot: Robot) -> None:
 
                 # ── 3. Face detection ──────────────────────────────────────────
                 print("[FACE] Starting customer detection...")
-                if cap.isOpened():
-                    customer = detect_customer(detector, cap)
-                else:
-                    print("[FACE] No camera — defaulting to Customer A")
-                    customer = "A"
+                customer = detect_customer(robot)
     
                 travel_mm   = CUSTOMER_A_TRAVEL_MM   if customer == "A" else CUSTOMER_B_TRAVEL_MM
                 to_stop_mm  = CUSTOMER_A_TO_STOP_MM  if customer == "A" else CUSTOMER_B_TO_STOP_MM
