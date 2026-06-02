@@ -125,10 +125,10 @@ PURE_PURSUIT_CONTROL_POINTS = [
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
-    (2000.0, 3700.0),      # Waypoint 1: home straight
-    (2200.0, 3700.0),
-    (2300.0, 3700.0),
-    (2400.0, 3700.0),    # Waypoint 2: transition / turn
+    (2000.0, 3750.0),      # Waypoint 1: home straight
+    (2200.0, 3750.0),
+    (2300.0, 3750.0),
+    (2400.0, 3750.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -243,8 +243,8 @@ INGREDIENT_SLOTS = {
 # Distance driven in -Y from the scan point to the customer row (100 mm buffer)
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
-CUSTOMER_A_TRAVEL_MM = 1800.0   # *** tune on arena ***
-CUSTOMER_B_TRAVEL_MM = 2100.0   # *** tune on arena ***
+CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
+CUSTOMER_B_TRAVEL_MM = 2200.0   # *** tune on arena ***
 
 
 MIN_STOP_CONF      = 0.50   # vision confidence threshold
