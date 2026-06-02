@@ -84,7 +84,7 @@ CUSTOMER_A_TO_STOP_MM = 800.0
 CUSTOMER_B_TO_STOP_MM = 400.0
 
 
-WALL_TARGET_MM = 180.0
+WALL_TARGET_MM = 150.0
 WALL_KP = 0.05
 WALL_DEAD_BAND_MM = 10.0
 WALL_MAX_ANGULAR_DEG_S = 5.0
@@ -106,7 +106,7 @@ TRAFFIC_LIGHT_TURN_DEG = 30.0
 TURN_TOLERANCE_DEG = 2.0
 
 # Stop sign safety override from the traffic-light example.
-ENABLE_STOP_SIGN_OVERRIDE = False
+ENABLE_STOP_SIGN_OVERRIDE = True
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +243,7 @@ INGREDIENT_SLOTS = {
 # Distance driven in -Y from the scan point to the customer row (100 mm buffer)
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
-CUSTOMER_A_TRAVEL_MM = 1700.0   # *** tune on arena ***
+CUSTOMER_A_TRAVEL_MM = 1800.0   # *** tune on arena ***
 CUSTOMER_B_TRAVEL_MM = 2100.0   # *** tune on arena ***
 
 
@@ -1022,13 +1022,7 @@ def run(robot: Robot) -> None:
                 print("[FSM] COURSE_IDLE — course mission cancelled")
                 state = "COURSE_IDLE"
 
-            elif ENABLE_STOP_SIGN_OVERRIDE and stop_sign_detected(robot):
-                cancel_motion(robot, motion_handle)
-                motion_handle = None
-                robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
-                robot.set_led(LED.GREEN, 0)
-                print("[VISION] stop sign detected during course — mission stopped")
-                state = "COURSE_IDLE"
+            
 
             else:
                 if now - last_status_print_at >= STATUS_PRINT_INTERVAL_S:
@@ -1067,7 +1061,15 @@ def run(robot: Robot) -> None:
                     show_idle_leds(robot)
                     print("[FSM] COURSE_IDLE — course mission cancelled")
                     state = "COURSE_IDLE"
-
+                
+            #elif ENABLE_STOP_SIGN_OVERRIDE and stop_sign_detected(robot):
+                #cancel_motion(robot, motion_handle)
+                #motion_handle = None
+                #robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
+                #robot.set_led(LED.GREEN, 0)
+                #print("[VISION] stop sign detected during course — mission stopped")
+                #state = "COURSE_IDLE"
+                
             else:
                 _, x, y, theta = get_best_pose(robot)
                 print(f"{theta}")
@@ -1142,9 +1144,12 @@ def run(robot: Robot) -> None:
                 
                 time.sleep(0.5)
                 robot.turn_by(75, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.move_forward(30, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
                 move_lift(robot, LIFT_PICKUP_TICKS)
                 claw_open(robot)
                 move_lift(robot, LIFT_CARRY_TICKS)
+                robot.move_backward(30, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 robot.turn_by(-75, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 robot.move_forward(to_stop_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
