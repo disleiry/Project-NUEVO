@@ -418,7 +418,7 @@ def drive_until_stop_sign(robot: Robot, final_distance_mm: float) -> None:
     3. On detection: stops, waits 2 s, then drives forward final_distance_mm.
     """
     robot.enable_vision()
-    robot.sleep(0.5)
+    time.sleep(2.0)
 
     if not robot.is_vision_active(timeout_s=5.0):
         print("[STOP] WARNING — vision node not detected as active. Stop sign detection may fail.")
