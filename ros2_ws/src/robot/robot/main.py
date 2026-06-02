@@ -80,11 +80,11 @@ GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 ANGULAR_VELOCITY_DEG = 20
-CUSTOMER_A_TO_STOP_MM = 800.0
-CUSTOMER_B_TO_STOP_MM = 800.0
+CUSTOMER_A_TO_STOP_MM = 1300.0
+CUSTOMER_B_TO_STOP_MM = 1100.0
 
 
-WALL_TARGET_MM = 150.0
+WALL_TARGET_MM = 160.0
 WALL_KP = 0.05
 WALL_DEAD_BAND_MM = 10.0
 WALL_MAX_ANGULAR_DEG_S = 5.0
@@ -124,7 +124,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
     (400.0, 3750.0),      # Waypoint 1: home straight
     (960.0, 3750.0),    # Waypoint 2: transition / turn
     (1100.0, 720.0),     # Waypoint 3: ramp / return direction
-    (1600.0, 720.0),    # Waypoint 4: entrance toward obstacle course
+    (1600.0, 780.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
@@ -248,7 +248,7 @@ INGREDIENT_SLOTS = {
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
 CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
-CUSTOMER_B_TRAVEL_MM = 2200.0   # *** tune on arena ***
+CUSTOMER_B_TRAVEL_MM = 2100.0   # *** tune on arena ***
 
 
 MIN_STOP_CONF      = 0.50   # vision confidence threshold
@@ -1180,8 +1180,8 @@ def run(robot: Robot) -> None:
                 move_lift(robot, LIFT_PICKUP_TICKS)
                 claw_open(robot)
                 move_lift(robot, LIFT_CARRY_TICKS)
-                robot.move_backward(50, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                robot.turn_by(-72, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.move_backward(55, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.turn_by(-70, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 drive_until_stop_sign(robot, to_stop_mm)
 
