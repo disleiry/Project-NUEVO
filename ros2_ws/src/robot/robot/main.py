@@ -219,7 +219,7 @@ TURN_VELOCITY_DEG = 45.0
 TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 
-DIST_TO_INGREDIENT_AREA = 785.0
+DIST_TO_INGREDIENT_AREA = 685.0
 APPROACH_SHELF_DIST = 25.0
 
 INGREDIENT_SLOTS = {
@@ -799,7 +799,7 @@ def run(robot: Robot) -> None:
                 led_moving(robot)
                 state = "WAIT_GREEN"
                 move_lift(robot, LIFT_CARRY_TICKS)
-                robot.move_forward(200, 50, POS_TOLERANCE_MM, blocking=True)
+                robot.move_forward(300, 50, POS_TOLERANCE_MM, blocking=True)
                 time.sleep(1.0)
                 robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             time.sleep(0.05)
@@ -1054,7 +1054,7 @@ def run(robot: Robot) -> None:
                     robot.stop()
 
                 time.sleep(2.0)
-                robot.turn_by(-75, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(-70, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(1.0)
                 robot.move_forward(travel_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
