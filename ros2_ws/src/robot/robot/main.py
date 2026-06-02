@@ -715,11 +715,14 @@ def detect_customer(detector: GenderDetector, cap: cv2.VideoCapture) -> str:
             print("[FACE] No face detected — retrying...")
             continue
 
-        if female_v == 0:
-            print("[FACE] 100% Male → Customer B")
+        if female_v < 2:
+            print("[FACE] Male → Customer B")
             return "B"
+        elif male_v < 2:
+            print(f"[FACE] Female → Customer A")
+            return "A"
         else:
-            print(f"[FACE] Not 100% Male → Customer A")
+            print(f"[FACE} Unsure → Customer A")
             return "A"
 
     print("[FACE] No face after all attempts — defaulting to Customer A")
