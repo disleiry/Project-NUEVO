@@ -80,8 +80,16 @@ GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 ANGULAR_VELOCITY_DEG = 20
-CUSTOMER_A_TO_STOP_MM = 1800.0
-CUSTOMER_B_TO_STOP_MM = 1400.0
+CUSTOMER_A_TO_STOP_MM = 800.0
+CUSTOMER_B_TO_STOP_MM = 400.0
+
+
+WALL_TARGET_MM = 180.0
+WALL_KP = 0.05
+WALL_DEAD_BAND_MM = 10.0
+WALL_MAX_ANGULAR_DEG_S = 5.0
+WALL_LOOP_DT_S = 0.05
+
 # ---------------------------------------------------------------------------
 # Traffic-light start behavior
 # ---------------------------------------------------------------------------
@@ -324,6 +332,79 @@ def get_robust_wall_distance(robot: Robot, num_samples: int = 10, delay_s: float
     print(f"[NAV] Robust median distance: {final_distance:.0f} mm")
     
     return statistics.median(valid_distances)
+
+def get_right_wall_distance_mm(robot: Robot) -> float:
+    obstacle_tracks = robot.get_obstacle_tracks()
+    if not obstacle_tracks:
+        return -1.0
+
+    _, rx, ry, rtheta_deg = get_best_pose(robot)
+    rtheta_rad = math.radians(rtheta_deg)
+
+    right_distances = []
+
+    for track in obstacle_tracks:
+        ox = float(track["x"])
+        oy = float(track["y"])
+        radius = float(track["radius"])
+
+        dx = ox - rx
+        dy = oy - ry
+
+        local_x =  dx * math.cos(rtheta_rad) + dy * math.sin(rtheta_rad)
+        local_y = -dx * math.sin(rtheta_rad) + dy * math.cos(rtheta_rad)
+
+        # Right side: local_y < 0, within ±150 mm fore-aft corridor
+        if local_y < 0 and abs(local_x) < (150.0 + radius):
+            dist = abs(local_y) - radius
+            if dist > 0:
+                right_distances.append(dist)
+
+    if not right_distances:
+        return -1.0
+
+    return min(right_distances)
+
+
+def drive_with_wall_following(robot: Robot, distance_mm: float, velocity_mm_s: float) -> None:
+    _, start_x, start_y, _ = get_best_pose(robot)
+    traveled_mm = 0.0
+
+    print(f"[WALL] Starting wall-following drive: {distance_mm:.0f} mm "
+          f"target={WALL_TARGET_MM:.0f} mm  Kp={WALL_KP}")
+
+    while traveled_mm < distance_mm:
+        remaining_mm = distance_mm - traveled_mm
+
+        right_dist = get_right_wall_distance_mm(robot)
+
+        if right_dist > 0.0:
+            error_mm = right_dist - WALL_TARGET_MM  # + = too far, - = too close
+            if abs(error_mm) < WALL_DEAD_BAND_MM:
+                angular_cmd = 0.0
+            else:
+                angular_cmd = -WALL_KP * error_mm
+                angular_cmd = max(-WALL_MAX_ANGULAR_DEG_S,
+                                  min(WALL_MAX_ANGULAR_DEG_S, angular_cmd))
+            print(f"[WALL] dist={right_dist:6.1f} mm  err={error_mm:+6.1f} mm  "
+                  f"angular={angular_cmd:+5.2f} deg/s  traveled={traveled_mm:.0f}/{distance_mm:.0f} mm")
+        else:
+            angular_cmd = 0.0
+            print(f"[WALL] dist=NO READING  traveled={traveled_mm:.0f}/{distance_mm:.0f} mm — driving straight")
+
+        if remaining_mm < 100.0:
+            speed = max(velocity_mm_s * (remaining_mm / 100.0), 40.0)
+        else:
+            speed = velocity_mm_s
+
+        robot.set_velocity(speed, angular_cmd)
+        time.sleep(WALL_LOOP_DT_S)
+
+        _, cx, cy, _ = get_best_pose(robot)
+        traveled_mm = math.hypot(cx - start_x, cy - start_y)
+
+    robot.stop()
+    print(f"[WALL] Wall-following complete. Total traveled ≈ {traveled_mm:.0f} mm")
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
@@ -1056,7 +1137,7 @@ def run(robot: Robot) -> None:
                 time.sleep(2.0)
                 robot.turn_by(-70, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(1.0)
-                robot.move_forward(travel_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                drive_with_wall_following(robot, travel_mm, DRIVE_VELOCITY)
 
                 
                 time.sleep(0.5)
