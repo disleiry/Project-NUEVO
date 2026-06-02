@@ -81,7 +81,7 @@ GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 ANGULAR_VELOCITY_DEG = 20
 CUSTOMER_A_TO_STOP_MM = 800.0
-CUSTOMER_B_TO_STOP_MM = 400.0
+CUSTOMER_B_TO_STOP_MM = 800.0
 
 
 WALL_TARGET_MM = 150.0
@@ -108,6 +108,10 @@ TURN_TOLERANCE_DEG = 2.0
 # Stop sign safety override from the traffic-light example.
 ENABLE_STOP_SIGN_OVERRIDE = True
 
+
+STOP_SIGN_APPROACH_MM = 150.0
+# Forward speed while scanning for the stop sign (mm/s).
+STOP_SIGN_SCAN_VELOCITY = 100.0
 
 # ---------------------------------------------------------------------------
 # Waypoint paths through the arena
@@ -405,6 +409,44 @@ def drive_with_wall_following(robot: Robot, distance_mm: float, velocity_mm_s: f
 
     robot.stop()
     print(f"[WALL] Wall-following complete. Total traveled ≈ {traveled_mm:.0f} mm")
+
+
+def drive_until_stop_sign(robot: Robot, final_distance_mm: float) -> None:
+    """
+    1. Drives forward STOP_SIGN_APPROACH_MM at full speed (no detection yet).
+    2. Creeps forward at STOP_SIGN_SCAN_VELOCITY watching for a stop sign.
+    3. On detection: stops, waits 2 s, then drives forward final_distance_mm.
+    """
+    # ── Phase 1: pre-detection advance ────────────────────────────────────
+    print(f"[STOP] Pre-detection advance {STOP_SIGN_APPROACH_MM:.0f} mm...")
+    robot.move_forward(STOP_SIGN_APPROACH_MM, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+    # ── Phase 2: creep forward watching for stop sign ─────────────────────
+    print("[STOP] Scanning for stop sign...")
+    robot.set_velocity(STOP_SIGN_SCAN_VELOCITY, 0.0)
+
+    while True:
+        detections = robot.get_detections("stop sign")
+        best_conf = 0.0
+        for det in detections:
+            conf = float(det.get("confidence", 0.0))
+            if conf > best_conf:
+                best_conf = conf
+
+        if best_conf >= MIN_STOP_CONF:
+            robot.stop()
+            print(f"[STOP] Stop sign detected (conf={best_conf:.2f}) — waiting 2 s")
+            time.sleep(2.0)
+            break
+
+        # Keep velocity command alive (set_velocity is not latched)
+        robot.set_velocity(STOP_SIGN_SCAN_VELOCITY, 0.0)
+        robot.wait_for_pose_update(timeout=0.05)
+
+    # ── Phase 3: final fixed drive ─────────────────────────────────────────
+    print(f"[STOP] Resuming — driving {final_distance_mm:.0f} mm to final stop.")
+    robot.move_forward(final_distance_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+    print("[STOP] Final stop reached.")
 # ---------------------------------------------------------------------------
 # General helpers
 # ---------------------------------------------------------------------------
@@ -1152,7 +1194,7 @@ def run(robot: Robot) -> None:
                 robot.move_backward(60, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 robot.turn_by(-72, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-                robot.move_forward(to_stop_mm, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                drive_until_stop_sign(robot, to_stop_mm)
 
                 
 
