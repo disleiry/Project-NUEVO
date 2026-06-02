@@ -1186,12 +1186,12 @@ def run(robot: Robot) -> None:
                 
                 time.sleep(0.5)
                 robot.turn_by(75, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-                robot.move_forward(60, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.move_forward(50, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
                 move_lift(robot, LIFT_PICKUP_TICKS)
                 claw_open(robot)
                 move_lift(robot, LIFT_CARRY_TICKS)
-                robot.move_backward(60, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.move_backward(50, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 robot.turn_by(-72, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 drive_until_stop_sign(robot, to_stop_mm)
