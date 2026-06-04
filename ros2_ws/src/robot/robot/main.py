@@ -993,7 +993,7 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_CARRY_TICKS)
 
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(-80, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 5. FETCH TOP BUN
             current_x = drive_to_slot(robot, current_x, "bun_top")
