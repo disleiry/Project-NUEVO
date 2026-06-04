@@ -121,18 +121,18 @@ STOP_SIGN_SCAN_VELOCITY = 100.0
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (400.0, 3750.0),      # Waypoint 1: home straight
-    (960.0, 3750.0),    # Waypoint 2: transition / turn
-    (1100.0, 720.0),     # Waypoint 3: ramp / return direction
-    (1600.0, 780.0),    # Waypoint 4: entrance toward obstacle course
+    (0.0, 3750.0),      # Waypoint 1: home straight
+    (560.0, 3750.0),    # Waypoint 2: transition / turn
+    (600.0, 720.0),     # Waypoint 3: ramp / return direction
+    (1200.0, 780.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
-    (2000.0, 3750.0),      # Waypoint 1: home straight
-    (2200.0, 3750.0),
-    (2300.0, 3750.0),
-    (2400.0, 3750.0),    # Waypoint 2: transition / turn
+    (1600.0, 3750.0),      # Waypoint 1: home straight
+    (1800.0, 3750.0),
+    (1900.0, 3750.0),
+    (2000.0, 3750.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -141,7 +141,7 @@ PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spac
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (2000.0, 3400.0),   # Obstacle waypoint / finish
+    (1600.0, 3400.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
