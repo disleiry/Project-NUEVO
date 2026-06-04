@@ -979,6 +979,11 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "meat")
             robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             driven = get_robust_wall_distance(robot)
+            if driven > 51:
+                driven = driven - 51
+            elif driven < 51:
+                driven = 51- driven
+            
             robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
             move_lift(robot, LIFT_PICKUP_TICKS)
@@ -991,6 +996,11 @@ def run(robot: Robot) -> None:
             # 4. PLACE MEAT
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            
+            if driven > 51:
+                driven = driven - 51
+            elif driven < 51:
+                driven = 51- driven
             driven = get_robust_wall_distance(robot)
             robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
@@ -1008,6 +1018,11 @@ def run(robot: Robot) -> None:
             # 5. FETCH TOP BUN
             current_x = drive_to_slot(robot, current_x, "bun_top")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+            if driven > 51:
+                driven = driven - 51
+            elif driven < 51:
+                driven = 51- driven
             driven = get_robust_wall_distance(robot)
             robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
@@ -1021,6 +1036,11 @@ def run(robot: Robot) -> None:
             # 6. PLACE TOP BUN & GRAB FULL STACK
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+
+            if driven > 51:
+                driven = driven - 51
+            elif driven < 51:
+                driven = 51- driven
             driven = get_robust_wall_distance(robot)
             robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             
