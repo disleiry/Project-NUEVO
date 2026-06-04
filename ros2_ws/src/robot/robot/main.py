@@ -968,7 +968,6 @@ def run(robot: Robot) -> None:
         elif state == "BURGER_PICKUP":
             from robot.hardware_map import LIDAR_RANGE_MAX_MM, LIDAR_FOV_DEG
 
-            robot.set_lidar_filter(range_min_mm=0.0, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
 
             #robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
@@ -983,7 +982,7 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "meat")
             robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
+            robot.set_lidar_filter(range_min_mm=0, range_max_mm=400, fov_deg=LIDAR_FOV_DEG)
             time.sleep(0.3)
             dist = -1.0
             for attempt in range(3):
@@ -991,7 +990,6 @@ def run(robot: Robot) -> None:
                 if dist > 0.0:
                     break
                 time.sleep(1.0)
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
             if dist > 0.0:
                 delta = dist - SHELF_STOP_DIST_MM
                 if delta > 0:
@@ -1017,7 +1015,6 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
             time.sleep(0.3)
             dist = -1.0
             for attempt in range(3):
@@ -1025,7 +1022,6 @@ def run(robot: Robot) -> None:
                 if dist > 0.0:
                     break
                 time.sleep(1.0)
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
             if dist > 0.0:
                 delta = dist - SHELF_STOP_DIST_MM
                 if delta > 0:
@@ -1051,7 +1047,6 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "bun_top")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
             time.sleep(0.3)
             dist = -1.0
             for attempt in range(3):
@@ -1059,7 +1054,6 @@ def run(robot: Robot) -> None:
                 if dist > 0.0:
                     break
                 time.sleep(1.0)
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
             if dist > 0.0:
                 delta = dist - SHELF_STOP_DIST_MM
                 if delta > 0:
@@ -1085,7 +1079,6 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
             time.sleep(0.3)
             dist = -1.0
             for attempt in range(3):
@@ -1093,7 +1086,6 @@ def run(robot: Robot) -> None:
                 if dist > 0.0:
                     break
                 time.sleep(1.0)
-            robot.set_lidar_filter(range_min_mm=LIDAR_RANGE_MIN_MM, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
             if dist > 0.0:
                 delta = dist - SHELF_STOP_DIST_MM
                 if delta > 0:
