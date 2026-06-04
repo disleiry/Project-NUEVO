@@ -966,6 +966,8 @@ def run(robot: Robot) -> None:
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
+            robot.set_lidar_filter(range_min_mm=0.0, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
+
             #robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 1. PREP INITIAL MOVE
@@ -1116,6 +1118,10 @@ def run(robot: Robot) -> None:
 
             print("[FSM] Burger pickup complete.")
             state = "BURGER_DONE"
+
+            
+            robot.set_lidar_filter(range_min_mm=75.0, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
+
 
 
         
