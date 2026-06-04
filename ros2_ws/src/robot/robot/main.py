@@ -966,7 +966,9 @@ def run(robot: Robot) -> None:
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
-            robot.set_lidar_filter(range_min_mm=0.0, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
+            from robot.hardware_map import LIDAR_RANGE_MAX_MM, LIDAR_FOV_DEG
+
+            robot.set_lidar_filter(range_min_mm=0.0, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
 
             #robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
@@ -1120,7 +1122,7 @@ def run(robot: Robot) -> None:
             state = "BURGER_DONE"
 
             
-            robot.set_lidar_filter(range_min_mm=75.0, range_max_mm=SHELF_APPROACH_LIDAR_RANGE_MM, fov_deg=LIDAR_FOV_DEG)
+            robot.set_lidar_filter(range_min_mm=75.0, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
 
 
 
