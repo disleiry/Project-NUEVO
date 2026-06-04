@@ -232,7 +232,12 @@ TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 
 DIST_TO_INGREDIENT_AREA = 670.0
-APPROACH_SHELF_DIST = 15.0
+APPROACH_SHELF_DIST = 15.0  # fallback only
+
+SHELF_STOP_DIST_MM = 51.0  # desired distance from shelf face after approach
+
+SHELF_APPROACH_LIDAR_RANGE_MM = 400.0   # enough to see the shelf, not the far wall
+
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
@@ -368,6 +373,8 @@ def get_right_wall_distance_mm(robot: Robot) -> float:
         return -1.0
 
     return min(right_distances)
+
+
 
 
 def drive_with_wall_following(robot: Robot, distance_mm: float, velocity_mm_s: float) -> None:
@@ -968,22 +975,25 @@ def run(robot: Robot) -> None:
             robot.move_forward(DIST_TO_INGREDIENT_AREA, 80 , POS_TOLERANCE_MM, blocking=True)
 
             # 3. FETCH MEAT
+            
             current_x = drive_to_slot(robot, current_x, "meat")
             robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-
+            driven = get_robust_wall_distance(robot)
+            robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_MEAT_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 4. PLACE MEAT
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-
+            driven = get_robust_wall_distance(robot)
+            robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
             #move_lift(robot, LIFT_PICKUP_TICKS)
@@ -992,26 +1002,28 @@ def run(robot: Robot) -> None:
             
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-80, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 5. FETCH TOP BUN
             current_x = drive_to_slot(robot, current_x, "bun_top")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-
+            driven = get_robust_wall_distance(robot)
+            robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 6. PLACE TOP BUN & GRAB FULL STACK
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-
+            driven = get_robust_wall_distance(robot)
+            robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            
             move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS))
             claw_open(robot)
 
@@ -1019,7 +1031,7 @@ def run(robot: Robot) -> None:
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             print("[FSM] Burger pickup complete.")
