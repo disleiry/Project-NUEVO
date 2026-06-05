@@ -103,7 +103,7 @@ MIN_TRAFFIC_CONFIDENCE = 0.50
 # Use 45.0 if the traffic light is farther out of view.
 # If the robot turns the wrong direction, flip the sign.
 TRAFFIC_LIGHT_TURN_DEG = 30.0
-TURN_TOLERANCE_DEG = 2.0
+TURN_TOLERANCE_DEG = 0.5
 
 # Stop sign safety override from the traffic-light example.
 ENABLE_STOP_SIGN_OVERRIDE = True
@@ -969,7 +969,7 @@ def run(robot: Robot) -> None:
 
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
-            robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(79, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS)
