@@ -71,7 +71,7 @@ from robot.util import densify_polyline
 APPROACH_SHELF_DIST = 45.0
 
 # --- ADD these 4 lines ---
-SHELF_TARGET_MM = 51.0           # target distance to shelf face during pickup
+SHELF_TARGET_MM = 80.0           # target distance to shelf face during pickup
 SHELF_SCAN_RANGE_MM = 350.0      # lidar max range while scanning shelf
 SHELF_SCAN_MIN_MM = 20.0         # lidar min range while scanning shelf (allows close-range)
 SHELF_ANGLE_THRESHOLD_DEG = 2.0  # skip correction if angle error is smaller than this
