@@ -353,55 +353,120 @@ def get_robust_wall_distance(robot: Robot, num_samples: int = 10, delay_s: float
     return statistics.median(valid_distances)
 
 
-
-
+import numpy as np
+import math
 
 def correct_shelf_angle(robot: Robot) -> float:
     """
     Call AFTER turn_by(81), BEFORE move_forward.
-    Sets lidar to close-range mode, samples the nearest front obstacle track,
-    and applies a small corrective turn so the robot is square to the shelf.
+    Sets lidar to close-range mode, calculates the true surface angle of the shelf 
+    using linear regression on the raw point cloud, and applies a corrective turn.
     Returns the angle corrected (deg) so the caller can include it in the return turn.
-    NOTE: leaves the lidar in close-range mode — call get_shelf_approach_mm next.
     """
+    # 1. Prepare Lidar for close-range shelf scanning
     robot.set_lidar_filter(
         range_min_mm=SHELF_SCAN_MIN_MM,
         range_max_mm=SHELF_SCAN_RANGE_MM,
         fov_deg=LIDAR_FOV_DEG,
     )
-    time.sleep(0.4)  # let tracker rebuild at new range
+    time.sleep(0.4)  # let sensor populate new points
 
-    angle_samples = []
-    for _ in range(6):
-        tracks = robot.get_obstacle_tracks()
-        if tracks:
-            _, rx, ry, rtheta_deg = get_best_pose(robot)
-            rtheta_rad = math.radians(rtheta_deg)
-            best = None  # (local_x, local_y, dist_to_edge)
-            for track in tracks:
-                ox, oy, r = float(track["x"]), float(track["y"]), float(track["radius"])
-                lx = (ox - rx) * math.cos(rtheta_rad) + (oy - ry) * math.sin(rtheta_rad)
-                ly = -(ox - rx) * math.sin(rtheta_rad) + (oy - ry) * math.cos(rtheta_rad)
-                d = lx - r
-                if lx > 0 and abs(ly) < (150.0 + r) and d > 0:
-                    if best is None or d < best[2]:
-                        best = (lx, ly, d)
-            if best:
-                angle_samples.append(math.degrees(math.atan2(best[1], best[0])))
-        robot.wait_for_pose_update(timeout=0.1)
+    # 2. Get the raw point cloud (X, Y in millimeters relative to robot center)
+    points = robot._obstacles_mm 
+    
+    if len(points) == 0:
+        print("[SHELF] No LiDAR points found — no correction applied")
+        return 0.0
 
-    angle_corr = 0.0
-    if angle_samples:
-        angle_corr = statistics.median(angle_samples)
-        print(f"[SHELF] Angle samples: {[f'{a:.1f}' for a in angle_samples]}, correction: {angle_corr:.1f}°")
-        if abs(angle_corr) > SHELF_ANGLE_THRESHOLD_DEG:
-            robot.turn_by(angle_corr, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-        else:
-            angle_corr = 0.0  # too small to apply, don't accumulate noise
+    # 3. Define a forward bounding box to isolate the shelf face
+    min_x = 20.0
+    max_x = SHELF_SCAN_RANGE_MM + 50.0  
+    max_y_width = 150.0  # Look 150mm left and 150mm right
+    
+    # Filter points to only keep those strictly in front of the robot
+    mask = (points[:, 0] > min_x) & (points[:, 0] < max_x) & (np.abs(points[:, 1]) < max_y_width)
+    shelf_points = points[mask]
+    
+    if len(shelf_points) < 10:
+        print(f"[SHELF] Not enough points ({len(shelf_points)}) to find wall — no correction applied")
+        return 0.0
+        
+    # 4. Calculate the Line of Best Fit (Linear Regression)
+    y_coords = shelf_points[:, 1]
+    x_coords = shelf_points[:, 0]
+    
+    slope, intercept = np.polyfit(y_coords, x_coords, 1)
+    
+    # Calculate the physical angle of the wall and reverse it to find the corrective turn
+    angle_rad = math.atan(slope)
+    shelf_angle_deg = math.degrees(angle_rad)
+    angle_corr = -shelf_angle_deg  # Invert so we turn into the correction
+
+    print(f"[SHELF] Calculated wall slope: {shelf_angle_deg:.2f}°, correction turn: {angle_corr:.2f}°")
+
+    # 5. Apply correction turn if it's large enough to matter
+    if abs(angle_corr) > SHELF_ANGLE_THRESHOLD_DEG:
+        print(f"[SHELF] Squaring up: Turning by {angle_corr:.2f} degrees")
+        robot.turn_by(
+            angle_corr, 
+            TURN_VELOCITY_DEG, 
+            tolerance_deg=TURN_TOLERANCE_DEG, 
+            blocking=True
+        )
+        time.sleep(0.2) # Give the robot a moment to settle mechanically
     else:
-        print("[SHELF] No angle data — no correction applied")
+        print("[SHELF] Robot is already square enough — no turn applied")
+        angle_corr = 0.0 # Don't return tiny values so we don't accumulate math noise
 
     return angle_corr
+
+
+def calculate_true_shelf_angle(robot) -> float:
+    # 1. Get the raw point cloud (X, Y in millimeters relative to robot center)
+    # Use robot.get_obstacles() if available, otherwise access the internal property
+    points = robot._obstacles_mm 
+    
+    if len(points) == 0:
+        return 0.0
+
+    # 2. Define a "bounding box" directly in front of the robot to isolate the shelf.
+    # For example: 100mm to 600mm straight ahead, and strictly within the width of the robot.
+    min_x = 100.0
+    max_x = 600.0
+    max_y_width = 150.0  # Look 150mm left and 150mm right
+    
+    # Filter points to only keep those inside our forward box
+    mask = (points[:, 0] > min_x) & (points[:, 0] < max_x) & (np.abs(points[:, 1]) < max_y_width)
+    shelf_points = points[mask]
+    
+    if len(shelf_points) < 10:
+        # Not enough points to confidently form a line
+        return 0.0
+        
+    # 3. Calculate the Line of Best Fit (Linear Regression)
+    # We fit a 1st-degree polynomial: X = m*Y + b 
+    # (We swap X and Y here because the wall is mostly horizontal relative to the robot's forward X-axis)
+    y_coords = shelf_points[:, 1]
+    x_coords = shelf_points[:, 0]
+    
+    slope, intercept = np.polyfit(y_coords, x_coords, 1)
+    
+    # 4. Convert the slope into degrees
+    # If the robot is perfectly square, the slope is 0. 
+    # If the right side of the wall is further away, it returns a positive angle.
+    angle_rad = math.atan(slope)
+    angle_deg = math.degrees(angle_rad)
+    
+    return angle_deg
+
+
+
+
+
+
+
+
+
 
 
 def get_shelf_approach_mm(robot: Robot) -> float:
