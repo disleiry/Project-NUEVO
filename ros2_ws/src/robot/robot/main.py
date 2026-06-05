@@ -66,6 +66,21 @@ from robot.util import densify_polyline
 # Sensor setup
 # ---------------------------------------------------------------------------
 
+
+# --- existing ---
+APPROACH_SHELF_DIST = 45.0
+
+# --- ADD these 4 lines ---
+SHELF_TARGET_MM = 51.0           # target distance to shelf face during pickup
+SHELF_SCAN_RANGE_MM = 350.0      # lidar max range while scanning shelf
+SHELF_SCAN_MIN_MM = 20.0         # lidar min range while scanning shelf (allows close-range)
+SHELF_ANGLE_THRESHOLD_DEG = 2.0  # skip correction if angle error is smaller than this
+
+
+
+
+
+
 ENABLE_VISION = True
 ENABLE_LIDAR = True
 ENABLE_GPS = True
@@ -336,6 +351,91 @@ def get_robust_wall_distance(robot: Robot, num_samples: int = 10, delay_s: float
     print(f"[NAV] Robust median distance: {final_distance:.0f} mm")
     
     return statistics.median(valid_distances)
+
+
+
+
+
+def correct_shelf_angle(robot: Robot) -> float:
+    """
+    Call AFTER turn_by(81), BEFORE move_forward.
+    Sets lidar to close-range mode, samples the nearest front obstacle track,
+    and applies a small corrective turn so the robot is square to the shelf.
+    Returns the angle corrected (deg) so the caller can include it in the return turn.
+    NOTE: leaves the lidar in close-range mode — call get_shelf_approach_mm next.
+    """
+    robot.set_lidar_filter(
+        range_min_mm=SHELF_SCAN_MIN_MM,
+        range_max_mm=SHELF_SCAN_RANGE_MM,
+        fov_deg=LIDAR_FOV_DEG,
+    )
+    time.sleep(0.4)  # let tracker rebuild at new range
+
+    angle_samples = []
+    for _ in range(6):
+        tracks = robot.get_obstacle_tracks()
+        if tracks:
+            _, rx, ry, rtheta_deg = get_best_pose(robot)
+            rtheta_rad = math.radians(rtheta_deg)
+            best = None  # (local_x, local_y, dist_to_edge)
+            for track in tracks:
+                ox, oy, r = float(track["x"]), float(track["y"]), float(track["radius"])
+                lx = (ox - rx) * math.cos(rtheta_rad) + (oy - ry) * math.sin(rtheta_rad)
+                ly = -(ox - rx) * math.sin(rtheta_rad) + (oy - ry) * math.cos(rtheta_rad)
+                d = lx - r
+                if lx > 0 and abs(ly) < (150.0 + r) and d > 0:
+                    if best is None or d < best[2]:
+                        best = (lx, ly, d)
+            if best:
+                angle_samples.append(math.degrees(math.atan2(best[1], best[0])))
+        robot.wait_for_pose_update(timeout=0.1)
+
+    angle_corr = 0.0
+    if angle_samples:
+        angle_corr = statistics.median(angle_samples)
+        print(f"[SHELF] Angle samples: {[f'{a:.1f}' for a in angle_samples]}, correction: {angle_corr:.1f}°")
+        if abs(angle_corr) > SHELF_ANGLE_THRESHOLD_DEG:
+            robot.turn_by(angle_corr, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+        else:
+            angle_corr = 0.0  # too small to apply, don't accumulate noise
+    else:
+        print("[SHELF] No angle data — no correction applied")
+
+    return angle_corr
+
+
+def get_shelf_approach_mm(robot: Robot) -> float:
+    """
+    Call AFTER correct_shelf_angle, BEFORE move_forward.
+    Samples the front wall distance (still in close-range lidar mode) and returns
+    how many mm to move_forward to reach SHELF_TARGET_MM from the shelf face.
+    Restores the default lidar filter before returning.
+    Falls back to APPROACH_SHELF_DIST if lidar gives no data.
+    """
+    valid = []
+    for _ in range(8):
+        d = get_front_wall_distance_mm(robot)
+        if d > 0.0:
+            valid.append(d)
+        robot.wait_for_pose_update(timeout=0.1)
+
+    # Restore default filter now that both shelf measurements are done
+    robot.set_lidar_filter(
+        range_min_mm=LIDAR_RANGE_MIN_MM,
+        range_max_mm=LIDAR_RANGE_MAX_MM,
+        fov_deg=LIDAR_FOV_DEG,
+    )
+
+    if not valid:
+        print("[SHELF] No LiDAR data — using fixed APPROACH_SHELF_DIST")
+        return APPROACH_SHELF_DIST
+
+    shelf_dist = statistics.median(valid)
+    approach_mm = shelf_dist - SHELF_TARGET_MM
+    print(f"[SHELF] Samples: {[f'{d:.0f}' for d in valid]}, "
+          f"shelf={shelf_dist:.0f} mm, target={SHELF_TARGET_MM:.0f} mm, approach={approach_mm:.0f} mm")
+    return max(approach_mm, 0.0)  # clamp: never back up here, just don't move if already close
+
 
 def get_right_wall_distance_mm(robot: Robot) -> float:
     obstacle_tracks = robot.get_obstacle_tracks()
@@ -970,47 +1070,51 @@ def run(robot: Robot) -> None:
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            angle_corr  = correct_shelf_angle(robot)
+            approach_mm = get_shelf_approach_mm(robot)
+            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_MEAT_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(-81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 4. PLACE MEAT
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            angle_corr  = correct_shelf_angle(robot)
+            approach_mm = get_shelf_approach_mm(robot)
+            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
-            #move_lift(robot, LIFT_PICKUP_TICKS)
-            #claw_close(robot, CLAW_CLOSE_BUN_DEG)
-            #claw_open(robot)
-            
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(-81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True))
 
             # 5. FETCH TOP BUN
             current_x = drive_to_slot(robot, current_x, "bun_top")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            angle_corr  = correct_shelf_angle(robot)
+            approach_mm = get_shelf_approach_mm(robot)
+            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(-81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 6. PLACE TOP BUN & GRAB FULL STACK
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            angle_corr  = correct_shelf_angle(robot)
+            approach_mm = get_shelf_approach_mm(robot)
+            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS))
             claw_open(robot)
@@ -1019,8 +1123,8 @@ def run(robot: Robot) -> None:
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(-81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             print("[FSM] Burger pickup complete.")
             state = "BURGER_DONE"
