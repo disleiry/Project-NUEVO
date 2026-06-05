@@ -237,7 +237,7 @@ APPROACH_SHELF_DIST = 45.0
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
     "meat": 348.0,
-    "bun_top": 490.0,
+    "bun_top": 485.0,
 }
 
 
@@ -969,7 +969,7 @@ def run(robot: Robot) -> None:
 
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
-            robot.turn_by(79, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS)
@@ -977,11 +977,11 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_CARRY_TICKS)
 
             robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-            robot.turn_by(-79, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(-81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 4. PLACE MEAT
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
-            robot.turn_by(79, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
