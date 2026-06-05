@@ -214,7 +214,7 @@ LIFT_MOTOR = Motor.DC_M3
 LIFT_CARRY_TICKS = -12100
 LIFT_PICKUP_TICKS = -8400
 LIFT_ITEM_THICKNESS_TICKS = -1800
-LIFT_MAX_VEL = 1800
+LIFT_MAX_VEL = 1650
 LIFT_TOLERANCE = 30
 LIFT_JOG_STEP = 100
 
@@ -236,8 +236,8 @@ APPROACH_SHELF_DIST = 60.0
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
-    "meat": 350.0,
-    "bun_top": 495.0,
+    "meat": 352.0,
+    "bun_top": 496.0,
 }
 
 
@@ -1009,7 +1009,7 @@ def run(robot: Robot) -> None:
 
             # 6. PLACE TOP BUN & GRAB FULL STACK
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
-            robot.turn_by(79, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+            robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS))
