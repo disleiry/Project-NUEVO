@@ -121,18 +121,18 @@ STOP_SIGN_SCAN_VELOCITY = 100.0
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (0.0, 3750.0),      # Waypoint 1: home straight
-    (560.0, 3750.0),    # Waypoint 2: transition / turn
-    (600.0, 720.0),     # Waypoint 3: ramp / return direction
-    (1200.0, 780.0),    # Waypoint 4: entrance toward obstacle course
+    (100.0, 3750.0),      # Waypoint 1: home straight
+    (660.0, 3750.0),    # Waypoint 2: transition / turn
+    (800.0, 720.0),     # Waypoint 3: ramp / return direction
+    (1300.0, 780.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
-    (1600.0, 3750.0),      # Waypoint 1: home straight
-    (1800.0, 3750.0),
+    (1700.0, 3750.0),      # Waypoint 1: home straight
     (1900.0, 3750.0),
-    (2000.0, 3750.0),    # Waypoint 2: transition / turn
+    (2000.0, 3750.0),
+    (2100.0, 3750.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
@@ -141,7 +141,7 @@ PURE_PURSUIT_CONTROL_POINTS = densify_polyline(PURE_PURSUIT_CONTROL_POINTS, spac
 
 # LAPF is only used in the obstacle-course section.
 LAPF_CONTROL_POINTS = [
-    (1600.0, 3400.0),   # Obstacle waypoint / finish
+    (1700.0, 3400.0),   # Obstacle waypoint / finish
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
@@ -232,12 +232,7 @@ TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 
 DIST_TO_INGREDIENT_AREA = 670.0
-APPROACH_SHELF_DIST = 15.0  # fallback only
-
-SHELF_STOP_DIST_MM = 51.0  # desired distance from shelf face after approach
-
-SHELF_APPROACH_LIDAR_RANGE_MM = 400.0   # enough to see the shelf, not the far wall
-
+APPROACH_SHELF_DIST = 15.0
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
@@ -373,8 +368,6 @@ def get_right_wall_distance_mm(robot: Robot) -> float:
         return -1.0
 
     return min(right_distances)
-
-
 
 
 def drive_with_wall_following(robot: Robot, distance_mm: float, velocity_mm_s: float) -> None:
@@ -930,7 +923,7 @@ def run(robot: Robot) -> None:
                 move_lift(robot, LIFT_CARRY_TICKS)
                 robot.move_forward(300, 50, POS_TOLERANCE_MM, blocking=True)
                 time.sleep(1.0)
-                robot.turn_to(115, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             time.sleep(0.05)
             
 
@@ -964,11 +957,7 @@ def run(robot: Robot) -> None:
                     pass
 
         # ── BURGER_PICKUP ─────────────────────────────────────────────────────
-        # ── BURGER_PICKUP ─────────────────────────────────────────────────────
         elif state == "BURGER_PICKUP":
-            from robot.hardware_map import LIDAR_RANGE_MAX_MM, LIDAR_FOV_DEG
-
-
             #robot.turn_to(90, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 1. PREP INITIAL MOVE
@@ -981,124 +970,47 @@ def run(robot: Robot) -> None:
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
             robot.turn_by(TURN_TO_SHELF_DEG, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-
-            robot.set_lidar_filter(range_min_mm=0, range_max_mm=400, fov_deg=LIDAR_FOV_DEG)
-            time.sleep(0.3)
-            dist = -1.0
-            for attempt in range(3):
-                dist = get_robust_wall_distance(robot, num_samples=10, delay_s=0.1)
-                if dist > 0.0:
-                    break
-                time.sleep(1.0)
-            if dist > 0.0:
-                delta = dist - SHELF_STOP_DIST_MM
-                if delta > 0:
-                    driven = delta
-                    robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                elif delta < 0:
-                    driven = abs(delta)
-                    robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                else:
-                    driven = 0.0
-            else:
-                driven = APPROACH_SHELF_DIST
-                robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_MEAT_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 4. PLACE MEAT
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-
-            time.sleep(0.3)
-            dist = -1.0
-            for attempt in range(3):
-                dist = get_robust_wall_distance(robot, num_samples=10, delay_s=0.1)
-                if dist > 0.0:
-                    break
-                time.sleep(1.0)
-            if dist > 0.0:
-                delta = dist - SHELF_STOP_DIST_MM
-                if delta > 0:
-                    driven = delta
-                    robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                elif delta < 0:
-                    driven = abs(delta)
-                    robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                else:
-                    driven = 0.0
-            else:
-                driven = APPROACH_SHELF_DIST
-                robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
+            #move_lift(robot, LIFT_PICKUP_TICKS)
+            #claw_close(robot, CLAW_CLOSE_BUN_DEG)
+            #claw_open(robot)
+            
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-80, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 5. FETCH TOP BUN
             current_x = drive_to_slot(robot, current_x, "bun_top")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-
-            time.sleep(0.3)
-            dist = -1.0
-            for attempt in range(3):
-                dist = get_robust_wall_distance(robot, num_samples=10, delay_s=0.1)
-                if dist > 0.0:
-                    break
-                time.sleep(1.0)
-            if dist > 0.0:
-                delta = dist - SHELF_STOP_DIST_MM
-                if delta > 0:
-                    driven = delta
-                    robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                elif delta < 0:
-                    driven = abs(delta)
-                    robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                else:
-                    driven = 0.0
-            else:
-                driven = APPROACH_SHELF_DIST
-                robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 6. PLACE TOP BUN & GRAB FULL STACK
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-
-            time.sleep(0.3)
-            dist = -1.0
-            for attempt in range(3):
-                dist = get_robust_wall_distance(robot, num_samples=10, delay_s=0.1)
-                if dist > 0.0:
-                    break
-                time.sleep(1.0)
-            if dist > 0.0:
-                delta = dist - SHELF_STOP_DIST_MM
-                if delta > 0:
-                    driven = delta
-                    robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                elif delta < 0:
-                    driven = abs(delta)
-                    robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                else:
-                    driven = 0.0
-            else:
-                driven = APPROACH_SHELF_DIST
-                robot.move_forward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
             move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS))
             claw_open(robot)
@@ -1107,18 +1019,12 @@ def run(robot: Robot) -> None:
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(driven, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            robot.move_backward(APPROACH_SHELF_DIST, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-83, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             print("[FSM] Burger pickup complete.")
             state = "BURGER_DONE"
 
-            
-            robot.set_lidar_filter(range_min_mm=75.0, range_max_mm=LIDAR_RANGE_MAX_MM, fov_deg=LIDAR_FOV_DEG)
-
-
-
-        
         # ── BURGER_DONE ───────────────────────────────────────────────────────
         # Enable GPS, reset odometry, and immediately begin the course (pure pursuit -> LAPF).
         elif state == "BURGER_DONE":
