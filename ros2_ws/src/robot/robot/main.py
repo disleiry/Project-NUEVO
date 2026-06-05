@@ -499,7 +499,7 @@ def get_shelf_approach_mm(robot: Robot) -> float:
     approach_mm = shelf_dist - SHELF_TARGET_MM
     print(f"[SHELF] Samples: {[f'{d:.0f}' for d in valid]}, "
           f"shelf={shelf_dist:.0f} mm, target={SHELF_TARGET_MM:.0f} mm, approach={approach_mm:.0f} mm")
-    return max(approach_mm, 0.0)  # clamp: never back up here, just don't move if already close
+    return approach_mm  # clamp: never back up here, just don't move if already close
 
 
 def get_right_wall_distance_mm(robot: Robot) -> float:
@@ -1136,8 +1136,18 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "meat")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             angle_corr  = correct_shelf_angle(robot)
+            
             approach_mm = get_shelf_approach_mm(robot)
-            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            if approach_mm > 0.0:
+                print(f"[SHELF] Too far. Moving forward {approach_mm:.1f} mm")
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                backup_dist = abs(approach_mm) # Convert -9.0 to a positive 9.0 for the move_backward command
+                print(f"[SHELF] Too close. Moving backward {backup_dist:.1f} mm")
+                robot.move_backward(backup_dist, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            else:
+                print(f"[SHELF] Already at perfect target distance ({SHELF_TARGET_MM} mm). Skipping drive.")
 
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_MEAT_DEG)
@@ -1150,8 +1160,18 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             angle_corr  = correct_shelf_angle(robot)
+            
             approach_mm = get_shelf_approach_mm(robot)
-            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            if approach_mm > 0.0:
+                print(f"[SHELF] Too far. Moving forward {approach_mm:.1f} mm")
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                backup_dist = abs(approach_mm) # Convert -9.0 to a positive 9.0 for the move_backward command
+                print(f"[SHELF] Too close. Moving backward {backup_dist:.1f} mm")
+                robot.move_backward(backup_dist, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            else:
+                print(f"[SHELF] Already at perfect target distance ({SHELF_TARGET_MM} mm). Skipping drive.")
 
             move_lift(robot, LIFT_PICKUP_TICKS + LIFT_ITEM_THICKNESS_TICKS)
             claw_open(robot)
@@ -1164,8 +1184,18 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "bun_top")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             angle_corr  = correct_shelf_angle(robot)
+            
             approach_mm = get_shelf_approach_mm(robot)
-            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            if approach_mm > 0.0:
+                print(f"[SHELF] Too far. Moving forward {approach_mm:.1f} mm")
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                backup_dist = abs(approach_mm) # Convert -9.0 to a positive 9.0 for the move_backward command
+                print(f"[SHELF] Too close. Moving backward {backup_dist:.1f} mm")
+                robot.move_backward(backup_dist, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            else:
+                print(f"[SHELF] Already at perfect target distance ({SHELF_TARGET_MM} mm). Skipping drive.")
 
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
@@ -1178,8 +1208,18 @@ def run(robot: Robot) -> None:
             current_x = drive_to_slot(robot, current_x, "bun_bottom")
             robot.turn_by(81, TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             angle_corr  = correct_shelf_angle(robot)
+            
             approach_mm = get_shelf_approach_mm(robot)
-            robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+            if approach_mm > 0.0:
+                print(f"[SHELF] Too far. Moving forward {approach_mm:.1f} mm")
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                backup_dist = abs(approach_mm) # Convert -9.0 to a positive 9.0 for the move_backward command
+                print(f"[SHELF] Too close. Moving backward {backup_dist:.1f} mm")
+                robot.move_backward(backup_dist, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            else:
+                print(f"[SHELF] Already at perfect target distance ({SHELF_TARGET_MM} mm). Skipping drive.")
 
             move_lift(robot, LIFT_PICKUP_TICKS + (2 * LIFT_ITEM_THICKNESS_TICKS))
             claw_open(robot)
