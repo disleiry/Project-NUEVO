@@ -232,12 +232,12 @@ TURN_TO_SHELF_DEG = 79
 TURN_FROM_SHELF_DEG = -79
 
 DIST_TO_INGREDIENT_AREA = 670.0
-APPROACH_SHELF_DIST = 60.0
+APPROACH_SHELF_DIST = 45.0
 
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
-    "meat": 352.0,
-    "bun_top": 496.0,
+    "meat": 348.0,
+    "bun_top": 490.0,
 }
 
 
