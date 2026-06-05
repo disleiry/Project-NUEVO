@@ -965,7 +965,7 @@ def run(robot: Robot) -> None:
             
 
             # 2. NAVIGATE TO INGREDIENT AREA
-            robot.move_forward(DIST_TO_INGREDIENT_AREA, 80 , POS_TOLERANCE_MM, blocking=True)
+            robot.move_forward(DIST_TO_INGREDIENT_AREA, 150 , POS_TOLERANCE_MM, blocking=True)
 
             # 3. FETCH MEAT
             current_x = drive_to_slot(robot, current_x, "meat")
