@@ -80,11 +80,11 @@ GPS_TANGENT_ALPHA = 0.15
 GPS_TANGENT_MIN_DISPLACEMENT_MM = 200.0
 
 ANGULAR_VELOCITY_DEG = 20
-CUSTOMER_A_TO_STOP_MM = 1100.0
-CUSTOMER_B_TO_STOP_MM = 900.0
+CUSTOMER_A_TO_STOP_MM = 950.0
+CUSTOMER_B_TO_STOP_MM = 800.0
 
 
-WALL_TARGET_MM = 160.0
+WALL_TARGET_MM = 170.0
 WALL_KP = 0.05
 WALL_DEAD_BAND_MM = 10.0
 WALL_MAX_ANGULAR_DEG_S = 5.0
@@ -109,7 +109,7 @@ TURN_TOLERANCE_DEG = 2.0
 ENABLE_STOP_SIGN_OVERRIDE = True
 
 
-STOP_SIGN_APPROACH_MM = 50.0
+STOP_SIGN_APPROACH_MM = 150.0
 # Forward speed while scanning for the stop sign (mm/s).
 STOP_SIGN_SCAN_VELOCITY = 100.0
 
@@ -121,9 +121,9 @@ STOP_SIGN_SCAN_VELOCITY = 100.0
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (100.0, 3750.0),      # Waypoint 1: home straight
-    (660.0, 3750.0),    # Waypoint 2: transition / turn
-    (800.0, 720.0),     # Waypoint 3: ramp / return direction
+    (100.0, 3800.0),      # Waypoint 1: home straight
+    (640.0, 3800.0),    # Waypoint 2: transition / turn
+    (780.0, 720.0),     # Waypoint 3: ramp / return direction
     (1300.0, 780.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
@@ -1175,12 +1175,12 @@ def run(robot: Robot) -> None:
                 
                 time.sleep(0.5)
                 robot.turn_by(72, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-                robot.move_forward(50, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.move_forward(55, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
                 move_lift(robot, LIFT_PICKUP_TICKS)
                 claw_open(robot)
                 move_lift(robot, LIFT_CARRY_TICKS)
-                robot.move_backward(55, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                robot.move_backward(65, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 robot.turn_by(-70, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 drive_until_stop_sign(robot, to_stop_mm)
