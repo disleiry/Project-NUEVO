@@ -472,16 +472,29 @@ def calculate_true_shelf_angle(robot) -> float:
 def get_shelf_approach_mm(robot: Robot) -> float:
     """
     Call AFTER correct_shelf_angle, BEFORE move_forward.
-    Samples the front wall distance (still in close-range lidar mode) and returns
-    how many mm to move_forward to reach SHELF_TARGET_MM from the shelf face.
-    Restores the default lidar filter before returning.
-    Falls back to APPROACH_SHELF_DIST if lidar gives no data.
+    Uses raw Lidar point cloud to find the true physical distance to the shelf face,
+    bypassing the obstacle tracker's circular boundaries.
     """
     valid = []
     for _ in range(8):
-        d = get_front_wall_distance_mm(robot)
-        if d > 0.0:
-            valid.append(d)
+        # Grab the raw, unfiltered point cloud
+        points = robot._obstacles_mm 
+        
+        if len(points) > 0:
+            # Create a narrow corridor dead ahead
+            # min_x=35.0 creates a tight blind spot to ignore the robot's own claw/lift
+            min_x = 35.0  
+            max_x = SHELF_SCAN_RANGE_MM + 50.0
+            max_y_width = 80.0  # Look strictly 80mm left/right to avoid clutter
+            
+            mask = (points[:, 0] > min_x) & (points[:, 0] < max_x) & (np.abs(points[:, 1]) < max_y_width)
+            shelf_points = points[mask]
+            
+            if len(shelf_points) > 5:
+                # The true distance is just the median X coordinate of the wall hits
+                wall_dist = np.median(shelf_points[:, 0])
+                valid.append(wall_dist)
+                
         robot.wait_for_pose_update(timeout=0.1)
 
     # Restore default filter now that both shelf measurements are done
@@ -492,14 +505,18 @@ def get_shelf_approach_mm(robot: Robot) -> float:
     )
 
     if not valid:
-        print("[SHELF] No LiDAR data — using fixed APPROACH_SHELF_DIST")
+        print("[SHELF] No raw LiDAR points found — using fixed APPROACH_SHELF_DIST")
         return APPROACH_SHELF_DIST
 
+    # Average the valid frames to reject noise
     shelf_dist = statistics.median(valid)
     approach_mm = shelf_dist - SHELF_TARGET_MM
-    print(f"[SHELF] Samples: {[f'{d:.0f}' for d in valid]}, "
-          f"shelf={shelf_dist:.0f} mm, target={SHELF_TARGET_MM:.0f} mm, approach={approach_mm:.0f} mm")
-    return approach_mm  # clamp: never back up here, just don't move if already close
+    
+    print(f"[SHELF] True shelf dist={shelf_dist:.0f} mm, target={SHELF_TARGET_MM:.0f} mm, approach={approach_mm:.0f} mm")
+    
+    # Notice we removed the max(..., 0.0) clamp!
+    # If approach_mm is negative, it will pass right through to your new backup logic.
+    return approach_mm
 
 
 def get_right_wall_distance_mm(robot: Robot) -> float:
