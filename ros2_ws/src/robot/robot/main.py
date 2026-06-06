@@ -1169,8 +1169,12 @@ def run(robot: Robot) -> None:
             move_lift(robot, LIFT_PICKUP_TICKS)
             claw_close(robot, CLAW_CLOSE_MEAT_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
+            
+            if approach_mm > 0.0:
+                robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
-            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
             robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 4. PLACE MEAT
@@ -1194,7 +1198,11 @@ def run(robot: Robot) -> None:
             claw_open(robot)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            if approach_mm > 0.0:
+                robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)            
+                
             robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 5. FETCH TOP BUN
@@ -1218,7 +1226,11 @@ def run(robot: Robot) -> None:
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            if approach_mm > 0.0:
+                robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                
             robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             # 6. PLACE TOP BUN & GRAB FULL STACK
@@ -1245,7 +1257,11 @@ def run(robot: Robot) -> None:
             claw_close(robot, CLAW_CLOSE_BUN_DEG)
             move_lift(robot, LIFT_CARRY_TICKS)
 
-            robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            if approach_mm > 0.0:
+                robot.move_backward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+            elif approach_mm < 0.0:
+                robot.move_forward(approach_mm, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                
             robot.turn_by(-(81 + angle_corr), TURN_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
             print("[FSM] Burger pickup complete.")
