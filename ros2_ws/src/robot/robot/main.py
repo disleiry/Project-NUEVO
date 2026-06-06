@@ -423,43 +423,6 @@ def correct_shelf_angle(robot: Robot) -> float:
     return angle_corr
 
 
-def calculate_true_shelf_angle(robot) -> float:
-    # 1. Get the raw point cloud (X, Y in millimeters relative to robot center)
-    # Use robot.get_obstacles() if available, otherwise access the internal property
-    points = robot._obstacles_mm 
-    
-    if len(points) == 0:
-        return 0.0
-
-    # 2. Define a "bounding box" directly in front of the robot to isolate the shelf.
-    # For example: 100mm to 600mm straight ahead, and strictly within the width of the robot.
-    min_x = 100.0
-    max_x = 600.0
-    max_y_width = 150.0  # Look 150mm left and 150mm right
-    
-    # Filter points to only keep those inside our forward box
-    mask = (points[:, 0] > min_x) & (points[:, 0] < max_x) & (np.abs(points[:, 1]) < max_y_width)
-    shelf_points = points[mask]
-    
-    if len(shelf_points) < 10:
-        # Not enough points to confidently form a line
-        return 0.0
-        
-    # 3. Calculate the Line of Best Fit (Linear Regression)
-    # We fit a 1st-degree polynomial: X = m*Y + b 
-    # (We swap X and Y here because the wall is mostly horizontal relative to the robot's forward X-axis)
-    y_coords = shelf_points[:, 1]
-    x_coords = shelf_points[:, 0]
-    
-    slope, intercept = np.polyfit(y_coords, x_coords, 1)
-    
-    # 4. Convert the slope into degrees
-    # If the robot is perfectly square, the slope is 0. 
-    # If the right side of the wall is further away, it returns a positive angle.
-    angle_rad = math.atan(slope)
-    angle_deg = math.degrees(angle_rad)
-    
-    return angle_deg
 
 
 
@@ -1384,14 +1347,7 @@ def run(robot: Robot) -> None:
                     show_idle_leds(robot)
                     print("[FSM] COURSE_IDLE — course mission cancelled")
                     state = "COURSE_IDLE"
-                
-            #elif ENABLE_STOP_SIGN_OVERRIDE and stop_sign_detected(robot):
-                #cancel_motion(robot, motion_handle)
-                #motion_handle = None
-                #robot.set_led(LED.RED, LED_BRIGHTNESS, mode=LEDMode.BLINK, period_ms=500)
-                #robot.set_led(LED.GREEN, 0)
-                #print("[VISION] stop sign detected during course — mission stopped")
-                #state = "COURSE_IDLE"
+            
                 
             else:
                 _, x, y, theta = get_best_pose(robot)
