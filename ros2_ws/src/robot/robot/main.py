@@ -1430,7 +1430,7 @@ def run(robot: Robot) -> None:
                 claw_open(robot)
                 move_lift(robot, LIFT_CARRY_TICKS)
                 robot.move_backward(65, DRIVE_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                robot.turn_by(-70, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(-68, 20, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
 
                 drive_until_stop_sign(robot, to_stop_mm)
 
