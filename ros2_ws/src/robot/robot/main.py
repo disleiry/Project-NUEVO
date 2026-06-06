@@ -464,7 +464,51 @@ def calculate_true_shelf_angle(robot) -> float:
 
 
 
+def correct_far_wall_angle(robot: Robot) -> float:
+    """
+    Uses raw LiDAR linear regression to square up perfectly to a wall that is
+    up to 1500mm away.
+    """
+    from robot.hardware_map import LIDAR_RANGE_MIN_MM, LIDAR_FOV_DEG
+    
+    # Temporarily increase Lidar range so we can see the far wall
+    robot.set_lidar_filter(
+        range_min_mm=LIDAR_RANGE_MIN_MM,
+        range_max_mm=1500.0,
+        fov_deg=LIDAR_FOV_DEG,
+    )
+    time.sleep(0.5)  # Let the point cloud populate
 
+    points = robot._obstacles_mm 
+    if len(points) == 0:
+        print("[ALIGN] No LiDAR points found")
+        return 0.0
+
+    # Filter for points roughly in front (up to 1.5 meters away, 200mm left/right)
+    mask = (points[:, 0] > 100.0) & (points[:, 0] < 1500.0) & (np.abs(points[:, 1]) < 200.0)
+    wall_points = points[mask]
+
+    if len(wall_points) < 10:
+        print("[ALIGN] Not enough points to detect wall")
+        return 0.0
+
+    # Calculate Line of Best Fit
+    y_coords = wall_points[:, 1]
+    x_coords = wall_points[:, 0]
+    slope, _ = np.polyfit(y_coords, x_coords, 1)
+
+    # Convert slope to degrees and invert for the correction turn
+    angle_rad = math.atan(slope)
+    wall_angle_deg = math.degrees(angle_rad)
+    angle_corr = -wall_angle_deg
+
+    print(f"[ALIGN] Wall slope: {wall_angle_deg:.2f}°, correction: {angle_corr:.2f}°")
+
+    if abs(angle_corr) > 1.0:
+        robot.turn_by(angle_corr, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+        time.sleep(0.2)
+
+    return angle_corr
 
 
 
@@ -1106,7 +1150,7 @@ def run(robot: Robot) -> None:
                 state = "WAIT_GREEN"
                 move_lift(robot, LIFT_CARRY_TICKS)
                 robot.move_forward(300, 50, POS_TOLERANCE_MM, blocking=True)
-                time.sleep(1.0)
+                time.sleep(0.4)
                 robot.turn_to(120, 10, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
             time.sleep(0.05)
             
@@ -1351,15 +1395,20 @@ def run(robot: Robot) -> None:
                 
             else:
                 _, x, y, theta = get_best_pose(robot)
-                print(f"{theta}")
+                print(f"[FACE] Odometry theta: {theta:.1f}")
                 
+                # 1. Use odometry to roughly face the wall (unwind wheel slip)
                 robot.turn_by(-(theta), 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(0.5)
-                robot.turn_by(8, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                
+                # 2. Perfect the alignment using LiDAR regression!
+                correct_far_wall_angle(robot)
 
-                    
-                _, x2, y2, theta2 = get_best_pose(robot)
-                print(f"{theta2}")
+                # 3. Turn exactly 8 degrees for the camera angle
+                robot.turn_by(8, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                time.sleep(0.5)
+
+                # ── 3. Face detection ──────────────────────────────────────────
 
                 # ── 3. Face detection ──────────────────────────────────────────
                 print("[FACE] Starting customer detection...")
@@ -1385,7 +1434,7 @@ def run(robot: Robot) -> None:
                 )
                 
                 print("[NAV] Waiting for Lidar to settle...")
-                time.sleep(1.0) 
+                time.sleep(0.3) 
                 
                 # --- BULLETPROOF RETRY LOOP ---
                 distance_to_wall = -1.0
@@ -1411,9 +1460,9 @@ def run(robot: Robot) -> None:
                     print("[ERROR] Wall not found after all retries or too close! Halting.")
                     robot.stop()
 
-                time.sleep(2.0)
+                time.sleep(0.3)
                 robot.turn_by(-70, ANGULAR_VELOCITY_DEG, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
-                time.sleep(1.0)
+                time.sleep(0.3)
                 drive_with_wall_following(robot, travel_mm, DRIVE_VELOCITY)
 
                 
