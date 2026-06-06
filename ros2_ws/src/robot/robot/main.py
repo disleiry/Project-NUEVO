@@ -136,9 +136,9 @@ STOP_SIGN_SCAN_VELOCITY = 100.0
 
 PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
-    (100.0, 3800.0),      # Waypoint 1: home straight
-    (640.0, 3800.0),    # Waypoint 2: transition / turn
-    (780.0, 720.0),     # Waypoint 3: ramp / return direction
+    (100.0, 3850.0),      # Waypoint 1: home straight
+    (640.0, 3850.0),    # Waypoint 2: transition / turn
+    (760.0, 750.0),     # Waypoint 3: ramp / return direction
     (1300.0, 780.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
