@@ -264,7 +264,7 @@ INGREDIENT_SLOTS = {
 # Distance driven in -Y from the scan point to the customer row (100 mm buffer)
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
-CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
+CUSTOMER_A_TRAVEL_MM = 2000.0   # *** tune on arena ***
 CUSTOMER_B_TRAVEL_MM = 2150.0   # *** tune on arena ***
 
 
