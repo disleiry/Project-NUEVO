@@ -1361,7 +1361,7 @@ def run(robot: Robot) -> None:
                 correct_far_wall_angle(robot)
 
                 # 3. Turn exactly 8 degrees for the camera angle
-                robot.turn_by(13, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
+                robot.turn_by(8, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(0.5)
 
                 # ── 3. Face detection ──────────────────────────────────────────
@@ -1377,7 +1377,7 @@ def run(robot: Robot) -> None:
 
                 
                 # ── 4. Turn right to face -Y ─────────────────────────────────── 
-                robot.turn_by(-13, 15, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG) 
+                robot.turn_by(-8, 15, blocking=True, tolerance_deg=TURN_TOLERANCE_DEG) 
                 
                 print("[NAV] Temporarily boosting Lidar range to 2000mm to see the far wall...")
                 from robot.hardware_map import LIDAR_RANGE_MIN_MM, LIDAR_FOV_DEG
@@ -1411,7 +1411,7 @@ def run(robot: Robot) -> None:
                 
                 # --- FINAL SAFETY CHECK & MOVEMENT ---
                 if distance_to_wall > 100.0:
-                    robot.move_forward(distance_to_wall - 30, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                    robot.move_forward(distance_to_wall - 45, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
                 else:
                     print("[ERROR] Wall not found after all retries or too close! Halting.")
                     robot.stop()
