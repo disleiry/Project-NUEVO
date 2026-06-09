@@ -1362,6 +1362,8 @@ def run(robot: Robot) -> None:
 
 
                  # Overwrite the 400mm limit just for this final check!
+                from robot.hardware_map import LIDAR_RANGE_MIN_MM, LIDAR_FOV_DEG
+
                 robot.set_lidar_filter(
                     range_min_mm=LIDAR_RANGE_MIN_MM,
                     range_max_mm=1200.0,  
