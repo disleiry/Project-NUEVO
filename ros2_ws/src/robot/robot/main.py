@@ -254,7 +254,7 @@ APPROACH_SHELF_DIST = 45.0
 INGREDIENT_SLOTS = {
     "bun_bottom": 207.0,
     "meat": 348.0,
-    "bun_top": 485.0,
+    "bun_top": 480.0,
 }
 
 
