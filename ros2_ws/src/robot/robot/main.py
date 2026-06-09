@@ -124,7 +124,7 @@ TURN_TOLERANCE_DEG = 0.5
 ENABLE_STOP_SIGN_OVERRIDE = True
 
 
-STOP_SIGN_APPROACH_MM = 150.0
+STOP_SIGN_APPROACH_MM = 220.0
 # Forward speed while scanning for the stop sign (mm/s).
 STOP_SIGN_SCAN_VELOCITY = 100.0
 
@@ -138,7 +138,7 @@ PURE_PURSUIT_CONTROL_POINTS = [
     #(0.0, 0.0),        # start
     (80.0, 3850.0),      # Waypoint 1: home straight
     (640.0, 3850.0),    # Waypoint 2: transition / turn
-    (760.0, 880.0),     # Waypoint 3: ramp / return direction
+    (760.0, 800.0),     # Waypoint 3: ramp / return direction
     (1300.0, 760.0),    # Waypoint 4: entrance toward obstacle course
 ]
 
