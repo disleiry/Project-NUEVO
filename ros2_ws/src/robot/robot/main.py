@@ -265,7 +265,7 @@ INGREDIENT_SLOTS = {
 # Customer A (Female): y 3700 → stop at y~1800 (shelf at y=1700)
 # Customer B (Male):   y 3700 → stop at y~1400 (shelf at y=1300)
 CUSTOMER_A_TRAVEL_MM = 1900.0   # *** tune on arena ***
-CUSTOMER_B_TRAVEL_MM = 2150.0   # *** tune on arena ***
+CUSTOMER_B_TRAVEL_MM = 2250.0   # *** tune on arena ***
 
 
 MIN_STOP_CONF      = 0.50   # vision confidence threshold
