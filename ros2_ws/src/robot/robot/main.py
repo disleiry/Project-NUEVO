@@ -1391,10 +1391,10 @@ def run(robot: Robot) -> None:
                     attempt += 1
                 
                 # --- FINAL SAFETY CHECK & MOVEMENT ---
-                if distance_to_wall > 420.0:
-                    robot.move_forward(distance_to_wall - 420, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
-                elif distance_to_wall < 420.0:
-                    robot.move_backward(-(distance_to_wall-420), APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                if distance_to_wall > 340.0:
+                    robot.move_forward(distance_to_wall - 340, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                elif distance_to_wall < 340.0:
+                    robot.move_backward(-(distance_to_wall-340), APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
 
 
                 time.sleep(0.3)
