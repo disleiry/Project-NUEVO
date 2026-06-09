@@ -1360,6 +1360,45 @@ def run(robot: Robot) -> None:
                 # 2. Perfect the alignment using LiDAR regression!
                 correct_far_wall_angle(robot)
 
+
+                 # Overwrite the 400mm limit just for this final check!
+                robot.set_lidar_filter(
+                    range_min_mm=LIDAR_RANGE_MIN_MM,
+                    range_max_mm=1200.0,  
+                    fov_deg=LIDAR_FOV_DEG,
+                )
+                
+                print("[NAV] Waiting for Lidar to settle...")
+                time.sleep(0.3) 
+                
+                # --- BULLETPROOF RETRY LOOP ---
+                distance_to_wall = -1.0
+                max_retries = 3
+                attempt = 0
+                
+                while distance_to_wall < 0.0 and attempt < max_retries:
+                    print(f"\n[NAV] Wall Measurement Attempt {attempt + 1}/{max_retries}...")
+                    
+                    # Increased to 10 samples (takes 1 full second of scanning)
+                    distance_to_wall = get_robust_wall_distance(robot, num_samples=10, delay_s=0.1)
+                    
+                    if distance_to_wall < 0.0:
+                        print("[WARNING] Lidar completely missed the wall. Retrying in 1 second...")
+                        time.sleep(1.0) # Give the sensor/environment a moment to clear
+                    
+                    attempt += 1
+                
+                # --- FINAL SAFETY CHECK & MOVEMENT ---
+                if distance_to_wall > 381.0:
+                    robot.move_forward(distance_to_wall - 381, APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+                elif distance_to_wall > 100.0::
+                    robot.move_backward(-(distance_to_wall-381), APPROACH_VELOCITY, POS_TOLERANCE_MM, blocking=True)
+
+
+                time.sleep(0.3)
+
+                
+
                 # 3. Turn exactly 8 degrees for the camera angle
                 robot.turn_by(10, 15, tolerance_deg=TURN_TOLERANCE_DEG, blocking=True)
                 time.sleep(1.5)
