@@ -160,7 +160,7 @@ LAPF_CONTROL_POINTS = [
 ]
 
 # Optional: densify LAPF segments so the obstacle-course path has intermediate goals.
-LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
+#LAPF_CONTROL_POINTS = densify_polyline(LAPF_CONTROL_POINTS, spacing=50.0)
 
 
 # ---------------------------------------------------------------------------
