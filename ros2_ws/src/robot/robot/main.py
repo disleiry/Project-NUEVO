@@ -145,9 +145,9 @@ PURE_PURSUIT_CONTROL_POINTS = [
 PURE_PURSUIT_CONTROL_POINTS_2 = [
     #(0.0, 0.0),        # start
     (1700.0, 3750.0),      # Waypoint 1: home straight
+    (1800.0, 3750.0),
     (1900.0, 3750.0),
-    (2000.0, 3750.0),
-    (2190.0, 3750.0),    # Waypoint 2: transition / turn
+    (2000.0, 3750.0),    # Waypoint 2: transition / turn
 
 ]
 # Optional: densify long pure-pursuit segments for smoother tracking.
