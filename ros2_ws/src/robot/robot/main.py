@@ -178,7 +178,7 @@ PURE_PURSUIT_MAX_ANGULAR_RAD_S = 1.5
 # LAPF tuning for obstacle-course section
 # ---------------------------------------------------------------------------
 
-LAPF_VELOCITY_MM_S = 150.0
+LAPF_VELOCITY_MM_S = 250.0
 LAPF_TOLERANCE_MM = 50.0
 LAPF_MAX_ANGULAR_RAD_S = 0.4
 
@@ -240,7 +240,7 @@ CLAW_OPEN_DEG = 40.0
 CLAW_CLOSE_MEAT_DEG = 150.0
 CLAW_CLOSE_BUN_DEG = 141.0
 
-DRIVE_VELOCITY = 150.0
+DRIVE_VELOCITY = 250.0
 APPROACH_VELOCITY = 60.0
 POS_TOLERANCE_MM = 10.0
 
